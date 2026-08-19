@@ -45,8 +45,8 @@ codesaver --language zh --backup-now
 Python 3.9 or newer is required.
 
 ```bash
-git clone https://github.com/vibecraft01/code-saver.git
-cd code-saver
+git clone https://github.com/vibecraft01/CodeSaver.git
+cd CodeSaver
 python -m venv .venv
 # Windows: .venv\\Scripts\\activate
 # Linux/macOS: source .venv/bin/activate
