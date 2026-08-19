@@ -1,0 +1,16 @@
+{
+  "interval": 600,
+  "language": "en",
+  "backup_dir": "../code-saver-backups",
+  "log": "../code-saver.log",
+  "excluded_dirs": [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "env",
+    ".env",
+    ".tox",
+    ".mypy_cache"
+  ]
+}

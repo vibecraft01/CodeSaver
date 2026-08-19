@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# CodeSaver output (keep backups outside the project when possible)
+backups/
