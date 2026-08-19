@@ -1,7 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
-from zipfile import ZipFile
+import os
+import time
+from zipfile import ZIP_DEFLATED, ZipFile
 from unittest.mock import patch
 
 from codesaver.core import BackupError, BackupManager
@@ -39,6 +41,53 @@ class BackupManagerTests(unittest.TestCase):
             self.assertEqual(progress, [(1, 1, "keep.txt")])
             with ZipFile(archive) as zip_file:
                 self.assertEqual(zip_file.namelist(), ["keep.txt"])
+
+    def test_compression_max_size_and_detailed_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            (root / "small.txt").write_bytes(b"1234")
+            (root / "large.bin").write_bytes(b"1234567890")
+            progress = []
+            manager = BackupManager(root, backups, compress=True, max_size=4)
+            archive = manager.create_backup(detailed_progress_callback=lambda *values: progress.append(values))
+            self.assertEqual(progress[0][0:2], (1, 1))
+            self.assertEqual(progress[0][3:], (4, 4))
+            with ZipFile(archive) as zip_file:
+                self.assertEqual(zip_file.namelist(), ["small.txt"])
+                self.assertEqual(zip_file.getinfo("small.txt").compress_type, ZIP_DEFLATED)
+
+    def test_gitignore_rules_are_applied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / ".gitignore").write_text("*.log\nignored_dir/\n!ignored_dir/keep.txt\n", encoding="utf-8")
+            (root / "app.py").write_text("pass\n", encoding="utf-8")
+            (root / "debug.log").write_text("ignore\n", encoding="utf-8")
+            ignored_dir = root / "ignored_dir"
+            ignored_dir.mkdir()
+            (ignored_dir / "drop.txt").write_text("ignore\n", encoding="utf-8")
+            (ignored_dir / "keep.txt").write_text("keep\n", encoding="utf-8")
+            archive = BackupManager(root).create_backup()
+            with ZipFile(archive) as zip_file:
+                self.assertEqual(set(zip_file.namelist()), {".gitignore", "app.py", "ignored_dir/keep.txt"})
+
+    def test_keep_last_removes_old_project_backups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            for index in range(3):
+                path = backups / f"project_old_{index}.zip"
+                path.write_bytes(b"old")
+                old_time = time.time() - (100 - index)
+                os.utime(path, (old_time, old_time))
+            manager = BackupManager(root, backups, keep_last=2)
+            manager.create_backup()
+            archives = sorted(backups.glob("project_*.zip"))
+            self.assertEqual(len(archives), 2)
 
     def test_empty_project_reports_zero_progress(self):
         with tempfile.TemporaryDirectory() as tmp:

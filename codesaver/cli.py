@@ -9,7 +9,7 @@ import sys
 import threading
 from typing import Optional
 
-from .config import Config, load_config
+from .config import Config, load_config, parse_size
 from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
 from .logging_utils import configure_logging
@@ -54,6 +54,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--interval", type=int, default=None, help=translate("help.interval", language))
     parser.add_argument("--no-autosave", action="store_true", help=translate("help.no_autosave", language))
     parser.add_argument("--backup-now", action="store_true", help=translate("help.backup_now", language))
+    parser.add_argument("--compress", action="store_true", default=None, help=translate("help.compress", language))
+    parser.add_argument("--max-size", metavar="SIZE", default=None, help=translate("help.max_size", language))
+    parser.add_argument("--keep-last", type=int, default=None, metavar="N", help=translate("help.keep_last", language))
+    parser.add_argument(
+        "--no-gitignore", action="store_true", default=None, help=translate("help.no_gitignore", language)
+    )
     parser.add_argument("--restore", type=Path, metavar="ARCHIVE", help=translate("help.restore", language))
     parser.add_argument("--overwrite", action="store_true", help=translate("help.overwrite", language))
     parser.add_argument("--config", type=Path, metavar="FILE", help=translate("help.config", language))
@@ -73,9 +79,17 @@ def _error_text(error: Exception, language: str) -> str:
 
 
 def _progress_callback(language: str):
-    def show_progress(current: int, total: int, _path: Path) -> None:
+    def show_progress(current: int, total: int, _path: Path, processed_bytes: int, total_bytes: int) -> None:
         percent = 100.0 if total == 0 else current / total * 100
-        message = translate("message.progress", language, current=current, total=total, percent=percent)
+        message = translate(
+            "message.progress",
+            language,
+            current=current,
+            total=total,
+            percent=percent,
+            processed_size=_format_bytes(processed_bytes),
+            total_size=_format_bytes(total_bytes),
+        )
         if sys.stdout.isatty():
             print("\r" + message, end="", flush=True)
             if current >= total:
@@ -86,9 +100,22 @@ def _progress_callback(language: str):
     return show_progress
 
 
+def _format_bytes(value: int) -> str:
+    units = ("B", "KB", "MB", "GB", "TB")
+    amount = float(value)
+    for unit in units:
+        if amount < 1024 or unit == units[-1]:
+            return f"{amount:.1f} {unit}" if unit != "B" else f"{int(amount)} B"
+        amount /= 1024
+    return f"{value} B"
+
+
 def _create_backup(manager: BackupManager, language: str, logger: logging.Logger) -> Path:
     logger.info("Starting backup: project=%s backup_dir=%s", manager.project_dir, manager.backup_dir)
-    archive = manager.create_backup(progress_callback=_progress_callback(language))
+    archive = manager.create_backup(detailed_progress_callback=_progress_callback(language))
+    if manager.last_cleanup_count:
+        logger.info("Removed old backups: count=%s", manager.last_cleanup_count)
+        print(translate("message.backups_removed", language, count=manager.last_cleanup_count))
     logger.info("Backup created: %s", archive)
     return archive
 
@@ -165,12 +192,25 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
     interval = args.interval if args.interval is not None else config.interval
     if interval <= 0:
         raise BackupError("errors.interval_positive")
+    try:
+        max_size = parse_size(args.max_size if args.max_size is not None else config.max_size)
+    except ValueError as exc:
+        raise BackupError("errors.max_size_invalid", value=args.max_size) from exc
+    keep_last = args.keep_last if args.keep_last is not None else config.keep_last
+    if keep_last is not None and keep_last <= 0:
+        raise BackupError("errors.keep_last_positive")
+    compress = config.compress if args.compress is None else args.compress
+    use_gitignore = config.use_gitignore if args.no_gitignore is None else not args.no_gitignore
     effective = Config(
         interval=interval,
         language=language,
         backup_dir=args.backup_dir or config.backup_dir,
         log_path=args.log or config.log_path,
         excluded_dirs=config.excluded_dirs,
+        compress=compress,
+        max_size=max_size,
+        keep_last=keep_last,
+        use_gitignore=use_gitignore,
     )
     try:
         logger = configure_logging(effective.log_path)
@@ -193,7 +233,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger: Optional[logging.Logger] = None
     try:
         project_dir, settings, language, logger = _settings(args, language)
-        manager = BackupManager(project_dir, settings.backup_dir, excluded_dirs=set(settings.excluded_dirs))
+        manager = BackupManager(
+            project_dir,
+            settings.backup_dir,
+            excluded_dirs=set(settings.excluded_dirs),
+            compress=settings.compress,
+            max_size=settings.max_size,
+            keep_last=settings.keep_last,
+            use_gitignore=settings.use_gitignore,
+        )
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         if args.restore:
             count = manager.restore_backup(args.restore, overwrite=args.overwrite)

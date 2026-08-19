@@ -14,6 +14,11 @@ CodeSaver is a lightweight, cross-platform CLI utility that creates reliable ZIP
 - Excludes `.git`, `__pycache__`, `venv`, `.venv`, `env`, `.tox`, and `.mypy_cache` by default.
 - Zip Slip protection during restore.
 - Progress reporting while files are added to an archive.
+- Optional maximum ZIP compression with `--compress`.
+- File-size filtering with `--max-size` (supports bytes, `K/M/G`, and `KiB/MiB/GiB`).
+- Real-time progress with processed and total data size.
+- Automatic cleanup with `--keep-last N`.
+- Automatic root `.gitignore` support, including common glob and negation rules.
 - Optional operation logs written with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
 - No runtime dependencies outside Python 3.9+.
@@ -69,13 +74,28 @@ Create one backup and exit:
 codesaver --project-dir ./my-project --backup-dir ./backups --backup-now
 ```
 
-During a backup CodeSaver reports the number of processed files:
+During a backup CodeSaver reports files and data processed in real time:
 
 ```text
-Progress: 12/48 files (25%)
-Progress: 48/48 files (100%)
+Progress: 12/48 files (25%) — 1.4 MB/5.8 MB
+Progress: 48/48 files (100%) — 5.8 MB/5.8 MB
 Backup created: /path/to/my-project-backups/my-project_2026-08-19_16-30-00.zip
 ```
+
+Useful backup controls:
+
+```bash
+# Maximum DEFLATE compression; exclude files larger than 100 MB.
+codesaver --backup-now --compress --max-size 100M
+
+# Keep only the five newest backups for this project.
+codesaver --backup-now --keep-last 5
+
+# Ignore the project's .gitignore for this run.
+codesaver --backup-now --no-gitignore
+```
+
+The root `.gitignore` is applied automatically. Files larger than `--max-size` are not counted in the archive or progress totals. Size values may be plain bytes (`104857600`), decimal units (`100M`), or binary units (`100MiB`).
 
 Restore an archive:
 
@@ -97,7 +117,11 @@ CodeSaver looks for `.codesaver.json` in the project directory. A ready-to-copy 
   "language": "en",
   "backup_dir": "../code-saver-backups",
   "log": "../code-saver.log",
-  "excluded_dirs": [".git", "__pycache__", "venv", ".venv", "build"]
+  "excluded_dirs": [".git", "__pycache__", "venv", ".venv", "build"],
+  "compress": true,
+  "max_size": "100M",
+  "keep_last": 5,
+  "use_gitignore": true
 }
 ```
 

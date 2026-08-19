@@ -7,6 +7,7 @@ and macOS without extra runtime dependencies.
 from __future__ import annotations
 
 from datetime import datetime
+from fnmatch import fnmatchcase
 from pathlib import Path
 import os
 import tempfile
@@ -16,6 +17,14 @@ from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 from .lang import translate
 
 DEFAULT_EXCLUDED_DIRS = frozenset({".git", "__pycache__", "venv", ".venv", "env", ".env", ".tox", ".mypy_cache"})
+ProgressCallback = Callable[[int, int, Path], None]
+DetailedProgressCallback = Callable[[int, int, Path, int, int], None]
+
+
+def _gitignore_pattern_matches(candidate: str, rule: str, anchored: bool) -> bool:
+    if "/" not in rule and not anchored:
+        return fnmatchcase(candidate, rule) or any(fnmatchcase(part, rule) for part in candidate.split("/"))
+    return fnmatchcase(candidate, rule)
 
 
 class BackupError(RuntimeError):
@@ -38,6 +47,10 @@ class BackupManager:
         project_dir: Union[Path, str],
         backup_dir: Optional[Union[Path, str]] = None,
         excluded_dirs: Optional[set[str]] = None,
+        compress: bool = False,
+        max_size: Optional[int] = None,
+        keep_last: Optional[int] = None,
+        use_gitignore: bool = True,
     ) -> None:
         self.project_dir = Path(project_dir).expanduser().resolve()
         self.backup_dir = (
@@ -46,6 +59,15 @@ class BackupManager:
             else self.project_dir.parent / f"{self.project_dir.name}-backups"
         )
         self.excluded_dirs = frozenset(excluded_dirs or DEFAULT_EXCLUDED_DIRS)
+        if max_size is not None and max_size < 0:
+            raise ValueError("max_size must be non-negative")
+        if keep_last is not None and keep_last < 1:
+            raise ValueError("keep_last must be positive")
+        self.compress = compress
+        self.max_size = max_size
+        self.keep_last = keep_last
+        self.use_gitignore = use_gitignore
+        self.last_cleanup_count = 0
 
     def _validate_project(self) -> None:
         if not self.project_dir.exists():
@@ -57,15 +79,75 @@ class BackupManager:
         """Yield files that belong in a snapshot, in stable order."""
         self._validate_project()
         backup_root = self.backup_dir
+        gitignore_rules = self._load_gitignore_rules() if self.use_gitignore else []
+        has_negated_rule = any(rule.startswith("!") for rule in gitignore_rules)
         for root, dirs, files in os.walk(self.project_dir, topdown=True, onerror=self._walk_error):
             root_path = Path(root)
             dirs[:] = sorted(
-                name for name in dirs if name not in self.excluded_dirs and (root_path / name).resolve() != backup_root
+                name
+                for name in dirs
+                if name not in self.excluded_dirs
+                and (root_path / name).resolve() != backup_root
+                and (
+                    not self.use_gitignore
+                    or not self._gitignore_matches(
+                        (root_path / name).relative_to(self.project_dir), True, gitignore_rules
+                    )
+                    or has_negated_rule
+                )
             )
             for name in sorted(files):
                 path = root_path / name
-                if not path.is_symlink():
+                relative_path = path.relative_to(self.project_dir)
+                if not path.is_symlink() and (
+                    not self.use_gitignore or not self._gitignore_matches(relative_path, False, gitignore_rules)
+                ):
                     yield path
+
+    def _load_gitignore_rules(self) -> list[str]:
+        path = self.project_dir / ".gitignore"
+        if not path.is_file():
+            return []
+        try:
+            return [
+                line.strip()
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+        except PermissionError as exc:
+            raise BackupError("errors.gitignore_failed", path=path, error=exc) from exc
+        except (OSError, UnicodeError) as exc:
+            raise BackupError("errors.gitignore_failed", path=path, error=exc) from exc
+
+    @staticmethod
+    def _gitignore_matches(relative_path: Path, is_dir: bool, rules: list[str]) -> bool:
+        """Apply common root-level .gitignore rules using Git's last-match-wins behavior."""
+        candidate = relative_path.as_posix().strip("/")
+        ignored = False
+        for raw_rule in rules:
+            negated = raw_rule.startswith("!")
+            rule = raw_rule[1:] if negated else raw_rule
+            rule = rule.replace("\\", "/").strip()
+            directory_only = rule.endswith("/")
+            rule = rule.rstrip("/")
+            anchored = rule.startswith("/")
+            rule = rule.lstrip("/")
+            if not rule:
+                continue
+            if directory_only:
+                candidates = (
+                    [candidate]
+                    if is_dir
+                    else ["/".join(relative_path.parts[:index]) for index in range(1, len(relative_path.parts))]
+                )
+                matches = any(_gitignore_pattern_matches(item, rule, anchored) for item in candidates)
+            else:
+                matches = _gitignore_pattern_matches(candidate, rule, anchored)
+                if "/" not in rule and not anchored:
+                    matches = matches or any(fnmatchcase(part, rule) for part in relative_path.parts)
+            if matches:
+                ignored = not negated
+        return ignored
 
     @staticmethod
     def _walk_error(error: OSError) -> None:
@@ -73,9 +155,22 @@ class BackupManager:
 
     def list_files(self) -> list[Path]:
         """Return the files included in the next backup."""
-        return list(self.iter_files())
+        files = []
+        for path in self.iter_files():
+            try:
+                if self.max_size is None or path.stat().st_size <= self.max_size:
+                    files.append(path)
+            except PermissionError as exc:
+                raise BackupError("errors.permission", path=path) from exc
+            except OSError as exc:
+                raise BackupError("errors.create_failed", error=exc) from exc
+        return files
 
-    def create_backup(self, progress_callback: Optional[Callable[[int, int, Path], None]] = None) -> Path:
+    def create_backup(
+        self,
+        progress_callback: Optional[ProgressCallback] = None,
+        detailed_progress_callback: Optional[DetailedProgressCallback] = None,
+    ) -> Path:
         """Create a timestamped ZIP archive and return its path.
 
         The archive is first written to a temporary file in the backup folder,
@@ -91,14 +186,24 @@ class BackupManager:
             fd, temp_name = tempfile.mkstemp(prefix=".codesaver-", suffix=".tmp", dir=self.backup_dir)
             os.close(fd)
             temp_path = Path(temp_name)
-            with ZipFile(temp_path, "w", compression=ZIP_DEFLATED) as archive:
+            total_bytes = sum(path.stat().st_size for path in files)
+            compression = ZIP_DEFLATED
+            compresslevel = 9 if self.compress else None
+            with ZipFile(temp_path, "w", compression=compression, compresslevel=compresslevel) as archive:
                 if not files and progress_callback:
                     progress_callback(0, 0, self.project_dir)
+                if not files and detailed_progress_callback:
+                    detailed_progress_callback(0, 0, self.project_dir, 0, 0)
+                processed_bytes = 0
                 for current, path in enumerate(files, start=1):
                     archive.write(path, path.relative_to(self.project_dir).as_posix())
+                    processed_bytes += path.stat().st_size
                     if progress_callback:
                         progress_callback(current, len(files), path)
+                    if detailed_progress_callback:
+                        detailed_progress_callback(current, len(files), path, processed_bytes, total_bytes)
             temp_path.replace(destination)
+            self.last_cleanup_count = self.cleanup_old_backups()
             return destination
         except PermissionError as exc:
             if temp_path:
@@ -108,6 +213,31 @@ class BackupManager:
             if temp_path:
                 temp_path.unlink(missing_ok=True)
             raise BackupError("errors.create_failed", error=exc) from exc
+
+    def cleanup_old_backups(self) -> int:
+        """Keep only the configured number of backups for this project."""
+        if self.keep_last is None:
+            return 0
+        prefix = f"{self.project_dir.name}_"
+        try:
+            archives = sorted(
+                (
+                    path
+                    for path in self.backup_dir.iterdir()
+                    if path.is_file() and path.suffix.lower() == ".zip" and path.name.startswith(prefix)
+                ),
+                key=lambda path: (path.stat().st_mtime, path.name),
+                reverse=True,
+            )
+            removed = 0
+            for archive in archives[self.keep_last :]:
+                archive.unlink()
+                removed += 1
+            return removed
+        except PermissionError as exc:
+            raise BackupError("errors.cleanup_failed", path=getattr(exc, "filename", None) or self.backup_dir) from exc
+        except OSError as exc:
+            raise BackupError("errors.cleanup_failed", path=self.backup_dir, error=exc) from exc
 
     def restore_backup(self, archive_path: Union[Path, str], overwrite: bool = False) -> int:
         """Restore an archive into the project directory and return file count.

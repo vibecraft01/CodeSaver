@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-19
+
+- Added optional maximum ZIP compression with `--compress`.
+- Added human-readable file-size filtering with `--max-size`.
+- Added real-time progress totals for processed and total bytes.
+- Added automatic old-backup cleanup with `--keep-last`.
+- Added automatic root `.gitignore` filtering with optional `--no-gitignore` override.
 - Added JSON configuration through `.codesaver.json` and `--config`.
 - Added localized progress reporting for backup creation.
 - Added optional file logging through `--log` or the `log` configuration key.

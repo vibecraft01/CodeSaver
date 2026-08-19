@@ -12,5 +12,9 @@
     ".env",
     ".tox",
     ".mypy_cache"
-  ]
+  ],
+  "compress": false,
+  "max_size": null,
+  "keep_last": null,
+  "use_gitignore": true
 }

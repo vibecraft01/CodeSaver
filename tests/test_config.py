@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codesaver.config import load_config
+from codesaver.config import load_config, parse_size
 from codesaver.core import BackupError, DEFAULT_EXCLUDED_DIRS
 
 
@@ -20,6 +20,10 @@ class ConfigTests(unittest.TestCase):
                         "backup_dir": "backups",
                         "log": "logs/codesaver.log",
                         "excluded_dirs": [".git", "build"],
+                        "compress": True,
+                        "max_size": "100M",
+                        "keep_last": 3,
+                        "use_gitignore": False,
                     }
                 ),
                 encoding="utf-8",
@@ -30,6 +34,15 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.backup_dir, (root / "backups").resolve())
             self.assertEqual(config.log_path, (root / "logs/codesaver.log").resolve())
             self.assertEqual(config.excluded_dirs, frozenset({".git", "build"}))
+            self.assertTrue(config.compress)
+            self.assertEqual(config.max_size, 100_000_000)
+            self.assertEqual(config.keep_last, 3)
+            self.assertFalse(config.use_gitignore)
+
+    def test_parse_size_accepts_common_units(self):
+        self.assertEqual(parse_size("100M"), 100_000_000)
+        self.assertEqual(parse_size("1MiB"), 1024 * 1024)
+        self.assertEqual(parse_size(42), 42)
 
     def test_missing_optional_config_returns_defaults(self):
         with tempfile.TemporaryDirectory() as tmp:
