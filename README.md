@@ -1,5 +1,7 @@
 # CodeSaver
 
+[![CI](https://github.com/vibecraft01/CodeSaver/actions/workflows/ci.yml/badge.svg)](https://github.com/vibecraft01/CodeSaver/actions/workflows/ci.yml)
+
 CodeSaver is a lightweight, cross-platform CLI utility that creates reliable ZIP snapshots of source-code projects. It uses only Python's standard library and automatically speaks the language configured by the operating system.
 
 ## Features
