@@ -1,0 +1,54 @@
+name: Build release artifacts
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            asset: CodeSaver-windows-x64.exe
+            source: dist/CodeSaver.exe
+          - os: macos-13
+            asset: CodeSaver-macos-x64
+            source: dist/CodeSaver
+          - os: ubuntu-latest
+            asset: CodeSaver-linux-x64
+            source: dist/CodeSaver
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install pyinstaller
+      - name: Build executable
+        run: python -m PyInstaller --clean --noconfirm --onefile --paths . --name CodeSaver scripts/build_entry.py
+      - name: Prepare release asset
+        shell: bash
+        run: cp "${{ matrix.source }}" "${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver ${GITHUB_REF_NAME}" --generate-notes

@@ -3,4 +3,4 @@
 from .core import BackupManager, BackupError
 
 __all__ = ["BackupError", "BackupManager"]
-__version__ = "1.0.0"
+__version__ = "1.1.0"

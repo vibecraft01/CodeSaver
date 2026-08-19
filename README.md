@@ -113,6 +113,27 @@ codesaver --project-dir ./my-project --backup-now --log ./logs/codesaver.log
 
 The CLI returns a non-zero exit code and a localized message for missing paths, permission errors, invalid configuration, damaged ZIP files, and invalid autosave intervals. Restore is protected against path traversal and refuses to replace existing files unless `--overwrite` is provided.
 
+## Release files for Windows, macOS, and Linux
+
+GitHub Releases contain standalone artifacts built by GitHub Actions:
+
+- `CodeSaver-windows-x64.exe` for Windows.
+- `CodeSaver-macos-x64` for macOS Terminal.
+- `CodeSaver-linux-x64` for Linux.
+
+The Python installation remains available on every platform. For macOS/Linux, use `scripts/install.sh`; for Windows PowerShell, use `scripts/install.ps1`:
+
+```bash
+sh scripts/install.sh
+```
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\install.ps1
+```
+
+The standalone files are console applications, so they preserve CodeSaver's interactive menu and progress output.
+
 ## Cross-platform notes
 
 CodeSaver uses `pathlib.Path` and `os.path` for filesystem operations and has no OS-specific shell commands. The same commands work in PowerShell, Command Prompt, Bash, and Zsh. On Windows, the CLI configures UTF-8 output so translated help and status messages remain readable.
