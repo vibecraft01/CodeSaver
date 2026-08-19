@@ -18,6 +18,10 @@ All notable CodeSaver changes are documented here.
 - Added platform installation scripts for Unix shells and Windows PowerShell.
 - Added standalone console artifacts to GitHub Releases.
 
+## [1.1.1] - 2026-08-19
+
+- Switched the macOS release runner to `macos-latest` for reliable artifact delivery.
+
 ## [1.0.0]
 
 - Initial cross-platform CodeSaver release.

@@ -16,7 +16,7 @@ jobs:
           - os: windows-latest
             asset: CodeSaver-windows-x64.exe
             source: dist/CodeSaver.exe
-          - os: macos-13
+          - os: macos-latest
             asset: CodeSaver-macos-x64
             source: dist/CodeSaver
           - os: ubuntu-latest
