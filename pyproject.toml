@@ -5,19 +5,30 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codesaver"
 version = "1.1.3"
-description = "Automatic code backup utility for developers"
+description = "Cross-platform code backup utility with CLI and optional PyQt5 Desktop application"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [{ name = "CodeSaver Contributors" }]
-keywords = ["backup", "developer-tools", "zip", "cli"]
+keywords = ["backup", "developer-tools", "zip", "cli", "desktop", "pyqt5"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
+    "Environment :: X11 Applications",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/vibecraft01/CodeSaver"
+Documentation = "https://github.com/vibecraft01/CodeSaver/blob/main/README.md"
+Releases = "https://github.com/vibecraft01/CodeSaver/releases"
+Issues = "https://github.com/vibecraft01/CodeSaver/issues"
 
 [project.scripts]
 codesaver = "codesaver.cli:main"
@@ -34,6 +45,11 @@ release = [
 desktop = [
     "PyQt5>=5.15",
 ]
+
+[tool.codesaver.desktop]
+version = "1.0.0"
+python_requires = ">=3.10"
+framework = "PyQt5"
 
 [tool.setuptools.packages.find]
 include = ["codesaver*", "desktop*"]

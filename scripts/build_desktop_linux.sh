@@ -10,7 +10,7 @@ trap 'rm -rf "$VENV_DIR"' EXIT
 VENV_PYTHON="$VENV_DIR/bin/python"
 "$VENV_PYTHON" -m pip install --upgrade pip
 "$VENV_PYTHON" -m pip install -e ".[desktop,release]"
-"$VENV_PYTHON" -m PyInstaller --clean --noconfirm --onefile --name CodeSaverDesktop scripts/build_desktop_entry.py
+"$VENV_PYTHON" -m PyInstaller --clean --noconfirm CodeSaverDesktop.spec
 
 if command -v dpkg-deb >/dev/null 2>&1; then
     PACKAGE_ROOT=$(mktemp -d)

@@ -6,5 +6,5 @@ python -m venv $VenvDir
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -e ".[desktop,release]"
-& $VenvPython -m PyInstaller --clean --noconfirm --onefile --windowed --name CodeSaverDesktop scripts\build_desktop_entry.py
+& $VenvPython -m PyInstaller --clean --noconfirm CodeSaverDesktop.spec
 Write-Host "Built dist\CodeSaverDesktop.exe"

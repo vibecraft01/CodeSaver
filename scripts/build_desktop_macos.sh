@@ -10,6 +10,6 @@ trap 'rm -rf "$VENV_DIR"' EXIT
 VENV_PYTHON="$VENV_DIR/bin/python"
 "$VENV_PYTHON" -m pip install --upgrade pip
 "$VENV_PYTHON" -m pip install -e ".[desktop,release]"
-"$VENV_PYTHON" -m PyInstaller --clean --noconfirm --windowed --name CodeSaverDesktop scripts/build_desktop_entry.py
+"$VENV_PYTHON" -m PyInstaller --clean --noconfirm CodeSaverDesktop.spec
 ditto -c -k --sequesterRsrc --keepParent "dist/CodeSaverDesktop.app" "CodeSaverDesktop-macos.zip"
 echo "Built CodeSaverDesktop-macos.zip"

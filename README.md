@@ -2,46 +2,91 @@
 
 [![CI](https://github.com/vibecraft01/CodeSaver/actions/workflows/ci.yml/badge.svg)](https://github.com/vibecraft01/CodeSaver/actions/workflows/ci.yml)
 
-CodeSaver is a lightweight, cross-platform CLI utility that creates reliable ZIP snapshots of source-code projects. It uses only Python's standard library and automatically speaks the language configured by the operating system.
+CodeSaver is a cross-platform code backup utility for developers. It creates timestamped ZIP snapshots, restores projects safely, supports unattended autosave, and provides both a scriptable CLI and an optional PyQt5 Desktop application.
+
+## Current versions
+
+| Component | Version | Runtime | Distribution |
+| --- | --- | --- | --- |
+| CodeSaver CLI | **1.1.3** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) |
+| CodeSaver Desktop | **1.0.0** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.0) |
+
+The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
 ## Features
 
+### CLI
+
 - Timestamped ZIP archives using `YYYY-MM-DD_HH-MM-SS`.
 - Background autosave every 10 minutes by default.
-- Interactive console menu for backup and restore.
+- Interactive backup and restore menu.
 - Automatic locale detection with 12 supported languages.
 - Localized help, prompts, progress messages, and errors.
-- Excludes `.git`, `__pycache__`, `venv`, `.venv`, `env`, `.tox`, and `.mypy_cache` by default.
+- Default exclusions for `.git`, `__pycache__`, virtual environments, build directories, and caches.
 - Zip Slip protection during restore.
-- Progress reporting while files are added to an archive.
-- Optional maximum ZIP compression with `--compress`.
-- File-size filtering with `--max-size` (supports bytes, `K/M/G`, and `KiB/MiB/GiB`).
-- Real-time progress with processed and total data size.
+- File and byte progress reporting.
+- Maximum compression with `--compress`.
+- File-size filtering with `--max-size`.
 - Automatic cleanup with `--keep-last N`.
-- Automatic root `.gitignore` support, including common glob and negation rules.
-- CLI extension filtering with repeatable `--exclude-ext`.
-- Optional operation logs written with `--log`.
+- Root `.gitignore` support with common glob and negation rules.
+- Repeatable extension filtering with `--exclude-ext`.
+- Optional operation logs with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
-- CLI has no runtime dependencies outside Python 3.9+; Desktop uses optional PyQt5 on Python 3.10+.
+- Python 3.9+ dependency-free runtime.
+
+### Desktop version
+
+CodeSaver Desktop `1.0.0` is a graphical alternative for developers who prefer a visual workflow. It includes:
+
+- Project folder selection with file count and total size.
+- Create and restore backup buttons.
+- Backup table with archive name, creation date, and size.
+- Double-click restore from the archive list.
+- Real-time progress for files and processed bytes.
+- Settings for excluded directories, excluded extensions, compression, autosave, retention, language, theme, backup location, and tray behavior.
+- Dark GitHub-style theme and light theme.
+- Optional system-tray mode and desktop notifications.
+- No API keys or external services.
+
+## Desktop interface preview
+
+The main window is organized as a compact developer dashboard:
+
+```text
++-----------------------------------------------------------------------+
+| CodeSaver Desktop                         [Open folder] [Settings]    |
+| Project: C:\Projects\demo   Files: 42   Size: 8.6 MB                 |
++-----------------------------------------------------------------------+
+| [Create backup] [Restore backup]                                      |
+|                                                                       |
+| Archive name                         Created              Size        |
+| demo_2026-08-20_12-30-00.zip        2026-08-20 12:30     2.1 MB      |
+|                                                                       |
+| Progress: 42/42 files - 8.6 MB/8.6 MB                         100%    |
+| Ready                                                                 |
++-----------------------------------------------------------------------+
+```
+
+The Settings dialog centralizes project exclusions, autosave, retention, language, theme, compression, and storage preferences.
 
 ## Supported languages
+
+The CLI detects `LC_ALL`, `LC_MESSAGES`, `LANG`, `LANGUAGE`, and the system locale. Use `--language` to override detection for one run.
 
 | Language | Documentation |
 | --- | --- |
 | English | [README.en.md](docs/README.en.md) |
-| Русский | [README.ru.md](docs/README.ru.md) |
-| Українська | [README.uk.md](docs/README.uk.md) |
-| Deutsch | [README.de.md](docs/README.de.md) |
-| Français | [README.fr.md](docs/README.fr.md) |
-| Español | [README.es.md](docs/README.es.md) |
-| Português | [README.pt.md](docs/README.pt.md) |
-| 中文 | [README.zh.md](docs/README.zh.md) |
-| 日本語 | [README.ja.md](docs/README.ja.md) |
-| 한국어 | [README.ko.md](docs/README.ko.md) |
-| हिन्दी | [README.hi.md](docs/README.hi.md) |
-| العربية | [README.ar.md](docs/README.ar.md) |
-
-CodeSaver detects `LC_ALL`, `LC_MESSAGES`, `LANG`, `LANGUAGE`, and the system locale. Use `--language` to override detection for a single run:
+| Russian | [README.ru.md](docs/README.ru.md) |
+| Ukrainian | [README.uk.md](docs/README.uk.md) |
+| German | [README.de.md](docs/README.de.md) |
+| French | [README.fr.md](docs/README.fr.md) |
+| Spanish | [README.es.md](docs/README.es.md) |
+| Portuguese | [README.pt.md](docs/README.pt.md) |
+| Chinese | [README.zh.md](docs/README.zh.md) |
+| Japanese | [README.ja.md](docs/README.ja.md) |
+| Korean | [README.ko.md](docs/README.ko.md) |
+| Hindi | [README.hi.md](docs/README.hi.md) |
+| Arabic | [README.ar.md](docs/README.ar.md) |
 
 ```bash
 codesaver --language de
@@ -50,20 +95,20 @@ codesaver --language zh --backup-now
 
 ## Installation
 
-Python 3.9 or newer is required.
+Python 3.9 or newer is required for the CLI.
 
 ```bash
 git clone https://github.com/vibecraft01/CodeSaver.git
 cd CodeSaver
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
+# Windows: .venv\Scripts\activate
 # Linux/macOS: source .venv/bin/activate
 python -m pip install -e .
 ```
 
-## Usage
+## CLI usage
 
-Start the interactive menu in the current project:
+Start the interactive menu:
 
 ```bash
 codesaver
@@ -75,31 +120,29 @@ Create one backup and exit:
 codesaver --project-dir ./my-project --backup-dir ./backups --backup-now
 ```
 
-During a backup CodeSaver reports files and data processed in real time:
-
-```text
-Progress: 12/48 files (25%) — 1.4 MB/5.8 MB
-Progress: 48/48 files (100%) — 5.8 MB/5.8 MB
-Backup created: /path/to/my-project-backups/my-project_2026-08-19_16-30-00.zip
-```
-
 Useful backup controls:
 
 ```bash
 # Maximum DEFLATE compression; exclude files larger than 100 MB.
 codesaver --backup-now --compress --max-size 100M
 
-# Keep only the five newest backups for this project.
+# Keep only the five newest backups.
 codesaver --backup-now --keep-last 5
-
-# Ignore the project's .gitignore for this run.
-codesaver --backup-now --no-gitignore
 
 # Exclude temporary and log files by extension.
 codesaver --backup-now --exclude-ext .tmp --exclude-ext .log
+
+# Ignore the project's .gitignore for this run.
+codesaver --backup-now --no-gitignore
 ```
 
-The root `.gitignore` is applied automatically. Files larger than `--max-size` are not counted in the archive or progress totals. Size values may be plain bytes (`104857600`), decimal units (`100M`), or binary units (`100MiB`).
+Example progress output:
+
+```text
+Progress: 12/48 files (25%) - 1.4 MB/5.8 MB
+Progress: 48/48 files (100%) - 5.8 MB/5.8 MB
+Backup created: /path/to/my-project-backups/my-project_2026-08-20_12-30-00.zip
+```
 
 Restore an archive:
 
@@ -109,7 +152,7 @@ codesaver --project-dir ./my-project \
   --overwrite
 ```
 
-Disable autosave with `--no-autosave`. Change the interval with `--interval 300` (seconds). Stop the interactive application with `Ctrl+C`.
+Disable autosave with `--no-autosave` or change the interval with `--interval 300` seconds.
 
 ## Configuration
 
@@ -130,7 +173,56 @@ CodeSaver looks for `.codesaver.json` in the project directory. A ready-to-copy 
 }
 ```
 
-Paths in the configuration are resolved relative to the configuration file, so the same file works on Windows, Linux, and macOS. Use another file explicitly with `--config ./settings.json`; command-line values override configuration values.
+Paths are resolved relative to the configuration file. Command-line values override configuration values.
+
+## Install and build Desktop
+
+### Install from source
+
+```bash
+python -m pip install -e ".[desktop]"
+python -m desktop.main
+```
+
+The installed entry point is also available:
+
+```bash
+codesaver-desktop
+```
+
+### Download a standalone package
+
+Use the [Desktop v1.0.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.0):
+
+- `CodeSaverDesktop-windows-x64.exe` for Windows.
+- `CodeSaverDesktop-macos.zip` containing the macOS application.
+- `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
+
+The [CLI v1.1.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) also includes standalone Windows, macOS, and Linux console binaries.
+
+### Build from source
+
+The repository includes platform scripts and a reviewed `CodeSaverDesktop.spec` PyInstaller definition:
+
+```powershell
+# Windows PowerShell
+.\scripts\build_desktop.ps1
+```
+
+```bash
+# macOS: creates dist/CodeSaverDesktop.app and a ZIP archive.
+sh scripts/build_desktop_macos.sh
+
+# Linux: creates a one-file binary and a .deb when dpkg-deb is available.
+sh scripts/build_desktop_linux.sh
+```
+
+To invoke PyInstaller directly:
+
+```bash
+python -m pip install -e ".[desktop,release]"
+python -m PyInstaller --clean --noconfirm CodeSaverDesktop.spec
+```
 
 ## Logging and error handling
 
@@ -140,55 +232,11 @@ Save timestamped operation logs to a file:
 codesaver --project-dir ./my-project --backup-now --log ./logs/codesaver.log
 ```
 
-The CLI returns a non-zero exit code and a localized message for missing paths, permission errors, invalid configuration, damaged ZIP files, and invalid autosave intervals. Restore is protected against path traversal and refuses to replace existing files unless `--overwrite` is provided.
-
-## Release files for Windows, macOS, and Linux
-
-GitHub Releases contain standalone artifacts built by GitHub Actions:
-
-- `CodeSaver-windows-x64.exe` for Windows.
-- `CodeSaver-macos-x64` for macOS Terminal.
-- `CodeSaver-linux-x64` for Linux.
-
-The Python installation remains available on every platform. For macOS/Linux, use `scripts/install.sh`; for Windows PowerShell, use `scripts/install.ps1`:
-
-```bash
-sh scripts/install.sh
-```
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\install.ps1
-```
-
-The standalone files are console applications, so they preserve CodeSaver's interactive menu and progress output.
-
-## Desktop
-
-CodeSaver Desktop `1.0.0` is a PyQt5 graphical alternative to the CLI. It reuses the same tested backup and restore core and provides project selection, archive browsing, progress, settings, autosave, dark/light themes, notifications, and system-tray operation.
-
-Install and run it locally on Python 3.10+:
-
-```bash
-python -m pip install -e ".[desktop]"
-python -m desktop.main
-```
-
-Or use the installed entry point:
-
-```bash
-codesaver-desktop
-```
-
-Build packages locally with `scripts/build_desktop.ps1` on Windows, `scripts/build_desktop_macos.sh` on macOS, or `scripts/build_desktop_linux.sh` on Linux. The desktop release workflow is prepared for a future `desktop-v1.0.0` tag; no Desktop release has been published yet.
-
-## Cross-platform notes
-
-CodeSaver uses `pathlib.Path` and `os.path` for filesystem operations and has no OS-specific shell commands. The same commands work in PowerShell, Command Prompt, Bash, and Zsh. On Windows, the CLI configures UTF-8 output so translated help and status messages remain readable.
+The CLI returns a non-zero exit code and a localized message for missing paths, permission errors, invalid configuration, damaged ZIP files, and invalid autosave intervals. Restore refuses unsafe archive paths and does not replace existing files unless `--overwrite` is provided.
 
 ## Development
 
-Run the test suite without installing pytest:
+Run the test suite:
 
 ```bash
 python -m unittest discover -s tests -v
@@ -198,19 +246,11 @@ Optional formatting and linting checks:
 
 ```bash
 python -m pip install -e ".[dev]"
-python -m black --check codesaver tests
-python -m flake8 codesaver tests
-```
-
-Desktop dependencies and checks:
-
-```bash
-python -m pip install -e ".[desktop,dev]"
 python -m black --check codesaver desktop tests scripts
 python -m flake8 codesaver desktop tests scripts
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [CHANGELOG.md](CHANGELOG.md) for release history.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and [LICENSE](LICENSE).
 
 ## License
 

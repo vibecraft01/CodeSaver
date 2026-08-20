@@ -22,3 +22,4 @@ backups/
 .desktop-build-check/
 .release-build-check/
 *.spec
+!CodeSaverDesktop.spec

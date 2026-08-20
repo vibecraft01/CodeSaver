@@ -4,7 +4,7 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
-## [1.1.3] - 2026-08-20
+## [CLI 1.1.3] - 2026-08-20
 
 - Added repeatable CLI `--exclude-ext` filtering for temporary, log, bytecode, and other file extensions.
 - Added `exclude_ext` configuration support.
@@ -15,6 +15,7 @@ All notable CodeSaver changes are documented here.
 - Added the optional PyQt5 CodeSaver Desktop application.
 - Added project selection, project statistics, archive table, restore, progress, settings, autosave, themes, notifications, and system-tray support.
 - Added local PyInstaller build scripts for Windows, macOS, and Linux `.deb` packages.
+- Added the reproducible `CodeSaverDesktop.spec` PyInstaller configuration.
 
 ## [1.1.2] - 2026-08-19
 
