@@ -13,6 +13,7 @@
     ".tox",
     ".mypy_cache"
   ],
+  "exclude_ext": [],
   "compress": false,
   "max_size": null,
   "keep_last": null,

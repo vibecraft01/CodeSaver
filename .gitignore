@@ -16,3 +16,9 @@ build/
 
 # CodeSaver output (keep backups outside the project when possible)
 backups/
+
+# Desktop build work directories and generated PyInstaller specs
+.desktop-build-venv/
+.desktop-build-check/
+.release-build-check/
+*.spec

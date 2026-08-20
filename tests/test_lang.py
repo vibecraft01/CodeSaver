@@ -25,6 +25,7 @@ class LocalizationTests(unittest.TestCase):
             help_text = build_parser(language).format_help()
             self.assertIn(translate("help.description", language), help_text)
             self.assertIn("--backup-now", help_text)
+            self.assertIn("--exclude-ext", help_text)
 
 
 if __name__ == "__main__":

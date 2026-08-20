@@ -19,9 +19,10 @@ CodeSaver is a lightweight, cross-platform CLI utility that creates reliable ZIP
 - Real-time progress with processed and total data size.
 - Automatic cleanup with `--keep-last N`.
 - Automatic root `.gitignore` support, including common glob and negation rules.
+- CLI extension filtering with repeatable `--exclude-ext`.
 - Optional operation logs written with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
-- No runtime dependencies outside Python 3.9+.
+- CLI has no runtime dependencies outside Python 3.9+; Desktop uses optional PyQt5 on Python 3.10+.
 
 ## Supported languages
 
@@ -93,6 +94,9 @@ codesaver --backup-now --keep-last 5
 
 # Ignore the project's .gitignore for this run.
 codesaver --backup-now --no-gitignore
+
+# Exclude temporary and log files by extension.
+codesaver --backup-now --exclude-ext .tmp --exclude-ext .log
 ```
 
 The root `.gitignore` is applied automatically. Files larger than `--max-size` are not counted in the archive or progress totals. Size values may be plain bytes (`104857600`), decimal units (`100M`), or binary units (`100MiB`).
@@ -118,6 +122,7 @@ CodeSaver looks for `.codesaver.json` in the project directory. A ready-to-copy 
   "backup_dir": "../code-saver-backups",
   "log": "../code-saver.log",
   "excluded_dirs": [".git", "__pycache__", "venv", ".venv", "build"],
+  "exclude_ext": [".tmp", ".log", ".pyc"],
   "compress": true,
   "max_size": "100M",
   "keep_last": 5,
@@ -158,6 +163,25 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 The standalone files are console applications, so they preserve CodeSaver's interactive menu and progress output.
 
+## Desktop
+
+CodeSaver Desktop `1.0.0` is a PyQt5 graphical alternative to the CLI. It reuses the same tested backup and restore core and provides project selection, archive browsing, progress, settings, autosave, dark/light themes, notifications, and system-tray operation.
+
+Install and run it locally on Python 3.10+:
+
+```bash
+python -m pip install -e ".[desktop]"
+python -m desktop.main
+```
+
+Or use the installed entry point:
+
+```bash
+codesaver-desktop
+```
+
+Build packages locally with `scripts/build_desktop.ps1` on Windows, `scripts/build_desktop_macos.sh` on macOS, or `scripts/build_desktop_linux.sh` on Linux. The desktop release workflow is prepared for a future `desktop-v1.0.0` tag; no Desktop release has been published yet.
+
 ## Cross-platform notes
 
 CodeSaver uses `pathlib.Path` and `os.path` for filesystem operations and has no OS-specific shell commands. The same commands work in PowerShell, Command Prompt, Bash, and Zsh. On Windows, the CLI configures UTF-8 output so translated help and status messages remain readable.
@@ -176,6 +200,14 @@ Optional formatting and linting checks:
 python -m pip install -e ".[dev]"
 python -m black --check codesaver tests
 python -m flake8 codesaver tests
+```
+
+Desktop dependencies and checks:
+
+```bash
+python -m pip install -e ".[desktop,dev]"
+python -m black --check codesaver desktop tests scripts
+python -m flake8 codesaver desktop tests scripts
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [CHANGELOG.md](CHANGELOG.md) for release history.

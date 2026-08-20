@@ -20,6 +20,7 @@ class ConfigTests(unittest.TestCase):
                         "backup_dir": "backups",
                         "log": "logs/codesaver.log",
                         "excluded_dirs": [".git", "build"],
+                        "exclude_ext": ["tmp", ".LOG"],
                         "compress": True,
                         "max_size": "100M",
                         "keep_last": 3,
@@ -34,6 +35,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.backup_dir, (root / "backups").resolve())
             self.assertEqual(config.log_path, (root / "logs/codesaver.log").resolve())
             self.assertEqual(config.excluded_dirs, frozenset({".git", "build"}))
+            self.assertEqual(config.excluded_extensions, frozenset({".tmp", ".log"}))
             self.assertTrue(config.compress)
             self.assertEqual(config.max_size, 100_000_000)
             self.assertEqual(config.keep_last, 3)

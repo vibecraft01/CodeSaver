@@ -1,0 +1,65 @@
+name: Build CodeSaver Desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            command: powershell -ExecutionPolicy Bypass -File scripts/build_desktop.ps1
+            asset: CodeSaverDesktop-windows-x64.exe
+            source: dist/CodeSaverDesktop.exe
+          - os: macos-latest
+            command: sh scripts/build_desktop_macos.sh
+            asset: CodeSaverDesktop-macos.zip
+            source: CodeSaverDesktop-macos.zip
+          - os: ubuntu-latest
+            command: sh scripts/build_desktop_linux.sh
+            asset: CodeSaverDesktop-linux-amd64.deb
+            source: CodeSaverDesktop-linux-amd64.deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build desktop package
+        shell: bash
+        run: ${{ matrix.command }}
+      - name: Prepare asset
+        shell: bash
+        run: cp "${{ matrix.source }}" "${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish Desktop release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes_file" ]; then
+            gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver Desktop ${GITHUB_REF_NAME}" --notes-file "$notes_file"
+          else
+            gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver Desktop ${GITHUB_REF_NAME}" --generate-notes
+          fi

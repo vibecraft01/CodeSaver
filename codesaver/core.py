@@ -47,6 +47,7 @@ class BackupManager:
         project_dir: Union[Path, str],
         backup_dir: Optional[Union[Path, str]] = None,
         excluded_dirs: Optional[set[str]] = None,
+        excluded_extensions: Optional[set[str]] = None,
         compress: bool = False,
         max_size: Optional[int] = None,
         keep_last: Optional[int] = None,
@@ -59,6 +60,7 @@ class BackupManager:
             else self.project_dir.parent / f"{self.project_dir.name}-backups"
         )
         self.excluded_dirs = frozenset(excluded_dirs or DEFAULT_EXCLUDED_DIRS)
+        self.excluded_extensions = frozenset(item.lower() for item in (excluded_extensions or set()))
         if max_size is not None and max_size < 0:
             raise ValueError("max_size must be non-negative")
         if keep_last is not None and keep_last < 1:
@@ -99,8 +101,10 @@ class BackupManager:
             for name in sorted(files):
                 path = root_path / name
                 relative_path = path.relative_to(self.project_dir)
-                if not path.is_symlink() and (
-                    not self.use_gitignore or not self._gitignore_matches(relative_path, False, gitignore_rules)
+                if (
+                    not path.is_symlink()
+                    and not any(path.name.lower().endswith(extension) for extension in self.excluded_extensions)
+                    and (not self.use_gitignore or not self._gitignore_matches(relative_path, False, gitignore_rules))
                 ):
                     yield path
 

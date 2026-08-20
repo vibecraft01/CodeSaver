@@ -9,7 +9,7 @@ import sys
 import threading
 from typing import Optional
 
-from .config import Config, load_config, parse_size
+from .config import Config, load_config, normalize_extensions, parse_size
 from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
 from .logging_utils import configure_logging
@@ -54,6 +54,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--interval", type=int, default=None, help=translate("help.interval", language))
     parser.add_argument("--no-autosave", action="store_true", help=translate("help.no_autosave", language))
     parser.add_argument("--backup-now", action="store_true", help=translate("help.backup_now", language))
+    parser.add_argument(
+        "--exclude-ext",
+        action="append",
+        default=None,
+        metavar="EXT",
+        help=translate("help.exclude_ext", language),
+    )
     parser.add_argument("--compress", action="store_true", default=None, help=translate("help.compress", language))
     parser.add_argument("--max-size", metavar="SIZE", default=None, help=translate("help.max_size", language))
     parser.add_argument("--keep-last", type=int, default=None, metavar="N", help=translate("help.keep_last", language))
@@ -199,6 +206,12 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
     keep_last = args.keep_last if args.keep_last is not None else config.keep_last
     if keep_last is not None and keep_last <= 0:
         raise BackupError("errors.keep_last_positive")
+    try:
+        excluded_extensions = normalize_extensions(
+            args.exclude_ext if args.exclude_ext is not None else config.excluded_extensions
+        )
+    except ValueError as exc:
+        raise BackupError("errors.exclude_ext_invalid", value=args.exclude_ext) from exc
     compress = config.compress if args.compress is None else args.compress
     use_gitignore = config.use_gitignore if args.no_gitignore is None else not args.no_gitignore
     effective = Config(
@@ -207,6 +220,7 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
         backup_dir=args.backup_dir or config.backup_dir,
         log_path=args.log or config.log_path,
         excluded_dirs=config.excluded_dirs,
+        excluded_extensions=excluded_extensions,
         compress=compress,
         max_size=max_size,
         keep_last=keep_last,
@@ -237,6 +251,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             project_dir,
             settings.backup_dir,
             excluded_dirs=set(settings.excluded_dirs),
+            excluded_extensions=set(settings.excluded_extensions),
             compress=settings.compress,
             max_size=settings.max_size,
             keep_last=settings.keep_last,

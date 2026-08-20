@@ -42,6 +42,16 @@ class BackupManagerTests(unittest.TestCase):
             with ZipFile(archive) as zip_file:
                 self.assertEqual(zip_file.namelist(), ["keep.txt"])
 
+    def test_excluded_extensions_are_not_archived(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "keep.py").write_text("pass\n", encoding="utf-8")
+            (root / "debug.log").write_text("ignore\n", encoding="utf-8")
+            archive = BackupManager(root, excluded_extensions={".log"}).create_backup()
+            with ZipFile(archive) as zip_file:
+                self.assertEqual(zip_file.namelist(), ["keep.py"])
+
     def test_compression_max_size_and_detailed_progress(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codesaver"
-version = "1.1.2"
+version = "1.1.3"
 description = "Automatic code backup utility for developers"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,6 +21,7 @@ classifiers = [
 
 [project.scripts]
 codesaver = "codesaver.cli:main"
+codesaver-desktop = "desktop.main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -30,9 +31,12 @@ dev = [
 release = [
     "pyinstaller>=6.0",
 ]
+desktop = [
+    "PyQt5>=5.15",
+]
 
 [tool.setuptools.packages.find]
-include = ["codesaver*"]
+include = ["codesaver*", "desktop*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

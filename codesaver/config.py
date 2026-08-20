@@ -24,6 +24,7 @@ class Config:
     backup_dir: Optional[Path] = None
     log_path: Optional[Path] = None
     excluded_dirs: frozenset[str] = DEFAULT_EXCLUDED_DIRS
+    excluded_extensions: frozenset[str] = frozenset()
     compress: bool = False
     max_size: Optional[int] = None
     keep_last: Optional[int] = None
@@ -74,6 +75,23 @@ def parse_size(value: object) -> Optional[int]:
     return int(number * multiplier)
 
 
+def normalize_extensions(values: object) -> frozenset[str]:
+    """Normalize extension filters to lowercase values with a leading dot."""
+    if values is None:
+        return frozenset()
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        raise ValueError("extensions must be a list")
+    normalized: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("extension must be a non-empty string")
+        for item in value.split(","):
+            item = item.strip().lower()
+            if item:
+                normalized.add(item if item.startswith(".") else f".{item}")
+    return frozenset(normalized)
+
+
 def _relative_path(value: object, base_dir: Path, key: str) -> Optional[Path]:
     if value is None:
         return None
@@ -111,6 +129,10 @@ def load_config(path: Optional[Union[Path, str]], project_dir: Path) -> Config:
     excluded = raw.get("excluded_dirs", list(DEFAULT_EXCLUDED_DIRS))
     if not isinstance(excluded, list) or not all(isinstance(item, str) and item for item in excluded):
         raise BackupError("errors.config_value", key="excluded_dirs")
+    try:
+        excluded_extensions = normalize_extensions(raw.get("exclude_ext", []))
+    except ValueError as exc:
+        raise BackupError("errors.config_value", key="exclude_ext") from exc
     compress = raw.get("compress", False)
     if not isinstance(compress, bool):
         raise BackupError("errors.config_value", key="compress")
@@ -130,6 +152,7 @@ def load_config(path: Optional[Union[Path, str]], project_dir: Path) -> Config:
         backup_dir=_relative_path(raw.get("backup_dir"), config_path.parent, "backup_dir"),
         log_path=_relative_path(raw.get("log"), config_path.parent, "log"),
         excluded_dirs=frozenset(excluded),
+        excluded_extensions=excluded_extensions,
         compress=compress,
         max_size=max_size,
         keep_last=keep_last,

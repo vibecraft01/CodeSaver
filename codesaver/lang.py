@@ -32,6 +32,8 @@ LANGUAGE_NAMES = {
 
 TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
     "en": {
+        "help.exclude_ext": "Exclude files by extension (repeat or comma-separate, for example .tmp,.log)",
+        "errors.exclude_ext_invalid": "Invalid excluded extension list: {value}",
         "help.description": "Automatic ZIP backups for a code project",
         "help.project_dir": "Project directory to back up",
         "help.backup_dir": "Directory where ZIP backups are stored",
@@ -69,6 +71,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Could not restore backup: {error}",
     },
     "ru": {
+        "help.exclude_ext": "Исключать файлы по расширению (например, .tmp,.log)",
+        "errors.exclude_ext_invalid": "Некорректный список исключаемых расширений: {value}",
         "help.description": "Автоматические ZIP-бэкапы проекта с исходным кодом",
         "help.project_dir": "Директория проекта для резервного копирования",
         "help.backup_dir": "Директория для хранения ZIP-бэкапов",
@@ -106,6 +110,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Не удалось восстановить бэкап: {error}",
     },
     "uk": {
+        "help.exclude_ext": "Виключати файли за розширенням (наприклад, .tmp,.log)",
+        "errors.exclude_ext_invalid": "Некоректний список розширень для виключення: {value}",
         "help.description": "Автоматичні ZIP-резервні копії проєкту з кодом",
         "help.project_dir": "Каталог проєкту для резервного копіювання",
         "help.backup_dir": "Каталог для ZIP-резервних копій",
@@ -143,6 +149,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Не вдалося відновити резервну копію: {error}",
     },
     "de": {
+        "help.exclude_ext": "Dateien nach Erweiterung ausschließen (z. B. .tmp,.log)",
+        "errors.exclude_ext_invalid": "Ungültige Liste ausgeschlossener Erweiterungen: {value}",
         "help.description": "Automatische ZIP-Sicherungen für ein Codeprojekt",
         "help.project_dir": "Zu sicherndes Projektverzeichnis",
         "help.backup_dir": "Verzeichnis für ZIP-Sicherungen",
@@ -180,6 +188,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Sicherung konnte nicht wiederhergestellt werden: {error}",
     },
     "fr": {
+        "help.exclude_ext": "Exclure les fichiers par extension (par exemple .tmp,.log)",
+        "errors.exclude_ext_invalid": "Liste d’extensions exclues invalide : {value}",
         "help.description": "Sauvegardes ZIP automatiques pour un projet de code",
         "help.project_dir": "Répertoire du projet à sauvegarder",
         "help.backup_dir": "Répertoire de stockage des sauvegardes ZIP",
@@ -217,6 +227,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Impossible de restaurer la sauvegarde : {error}",
     },
     "es": {
+        "help.exclude_ext": "Excluir archivos por extensión (por ejemplo, .tmp,.log)",
+        "errors.exclude_ext_invalid": "Lista de extensiones excluidas no válida: {value}",
         "help.description": "Copias de seguridad ZIP automáticas para un proyecto de código",
         "help.project_dir": "Directorio del proyecto que se copiará",
         "help.backup_dir": "Directorio donde se guardan las copias ZIP",
@@ -254,6 +266,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "No se pudo restaurar la copia: {error}",
     },
     "pt": {
+        "help.exclude_ext": "Excluir arquivos por extensão (por exemplo, .tmp,.log)",
+        "errors.exclude_ext_invalid": "Lista de extensões excluídas inválida: {value}",
         "help.description": "Backups ZIP automáticos para um projeto de código",
         "help.project_dir": "Diretório do projeto para backup",
         "help.backup_dir": "Diretório onde os backups ZIP são armazenados",
@@ -291,6 +305,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Não foi possível restaurar o backup: {error}",
     },
     "zh": {
+        "help.exclude_ext": "按扩展名排除文件（例如 .tmp,.log）",
+        "errors.exclude_ext_invalid": "排除扩展名列表无效：{value}",
         "help.description": "为代码项目自动创建 ZIP 备份",
         "help.project_dir": "要备份的项目目录",
         "help.backup_dir": "ZIP 备份的存储目录",
@@ -328,6 +344,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "无法恢复备份：{error}",
     },
     "ja": {
+        "help.exclude_ext": "拡張子でファイルを除外する（例: .tmp,.log）",
+        "errors.exclude_ext_invalid": "除外拡張子リストが不正です: {value}",
         "help.description": "コードプロジェクト用の自動 ZIP バックアップ",
         "help.project_dir": "バックアップするプロジェクトディレクトリ",
         "help.backup_dir": "ZIP バックアップの保存先",
@@ -365,6 +383,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "バックアップを復元できませんでした: {error}",
     },
     "ko": {
+        "help.exclude_ext": "확장자로 파일 제외 (예: .tmp,.log)",
+        "errors.exclude_ext_invalid": "제외 확장자 목록이 올바르지 않습니다: {value}",
         "help.description": "코드 프로젝트를 위한 자동 ZIP 백업",
         "help.project_dir": "백업할 프로젝트 디렉터리",
         "help.backup_dir": "ZIP 백업 저장 디렉터리",
@@ -402,6 +422,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "백업을 복원할 수 없습니다: {error}",
     },
     "hi": {
+        "help.exclude_ext": "एक्सटेंशन के आधार पर फ़ाइलें छोड़ें (उदाहरण: .tmp,.log)",
+        "errors.exclude_ext_invalid": "बहिष्कृत एक्सटेंशन सूची अमान्य है: {value}",
         "help.description": "कोड प्रोजेक्ट के लिए स्वचालित ZIP बैकअप",
         "help.project_dir": "बैकअप के लिए प्रोजेक्ट डायरेक्टरी",
         "help.backup_dir": "ZIP बैकअप रखने की डायरेक्टरी",
@@ -439,6 +461,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "बैकअप पुनर्स्थापित नहीं किया जा सका: {error}",
     },
     "ar": {
+        "help.exclude_ext": "استبعاد الملفات حسب الامتداد (مثل ‎.tmp,.log)",
+        "errors.exclude_ext_invalid": "قائمة الامتدادات المستبعدة غير صالحة: {value}",
         "help.description": "نسخ احتياطية تلقائية بصيغة ZIP لمشروع برمجي",
         "help.project_dir": "مجلد المشروع المراد نسخه احتياطياً",
         "help.backup_dir": "مجلد تخزين النسخ الاحتياطية",
