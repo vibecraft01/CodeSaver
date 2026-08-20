@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | **1.1.3** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) |
-| CodeSaver Desktop | **1.0.0** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.0) |
+| CodeSaver Desktop | **1.0.1** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.1) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -36,7 +36,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ### Desktop version
 
-CodeSaver Desktop `1.0.0` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.0.1` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -192,13 +192,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-Use the [Desktop v1.0.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.0):
+The current stable binary is available in the [Desktop v1.0.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.1):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The [CLI v1.1.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) also includes standalone Windows, macOS, and Linux console binaries.
+The stable [CLI v1.1.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) is also available.
 
 ### Build from source
 

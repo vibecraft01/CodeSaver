@@ -43,9 +43,10 @@ class SettingsDialog(QDialog):
         self.language.addItem("English", "en")
         self.language.setCurrentIndex(0 if settings.language == "ru" else 1)
         self.theme = QComboBox()
+        self.theme.addItem("System", "system")
         self.theme.addItem("Тёмная" if settings.language == "ru" else "Dark", "dark")
         self.theme.addItem("Светлая" if settings.language == "ru" else "Light", "light")
-        self.theme.setCurrentIndex(0 if settings.theme == "dark" else 1)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(settings.theme)))
         self.compress = QCheckBox("Максимальное ZIP-сжатие" if settings.language == "ru" else "Maximum ZIP compression")
         self.compress.setChecked(settings.compress)
         self.minimize_to_tray = QCheckBox(

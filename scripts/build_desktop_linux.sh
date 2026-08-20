@@ -20,7 +20,7 @@ if command -v dpkg-deb >/dev/null 2>&1; then
     chmod 755 "$PACKAGE_ROOT/usr/bin/codesaver-desktop"
     cat > "$PACKAGE_ROOT/DEBIAN/control" <<'CONTROL'
 Package: codesaver-desktop
-Version: 1.0.0
+Version: 1.0.1
 Section: utils
 Priority: optional
 Architecture: amd64

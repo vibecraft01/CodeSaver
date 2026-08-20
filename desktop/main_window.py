@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from shutil import disk_usage
 
-from PyQt5.QtCore import QThread, QTimer, Qt, pyqtSignal
+from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
+from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -20,13 +21,14 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PyQt5.QtCore import QUrl
 
 from codesaver.core import BackupError
 
 from .backup_manager import DesktopBackupManager
 from .settings_dialog import SettingsDialog
 from .tray_icon import TrayIcon
-from .utils import DesktopSettings, archive_details, format_bytes, load_settings, save_settings
+from .utils import DesktopSettings, archive_details, detect_system_theme, format_bytes, load_settings, save_settings
 
 TEXT = {
     "ru": {
@@ -76,6 +78,37 @@ TEXT = {
         "disk_warning": "Low disk space remaining: {free}",
     },
 }
+
+
+# Keep the UI strings in one place and use UTF-8 text for the refreshed
+# controls. The original translations remain as a fallback for older keys.
+TEXT["ru"].update(
+    {
+        "open": "Открыть папку",
+        "open_backups": "Открыть папку бэкапов",
+        "backup": "Создать бэкап",
+        "restore": "Восстановить из бэкапа",
+        "settings": "Настройки",
+        "path": "Путь: {path}",
+        "stats": "Файлов: {count} • Размер: {size}",
+        "progress": "{current}/{total} • {processed}/{total_bytes} ({percent}%)",
+        "ready": "Готово",
+        "choose_project": "Сначала выберите папку проекта.",
+        "backup_started": "Создание бэкапа…",
+        "backup_done": "Бэкап создан",
+        "restore_done": "Восстановлено файлов: {count}",
+        "disk_warning": "На диске осталось мало места: {free}",
+    }
+)
+TEXT["en"].update(
+    {
+        "open_backups": "Open backups folder",
+        "path": "Path: {path}",
+        "stats": "Files: {count} • Size: {size}",
+        "progress": "{current}/{total} • {processed}/{total_bytes} ({percent}%)",
+        "backup_started": "Creating backup…",
+    }
+)
 
 
 class BackupWorker(QThread):
@@ -139,10 +172,13 @@ class MainWindow(QMainWindow):
         self.open_button = QPushButton(self._text("open"))
         self.open_button.clicked.connect(self._choose_project)
         header.addWidget(self.open_button)
+        self.open_backups_button = QPushButton(self._text("open_backups"))
+        self.open_backups_button.clicked.connect(self._open_backup_folder)
+        header.addWidget(self.open_backups_button)
         project_layout.addLayout(header)
-        self.path_label = QLabel(self._text("path"))
+        self.path_label = QLabel(self._text("path", path="—"))
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.stats_label = QLabel(self._text("stats"))
+        self.stats_label = QLabel(self._text("stats", count=0, size=format_bytes(0)))
         project_layout.addWidget(self.path_label)
         project_layout.addWidget(self.stats_label)
         layout.addWidget(project_frame)
@@ -172,7 +208,11 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self.progress_text = QLabel("0/0 • 0 B/0 B")
+        self.progress.setFormat("%p%")
+        self.progress_animation = QPropertyAnimation(self.progress, b"value", self)
+        self.progress_animation.setDuration(260)
+        self.progress_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.progress_text = QLabel(self._progress_text(0, 0, 0, 0))
         progress_row.addWidget(self.progress, 1)
         progress_row.addWidget(self.progress_text)
         layout.addLayout(progress_row)
@@ -184,6 +224,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self._text("title"))
         self.project_header.setText(f"<b>{self._text('project')}</b>")
         self.open_button.setText(self._text("open"))
+        self.open_backups_button.setText(self._text("open_backups"))
         self.backup_button.setText(self._text("backup"))
         self.restore_button.setText(self._text("restore"))
         self.settings_button.setText(self._text("settings"))
@@ -197,7 +238,8 @@ class MainWindow(QMainWindow):
         self.tray.show()
 
     def _apply_theme(self) -> None:
-        if self.settings.theme == "dark":
+        theme = detect_system_theme() if self.settings.theme == "system" else self.settings.theme
+        if theme == "dark":
             self.setStyleSheet(
                 "QMainWindow,QWidget{background:#0D1117;color:#FFFFFF;}"
                 "QFrame{border:1px solid #30363D;border-radius:6px;}"
@@ -228,11 +270,26 @@ class MainWindow(QMainWindow):
     def _set_project(self, path: Path) -> None:
         self.settings.project_dir = str(path.resolve())
         self.manager = DesktopBackupManager(path, self.settings)
-        self.path_label.setText(str(path.resolve()))
+        self.path_label.setText(self._text("path", path=path.resolve()))
         self._refresh_project_info()
         self._refresh_backups()
         save_settings(self.settings)
         self.statusBar().showMessage(self._text("ready"))
+
+    def _open_backup_folder(self) -> None:
+        if self.manager:
+            backup_dir = self.manager.backup_dir
+        elif self.settings.backup_dir:
+            backup_dir = Path(self.settings.backup_dir)
+        else:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(backup_dir))):
+                raise OSError("Could not open the backups folder")
+        except OSError as exc:
+            self._show_error(str(exc))
 
     def _refresh_project_info(self) -> None:
         if not self.manager:
@@ -240,7 +297,7 @@ class MainWindow(QMainWindow):
         try:
             files = self.manager.list_files()
             total = sum(path.stat().st_size for path in files)
-            self.stats_label.setText(f"{self._text('stats').split(':')[0]}: {len(files)} • {format_bytes(total)}")
+            self.stats_label.setText(self._text("stats", count=len(files), size=format_bytes(total)))
         except (BackupError, OSError) as exc:
             self._show_error(str(exc))
 
@@ -259,6 +316,24 @@ class MainWindow(QMainWindow):
         except OSError as exc:
             self._show_error(str(exc))
 
+    def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
+        percent = 0 if total == 0 else int(current / total * 100)
+        return self._text(
+            "progress",
+            current=current,
+            total=total,
+            processed=format_bytes(processed),
+            total_bytes=format_bytes(total_bytes),
+            percent=percent,
+        )
+
+    def _animate_progress(self, percent: int) -> None:
+        current = self.progress.value()
+        self.progress_animation.stop()
+        self.progress_animation.setStartValue(current)
+        self.progress_animation.setEndValue(max(0, min(100, percent)))
+        self.progress_animation.start()
+
     def _start_backup(self) -> None:
         if not self.manager:
             self.statusBar().showMessage(self._text("choose_project"))
@@ -267,7 +342,8 @@ class MainWindow(QMainWindow):
             return
         self._operation = "backup"
         self.progress.setValue(0)
-        self.progress_text.setText("0/0 • 0 B/0 B")
+        self.progress_text.setText(self._progress_text(0, 0, 0, 0))
+        self._animate_progress(0)
         self.statusBar().showMessage(self._text("backup_started"))
         self._set_busy(True)
         self.worker = BackupWorker(self.manager, "backup", language=self.settings.language)
@@ -304,12 +380,12 @@ class MainWindow(QMainWindow):
 
     def _update_progress(self, current: int, total: int, processed: int, total_bytes: int) -> None:
         percent = 100 if total == 0 else int(current / total * 100)
-        self.progress.setValue(percent)
-        self.progress_text.setText(f"{current}/{total} • {format_bytes(processed)}/{format_bytes(total_bytes)}")
+        self._animate_progress(percent)
+        self.progress_text.setText(self._progress_text(current, total, processed, total_bytes))
 
     def _worker_succeeded(self, value: str) -> None:
         if self._operation == "backup":
-            self.progress.setValue(100)
+            self._animate_progress(100)
             self.statusBar().showMessage(self._text("backup_done"))
             self.tray.notify(self._text("title"), self._text("backup_done"))
             if self.manager:
@@ -332,6 +408,7 @@ class MainWindow(QMainWindow):
         self.backup_button.setEnabled(not busy)
         self.restore_button.setEnabled(not busy)
         self.open_button.setEnabled(not busy)
+        self.open_backups_button.setEnabled(not busy)
         self.settings_button.setEnabled(not busy)
 
     def _open_settings(self) -> None:

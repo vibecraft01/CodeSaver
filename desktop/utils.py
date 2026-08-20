@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 import json
+import os
 from pathlib import Path
+import sys
 from typing import Optional
 
 from codesaver.config import normalize_extensions, parse_size
@@ -26,7 +28,7 @@ class DesktopSettings:
     interval_minutes: int = 10
     keep_last: int = 0
     language: str = "ru"
-    theme: str = "dark"
+    theme: str = "system"
     minimize_to_tray: bool = True
     compress: bool = True
     max_size: Optional[int] = None
@@ -54,7 +56,7 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
         keep_last = max(0, int(raw.get("keep_last", 0)))
         max_size = parse_size(raw.get("max_size"))
         language = raw.get("language", "ru") if raw.get("language", "ru") in {"ru", "en"} else "ru"
-        theme = raw.get("theme", "dark") if raw.get("theme", "dark") in {"dark", "light"} else "dark"
+        theme = raw.get("theme", "system") if raw.get("theme", "system") in {"system", "dark", "light"} else "system"
         return DesktopSettings(
             project_dir=_path_value(raw.get("project_dir")),
             backup_dir=_path_value(raw.get("backup_dir")),
@@ -75,6 +77,26 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
 def save_settings(settings: DesktopSettings, path: Path = DESKTOP_CONFIG_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def detect_system_theme() -> str:
+    """Return the Windows application theme as ``light`` or ``dark``.
+
+    Windows stores the user preference in the Personalize registry key. On
+    other platforms, or when the registry cannot be read, dark mode remains a
+    safe deterministic fallback; users can still choose a fixed theme.
+    """
+    if os.name != "nt" and not sys.platform.startswith("win"):
+        return "dark"
+    try:
+        import winreg
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return "light" if int(value) == 1 else "dark"
+    except (ImportError, OSError, TypeError, ValueError):
+        return "dark"
 
 
 def format_bytes(value: int) -> str:

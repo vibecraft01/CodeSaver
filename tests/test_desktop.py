@@ -1,13 +1,50 @@
 import tempfile
 import unittest
 from pathlib import Path
+import sys
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from desktop.backup_manager import DesktopBackupManager
-from desktop.utils import DesktopSettings, archive_details, format_bytes, load_settings, save_settings
+from desktop.utils import (
+    DesktopSettings,
+    archive_details,
+    detect_system_theme,
+    format_bytes,
+    load_settings,
+    save_settings,
+)
 
 
 class DesktopSupportTests(unittest.TestCase):
+    def test_system_theme_detection_and_default(self):
+        self.assertEqual(DesktopSettings().theme, "system")
+
+        class FakeWinreg:
+            HKEY_CURRENT_USER = object()
+
+            class Key:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return None
+
+            @staticmethod
+            def OpenKey(_root, _path):
+                return FakeWinreg.Key()
+
+            @staticmethod
+            def QueryValueEx(_key, _name):
+                return 1, None
+
+        with (
+            patch("desktop.utils.os.name", "nt"),
+            patch("desktop.utils.sys.platform", "win32"),
+            patch.dict(sys.modules, {"winreg": FakeWinreg}),
+        ):
+            self.assertEqual(detect_system_theme(), "light")
+
     def test_settings_round_trip_and_formatting(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "desktop.json"
