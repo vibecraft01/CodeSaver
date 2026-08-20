@@ -37,7 +37,10 @@ jobs:
         run: ${{ matrix.command }}
       - name: Prepare asset
         shell: bash
-        run: cp "${{ matrix.source }}" "${{ matrix.asset }}"
+        run: |
+          if [ "${{ matrix.source }}" != "${{ matrix.asset }}" ]; then
+            cp "${{ matrix.source }}" "${{ matrix.asset }}"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
