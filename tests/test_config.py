@@ -20,10 +20,13 @@ class ConfigTests(unittest.TestCase):
                         "backup_dir": "backups",
                         "log": "logs/codesaver.log",
                         "excluded_dirs": [".git", "build"],
-                        "exclude_ext": ["tmp", ".LOG"],
+                        "exclude_ext": ["tmp", ".LOG", "*.bak"],
+                        "exclude_patterns": ["temp_*"],
                         "compress": True,
                         "max_size": "100M",
                         "keep_last": 3,
+                        "keep_days": 7,
+                        "follow_symlinks": True,
                         "use_gitignore": False,
                     }
                 ),
@@ -36,9 +39,12 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.log_path, (root / "logs/codesaver.log").resolve())
             self.assertEqual(config.excluded_dirs, frozenset({".git", "build"}))
             self.assertEqual(config.excluded_extensions, frozenset({".tmp", ".log"}))
+            self.assertEqual(config.excluded_patterns, frozenset({"*.bak", "temp_*"}))
             self.assertTrue(config.compress)
             self.assertEqual(config.max_size, 100_000_000)
             self.assertEqual(config.keep_last, 3)
+            self.assertEqual(config.keep_days, 7)
+            self.assertTrue(config.follow_symlinks)
             self.assertFalse(config.use_gitignore)
 
     def test_parse_size_accepts_common_units(self):

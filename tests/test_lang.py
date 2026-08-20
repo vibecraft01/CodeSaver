@@ -26,6 +26,8 @@ class LocalizationTests(unittest.TestCase):
             self.assertIn(translate("help.description", language), help_text)
             self.assertIn("--backup-now", help_text)
             self.assertIn("--exclude-ext", help_text)
+            self.assertIn("--keep-days", help_text)
+            self.assertIn("--follow-symlinks", help_text)
 
 
 if __name__ == "__main__":

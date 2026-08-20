@@ -25,9 +25,12 @@ class Config:
     log_path: Optional[Path] = None
     excluded_dirs: frozenset[str] = DEFAULT_EXCLUDED_DIRS
     excluded_extensions: frozenset[str] = frozenset()
+    excluded_patterns: frozenset[str] = frozenset()
     compress: bool = False
     max_size: Optional[int] = None
     keep_last: Optional[int] = None
+    keep_days: Optional[int] = None
+    follow_symlinks: bool = False
     use_gitignore: bool = True
 
 
@@ -92,6 +95,42 @@ def normalize_extensions(values: object) -> frozenset[str]:
     return frozenset(normalized)
 
 
+def normalize_patterns(values: object) -> frozenset[str]:
+    """Normalize filename/path glob patterns used for exclusions."""
+    if values is None:
+        return frozenset()
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        raise ValueError("patterns must be a list")
+    normalized: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("pattern must be a non-empty string")
+        for item in value.split(","):
+            item = item.strip().replace("\\", "/")
+            if item:
+                normalized.add(item)
+    return frozenset(normalized)
+
+
+def _split_exclusion_values(values: object) -> tuple[list[str], list[str]]:
+    """Separate legacy extension values from glob patterns."""
+    if values is None:
+        return [], []
+    if not isinstance(values, (list, tuple, set, frozenset)):
+        raise ValueError("extensions must be a list")
+    extensions: list[str] = []
+    patterns: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("extension must be a non-empty string")
+        for item in value.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            (patterns if any(char in item for char in "*?[") else extensions).append(item)
+    return extensions, patterns
+
+
 def _relative_path(value: object, base_dir: Path, key: str) -> Optional[Path]:
     if value is None:
         return None
@@ -130,9 +169,11 @@ def load_config(path: Optional[Union[Path, str]], project_dir: Path) -> Config:
     if not isinstance(excluded, list) or not all(isinstance(item, str) and item for item in excluded):
         raise BackupError("errors.config_value", key="excluded_dirs")
     try:
-        excluded_extensions = normalize_extensions(raw.get("exclude_ext", []))
+        extension_values, legacy_patterns = _split_exclusion_values(raw.get("exclude_ext", []))
+        excluded_extensions = normalize_extensions(extension_values)
+        excluded_patterns = frozenset(legacy_patterns) | normalize_patterns(raw.get("exclude_patterns", []))
     except ValueError as exc:
-        raise BackupError("errors.config_value", key="exclude_ext") from exc
+        raise BackupError("errors.config_value", key="exclude_patterns") from exc
     compress = raw.get("compress", False)
     if not isinstance(compress, bool):
         raise BackupError("errors.config_value", key="compress")
@@ -143,6 +184,12 @@ def load_config(path: Optional[Union[Path, str]], project_dir: Path) -> Config:
     keep_last = raw.get("keep_last")
     if isinstance(keep_last, bool) or (keep_last is not None and (not isinstance(keep_last, int) or keep_last < 1)):
         raise BackupError("errors.config_value", key="keep_last")
+    keep_days = raw.get("keep_days")
+    if isinstance(keep_days, bool) or (keep_days is not None and (not isinstance(keep_days, int) or keep_days < 1)):
+        raise BackupError("errors.config_value", key="keep_days")
+    follow_symlinks = raw.get("follow_symlinks", False)
+    if not isinstance(follow_symlinks, bool):
+        raise BackupError("errors.config_value", key="follow_symlinks")
     use_gitignore = raw.get("use_gitignore", True)
     if not isinstance(use_gitignore, bool):
         raise BackupError("errors.config_value", key="use_gitignore")
@@ -153,8 +200,11 @@ def load_config(path: Optional[Union[Path, str]], project_dir: Path) -> Config:
         log_path=_relative_path(raw.get("log"), config_path.parent, "log"),
         excluded_dirs=frozenset(excluded),
         excluded_extensions=excluded_extensions,
+        excluded_patterns=excluded_patterns,
         compress=compress,
         max_size=max_size,
         keep_last=keep_last,
+        keep_days=keep_days,
+        follow_symlinks=follow_symlinks,
         use_gitignore=use_gitignore,
     )

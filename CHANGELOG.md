@@ -4,6 +4,24 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.1.4] - 2026-08-20
+
+- Added ETA output to CLI backup progress messages.
+- Added automatic Russian/English locale detection without requiring `--language`.
+- Added JSON glob exclusion templates through `exclude_patterns` and wildcard values in `exclude_ext`.
+- Added optional symlink traversal with `--follow-symlinks` and `follow_symlinks` configuration.
+- Added recent-project selection when starting the CLI without arguments.
+- Added per-file unreadable-file warnings while allowing the backup to continue.
+- Added age-based cleanup with `--keep-days` and `keep_days` configuration.
+
+## [Desktop 1.0.1] - 2026-08-20
+
+- Added automatic Windows system-theme detection with a System theme option.
+- Added immediate project file-count and total-size information when selecting a folder.
+- Added smooth animated backup progress with percentage and byte totals.
+- Added an Open Backups Folder action to the main window.
+- Restored the last selected project automatically on application startup.
+
 ## [CLI 1.1.3] - 2026-08-20
 
 - Added repeatable CLI `--exclude-ext` filtering for temporary, log, bytecode, and other file extensions.

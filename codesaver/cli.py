@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 import sys
 import threading
+import time
 from typing import Optional
 
 from .config import Config, load_config, normalize_extensions, parse_size
@@ -14,6 +16,8 @@ from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
 from .logging_utils import configure_logging
 from .runtime import check_python_version, python_version_text
+
+RECENT_PROJECTS_PATH = Path.home() / ".codesaver-recent.json"
 
 
 class LocalizedArgumentParser(argparse.ArgumentParser):
@@ -64,6 +68,10 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--compress", action="store_true", default=None, help=translate("help.compress", language))
     parser.add_argument("--max-size", metavar="SIZE", default=None, help=translate("help.max_size", language))
     parser.add_argument("--keep-last", type=int, default=None, metavar="N", help=translate("help.keep_last", language))
+    parser.add_argument("--keep-days", type=int, default=None, metavar="N", help=translate("help.keep_days", language))
+    parser.add_argument(
+        "--follow-symlinks", action="store_true", default=None, help=translate("help.follow_symlinks", language)
+    )
     parser.add_argument(
         "--no-gitignore", action="store_true", default=None, help=translate("help.no_gitignore", language)
     )
@@ -85,9 +93,35 @@ def _error_text(error: Exception, language: str) -> str:
     return error.localized(language) if isinstance(error, BackupError) else str(error)
 
 
+def _format_duration(seconds: Optional[float], language: str) -> str:
+    if seconds is None:
+        return translate("message.eta_unknown", language)
+    remaining = max(0, int(round(seconds)))
+    hours, remainder = divmod(remaining, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
 def _progress_callback(language: str):
+    started: Optional[float] = None
+
     def show_progress(current: int, total: int, _path: Path, processed_bytes: int, total_bytes: int) -> None:
+        nonlocal started
+        now = time.monotonic()
+        if started is None:
+            started = now
         percent = 100.0 if total == 0 else current / total * 100
+        elapsed = now - started
+        if current >= total:
+            eta = _format_duration(0, language)
+        elif current and elapsed > 0:
+            eta = _format_duration((total - current) * elapsed / current, language)
+        else:
+            eta = _format_duration(None, language)
         message = translate(
             "message.progress",
             language,
@@ -96,6 +130,7 @@ def _progress_callback(language: str):
             percent=percent,
             processed_size=_format_bytes(processed_bytes),
             total_size=_format_bytes(total_bytes),
+            eta=eta,
         )
         if sys.stdout.isatty():
             print("\r" + message, end="", flush=True)
@@ -125,6 +160,74 @@ def _create_backup(manager: BackupManager, language: str, logger: logging.Logger
         print(translate("message.backups_removed", language, count=manager.last_cleanup_count))
     logger.info("Backup created: %s", archive)
     return archive
+
+
+def _file_error_callback(language: str, logger: logging.Logger):
+    def report(path: Path, error: BaseException) -> None:
+        message = translate("message.file_skipped", language, path=path, error=error)
+        logger.warning("File skipped: %s (%s)", path, error)
+        print(message, file=sys.stderr)
+
+    return report
+
+
+def _load_recent_projects() -> list[Path]:
+    try:
+        raw = json.loads(RECENT_PROJECTS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            return []
+        projects: list[Path] = []
+        for value in raw:
+            path = Path(str(value)).expanduser().resolve()
+            if path.is_dir() and path not in projects:
+                projects.append(path)
+        return projects[:10]
+    except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+        return []
+
+
+def _remember_project(project_dir: Path) -> None:
+    projects = [project_dir.resolve(), *_load_recent_projects()]
+    unique: list[str] = []
+    for path in projects:
+        value = str(path)
+        if value not in unique and Path(value).is_dir():
+            unique.append(value)
+    try:
+        RECENT_PROJECTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        RECENT_PROJECTS_PATH.write_text(json.dumps(unique[:10], indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _select_recent_project(language: str) -> Path:
+    recent = _load_recent_projects()
+    print(translate("recent.header", language))
+    if recent:
+        for index, path in enumerate(recent, start=1):
+            print(f"{index}. {path}")
+    else:
+        print(translate("recent.none", language))
+    print(f"c. {translate('recent.current', language)} ({Path.cwd().resolve()})")
+    print(f"b. {translate('recent.browse', language)}")
+    print(f"q. {translate('recent.quit', language)}")
+    while True:
+        try:
+            choice = input(translate("recent.prompt", language)).strip().lower()
+        except EOFError:
+            return Path.cwd().resolve()
+        if choice == "c" or choice == "":
+            return Path.cwd().resolve()
+        if choice == "b":
+            value = input(translate("recent.path", language)).strip()
+            path = Path(value).expanduser().resolve()
+            if path.is_dir():
+                return path
+        elif choice == "q":
+            raise KeyboardInterrupt
+        elif choice.isdigit() and 1 <= int(choice) <= len(recent):
+            return recent[int(choice) - 1]
+        print(translate("recent.invalid", language))
 
 
 def _autosave(
@@ -206,6 +309,9 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
     keep_last = args.keep_last if args.keep_last is not None else config.keep_last
     if keep_last is not None and keep_last <= 0:
         raise BackupError("errors.keep_last_positive")
+    keep_days = args.keep_days if args.keep_days is not None else config.keep_days
+    if keep_days is not None and keep_days <= 0:
+        raise BackupError("errors.keep_days_positive")
     try:
         excluded_extensions = normalize_extensions(
             args.exclude_ext if args.exclude_ext is not None else config.excluded_extensions
@@ -221,9 +327,12 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
         log_path=args.log or config.log_path,
         excluded_dirs=config.excluded_dirs,
         excluded_extensions=excluded_extensions,
+        excluded_patterns=config.excluded_patterns,
         compress=compress,
         max_size=max_size,
         keep_last=keep_last,
+        keep_days=keep_days,
+        follow_symlinks=config.follow_symlinks if args.follow_symlinks is None else args.follow_symlinks,
         use_gitignore=use_gitignore,
     )
     try:
@@ -238,12 +347,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure:
             reconfigure(encoding="utf-8", errors="replace")
+    raw_args = sys.argv[1:] if argv is None else argv
     detected_language = _language_from_argv(argv) or detect_language()
     if not check_python_version():
         print(translate("errors.python_version", detected_language, version=python_version_text()), file=sys.stderr)
         return 2
     args = build_parser(detected_language).parse_args(argv)
     language = normalize_language(args.language or detected_language)
+    if not raw_args and args.project_dir is None:
+        try:
+            args.project_dir = _select_recent_project(language)
+        except KeyboardInterrupt:
+            print("\n" + translate("message.stopping", language))
+            return 0
     logger: Optional[logging.Logger] = None
     try:
         project_dir, settings, language, logger = _settings(args, language)
@@ -252,11 +368,16 @@ def main(argv: Optional[list[str]] = None) -> int:
             settings.backup_dir,
             excluded_dirs=set(settings.excluded_dirs),
             excluded_extensions=set(settings.excluded_extensions),
+            excluded_patterns=set(settings.excluded_patterns),
             compress=settings.compress,
             max_size=settings.max_size,
             keep_last=settings.keep_last,
+            keep_days=settings.keep_days,
+            follow_symlinks=settings.follow_symlinks,
             use_gitignore=settings.use_gitignore,
+            file_error_callback=_file_error_callback(language, logger),
         )
+        _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         if args.restore:
             count = manager.restore_backup(args.restore, overwrite=args.overwrite)

@@ -14,8 +14,11 @@
     ".mypy_cache"
   ],
   "exclude_ext": [],
+  "exclude_patterns": ["*.tmp", "*.log", "temp_*"],
   "compress": false,
   "max_size": null,
   "keep_last": null,
+  "keep_days": null,
+  "follow_symlinks": false,
   "use_gitignore": true
 }

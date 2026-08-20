@@ -8,7 +8,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.1.3** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) |
+| CodeSaver CLI | **1.1.4** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.4) |
 | CodeSaver Desktop | **1.0.1** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.1) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
@@ -25,11 +25,17 @@ The CLI and Desktop applications share the same tested backup and restore engine
 - Default exclusions for `.git`, `__pycache__`, virtual environments, build directories, and caches.
 - Zip Slip protection during restore.
 - File and byte progress reporting.
+- Estimated time remaining (ETA) in progress output.
 - Maximum compression with `--compress`.
 - File-size filtering with `--max-size`.
 - Automatic cleanup with `--keep-last N`.
+- Age-based cleanup with `--keep-days N`.
 - Root `.gitignore` support with common glob and negation rules.
 - Repeatable extension filtering with `--exclude-ext`.
+- JSON glob templates such as `*.tmp`, `*.log`, and `temp_*`.
+- Optional symbolic-link traversal with `--follow-symlinks`.
+- Recent-project selection when starting `codesaver` without arguments.
+- Unreadable files are reported with their path and skipped so the backup can continue.
 - Optional operation logs with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
 - Python 3.9+ dependency-free runtime.
@@ -129,6 +135,12 @@ codesaver --backup-now --compress --max-size 100M
 # Keep only the five newest backups.
 codesaver --backup-now --keep-last 5
 
+# Delete backups older than 30 days.
+codesaver --backup-now --keep-days 30
+
+# Include the contents reached through symbolic links.
+codesaver --backup-now --follow-symlinks
+
 # Exclude temporary and log files by extension.
 codesaver --backup-now --exclude-ext .tmp --exclude-ext .log
 
@@ -139,8 +151,8 @@ codesaver --backup-now --no-gitignore
 Example progress output:
 
 ```text
-Progress: 12/48 files (25%) - 1.4 MB/5.8 MB
-Progress: 48/48 files (100%) - 5.8 MB/5.8 MB
+Progress: 12/48 files (25%) - 1.4 MB/5.8 MB; ETA: 18s
+Progress: 48/48 files (100%) - 5.8 MB/5.8 MB; ETA: 0s
 Backup created: /path/to/my-project-backups/my-project_2026-08-20_12-30-00.zip
 ```
 
@@ -166,9 +178,12 @@ CodeSaver looks for `.codesaver.json` in the project directory. A ready-to-copy 
   "log": "../code-saver.log",
   "excluded_dirs": [".git", "__pycache__", "venv", ".venv", "build"],
   "exclude_ext": [".tmp", ".log", ".pyc"],
+  "exclude_patterns": ["*.tmp", "*.log", "temp_*"],
   "compress": true,
   "max_size": "100M",
   "keep_last": 5,
+  "keep_days": 30,
+  "follow_symlinks": false,
   "use_gitignore": true
 }
 ```
@@ -198,7 +213,7 @@ The current stable binary is available in the [Desktop v1.0.1 release](https://g
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.1.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.3) is also available.
+The stable [CLI v1.1.4 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.4) is also available.
 
 ### Build from source
 

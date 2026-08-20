@@ -52,6 +52,70 @@ class BackupManagerTests(unittest.TestCase):
             with ZipFile(archive) as zip_file:
                 self.assertEqual(zip_file.namelist(), ["keep.py"])
 
+    def test_excluded_glob_patterns_are_not_archived(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "keep.py").write_text("pass\n", encoding="utf-8")
+            (root / "debug.tmp").write_text("ignore\n", encoding="utf-8")
+            (root / "temp_generated.txt").write_text("ignore\n", encoding="utf-8")
+            archive = BackupManager(root, excluded_patterns={"*.tmp", "temp_*"}).create_backup()
+            with ZipFile(archive) as zip_file:
+                self.assertEqual(zip_file.namelist(), ["keep.py"])
+
+    def test_keep_days_removes_aged_backups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            old_archive = backups / "project_old.zip"
+            old_archive.write_bytes(b"old")
+            os.utime(old_archive, (time.time() - 3 * 86400, time.time() - 3 * 86400))
+            (root / "app.py").write_text("pass\n", encoding="utf-8")
+            manager = BackupManager(root, backups, keep_days=1)
+            manager.create_backup()
+            self.assertFalse(old_archive.exists())
+            self.assertEqual(manager.last_cleanup_count, 1)
+
+    def test_follow_symlinks_archives_target_contents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            target = Path(tmp) / "target.txt"
+            root.mkdir()
+            target.write_bytes(b"linked content\n")
+            link = root / "linked.txt"
+            try:
+                link.symlink_to(target)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"symbolic links are unavailable: {exc}")
+            archive = BackupManager(root, follow_symlinks=True).create_backup()
+            with ZipFile(archive) as zip_file:
+                self.assertEqual(zip_file.read("linked.txt"), b"linked content\n")
+
+    def test_unreadable_file_is_skipped_and_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "keep.py").write_text("pass\n", encoding="utf-8")
+            skipped = root / "skip.py"
+            skipped.write_text("skip\n", encoding="utf-8")
+            errors = []
+            original_write = ZipFile.write
+
+            def write_file(archive, filename, *args, **kwargs):
+                if Path(filename).name == "skip.py":
+                    raise PermissionError("denied")
+                return original_write(archive, filename, *args, **kwargs)
+
+            with patch.object(ZipFile, "write", write_file):
+                archive = BackupManager(
+                    root, file_error_callback=lambda path, error: errors.append((path, error))
+                ).create_backup()
+            with ZipFile(archive) as zip_file:
+                self.assertEqual(zip_file.namelist(), ["keep.py"])
+            self.assertEqual(errors[0][0], skipped)
+
     def test_compression_max_size_and_detailed_progress(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

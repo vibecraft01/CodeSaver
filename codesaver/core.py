@@ -11,6 +11,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 import os
 import tempfile
+import time
 from typing import Callable, Iterator, Optional, Union
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
@@ -19,6 +20,7 @@ from .lang import translate
 DEFAULT_EXCLUDED_DIRS = frozenset({".git", "__pycache__", "venv", ".venv", "env", ".env", ".tox", ".mypy_cache"})
 ProgressCallback = Callable[[int, int, Path], None]
 DetailedProgressCallback = Callable[[int, int, Path, int, int], None]
+FileErrorCallback = Callable[[Path, BaseException], None]
 
 
 def _gitignore_pattern_matches(candidate: str, rule: str, anchored: bool) -> bool:
@@ -48,10 +50,14 @@ class BackupManager:
         backup_dir: Optional[Union[Path, str]] = None,
         excluded_dirs: Optional[set[str]] = None,
         excluded_extensions: Optional[set[str]] = None,
+        excluded_patterns: Optional[set[str]] = None,
         compress: bool = False,
         max_size: Optional[int] = None,
         keep_last: Optional[int] = None,
+        keep_days: Optional[int] = None,
+        follow_symlinks: bool = False,
         use_gitignore: bool = True,
+        file_error_callback: Optional[FileErrorCallback] = None,
     ) -> None:
         self.project_dir = Path(project_dir).expanduser().resolve()
         self.backup_dir = (
@@ -61,15 +67,33 @@ class BackupManager:
         )
         self.excluded_dirs = frozenset(excluded_dirs or DEFAULT_EXCLUDED_DIRS)
         self.excluded_extensions = frozenset(item.lower() for item in (excluded_extensions or set()))
+        self.excluded_patterns = frozenset(item.lower() for item in (excluded_patterns or set()))
         if max_size is not None and max_size < 0:
             raise ValueError("max_size must be non-negative")
         if keep_last is not None and keep_last < 1:
             raise ValueError("keep_last must be positive")
+        if keep_days is not None and keep_days < 1:
+            raise ValueError("keep_days must be positive")
         self.compress = compress
         self.max_size = max_size
         self.keep_last = keep_last
+        self.keep_days = keep_days
+        self.follow_symlinks = follow_symlinks
         self.use_gitignore = use_gitignore
+        self.file_error_callback = file_error_callback
         self.last_cleanup_count = 0
+
+    def _report_file_error(self, path: Path, error: BaseException) -> None:
+        if self.file_error_callback:
+            try:
+                self.file_error_callback(path, error)
+            except Exception:
+                pass
+
+    def _matches_exclusion_pattern(self, relative_path: Path) -> bool:
+        candidate = relative_path.as_posix().lower()
+        name = relative_path.name.lower()
+        return any(fnmatchcase(candidate, pattern) or fnmatchcase(name, pattern) for pattern in self.excluded_patterns)
 
     def _validate_project(self) -> None:
         if not self.project_dir.exists():
@@ -83,13 +107,16 @@ class BackupManager:
         backup_root = self.backup_dir
         gitignore_rules = self._load_gitignore_rules() if self.use_gitignore else []
         has_negated_rule = any(rule.startswith("!") for rule in gitignore_rules)
-        for root, dirs, files in os.walk(self.project_dir, topdown=True, onerror=self._walk_error):
+        for root, dirs, files in os.walk(
+            self.project_dir, topdown=True, onerror=self._walk_error, followlinks=self.follow_symlinks
+        ):
             root_path = Path(root)
             dirs[:] = sorted(
                 name
                 for name in dirs
                 if name not in self.excluded_dirs
                 and (root_path / name).resolve() != backup_root
+                and not self._matches_exclusion_pattern((root_path / name).relative_to(self.project_dir))
                 and (
                     not self.use_gitignore
                     or not self._gitignore_matches(
@@ -102,8 +129,9 @@ class BackupManager:
                 path = root_path / name
                 relative_path = path.relative_to(self.project_dir)
                 if (
-                    not path.is_symlink()
+                    (self.follow_symlinks or not path.is_symlink())
                     and not any(path.name.lower().endswith(extension) for extension in self.excluded_extensions)
+                    and not self._matches_exclusion_pattern(relative_path)
                     and (not self.use_gitignore or not self._gitignore_matches(relative_path, False, gitignore_rules))
                 ):
                     yield path
@@ -165,9 +193,9 @@ class BackupManager:
                 if self.max_size is None or path.stat().st_size <= self.max_size:
                     files.append(path)
             except PermissionError as exc:
-                raise BackupError("errors.permission", path=path) from exc
+                self._report_file_error(path, exc)
             except OSError as exc:
-                raise BackupError("errors.create_failed", error=exc) from exc
+                self._report_file_error(path, exc)
         return files
 
     def create_backup(
@@ -190,7 +218,15 @@ class BackupManager:
             fd, temp_name = tempfile.mkstemp(prefix=".codesaver-", suffix=".tmp", dir=self.backup_dir)
             os.close(fd)
             temp_path = Path(temp_name)
-            total_bytes = sum(path.stat().st_size for path in files)
+            total_bytes = 0
+            valid_files: list[Path] = []
+            for path in files:
+                try:
+                    total_bytes += path.stat().st_size
+                    valid_files.append(path)
+                except (PermissionError, OSError) as exc:
+                    self._report_file_error(path, exc)
+            files = valid_files
             compression = ZIP_DEFLATED
             compresslevel = 9 if self.compress else None
             with ZipFile(temp_path, "w", compression=compression, compresslevel=compresslevel) as archive:
@@ -200,8 +236,16 @@ class BackupManager:
                     detailed_progress_callback(0, 0, self.project_dir, 0, 0)
                 processed_bytes = 0
                 for current, path in enumerate(files, start=1):
-                    archive.write(path, path.relative_to(self.project_dir).as_posix())
-                    processed_bytes += path.stat().st_size
+                    try:
+                        archive.write(path, path.relative_to(self.project_dir).as_posix())
+                    except (PermissionError, OSError) as exc:
+                        self._report_file_error(path, exc)
+                        continue
+                    try:
+                        processed_bytes += path.stat().st_size
+                    except (PermissionError, OSError) as exc:
+                        self._report_file_error(path, exc)
+                        continue
                     if progress_callback:
                         progress_callback(current, len(files), path)
                     if detailed_progress_callback:
@@ -220,7 +264,7 @@ class BackupManager:
 
     def cleanup_old_backups(self) -> int:
         """Keep only the configured number of backups for this project."""
-        if self.keep_last is None:
+        if self.keep_last is None and self.keep_days is None:
             return 0
         prefix = f"{self.project_dir.name}_"
         try:
@@ -234,7 +278,18 @@ class BackupManager:
                 reverse=True,
             )
             removed = 0
-            for archive in archives[self.keep_last :]:
+            if self.keep_days is not None:
+                cutoff = time.time() - self.keep_days * 86400
+                aged = [archive for archive in archives if archive.stat().st_mtime < cutoff]
+                for archive in aged:
+                    archive.unlink()
+                    removed += 1
+                archives = [archive for archive in archives if archive.exists()]
+            if self.keep_last is not None:
+                old_archives = archives[self.keep_last :]
+            else:
+                old_archives = []
+            for archive in old_archives:
                 archive.unlink()
                 removed += 1
             return removed

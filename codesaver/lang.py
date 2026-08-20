@@ -824,6 +824,48 @@ for _language, _messages in _FEATURE_TRANSLATIONS.items():
     TRANSLATIONS[_language].update(_messages)
 
 
+_V14_COMMON = {
+    "help.keep_days": "Remove backups older than N days",
+    "help.follow_symlinks": "Include files reached through symbolic links",
+    "message.eta_unknown": "calculating",
+    "message.file_skipped": "Skipped unreadable file {path}: {error}",
+    "recent.header": "Choose a recent project",
+    "recent.none": "No recent projects found.",
+    "recent.current": "Use current directory",
+    "recent.browse": "Enter another project path",
+    "recent.quit": "Cancel",
+    "recent.prompt": "Project choice: ",
+    "recent.path": "Project path: ",
+    "recent.invalid": "Invalid choice. Try again.",
+    "errors.keep_days_positive": "--keep-days must be at least 1",
+    "message.progress": (
+        "Progress: {current}/{total} files ({percent:.0f}%) — " "{processed_size}/{total_size}; ETA: {eta}"
+    ),
+}
+for _language in TRANSLATIONS:
+    TRANSLATIONS[_language].update(_V14_COMMON)
+TRANSLATIONS["ru"].update(
+    {
+        "help.keep_days": "Удалять бэкапы старше N дней",
+        "help.follow_symlinks": "Включать содержимое символических ссылок",
+        "message.eta_unknown": "расчёт",
+        "message.file_skipped": "Нечитаемый файл пропущен {path}: {error}",
+        "recent.header": "Выберите недавний проект",
+        "recent.none": "Недавние проекты не найдены.",
+        "recent.current": "Использовать текущую папку",
+        "recent.browse": "Ввести другой путь проекта",
+        "recent.quit": "Отмена",
+        "recent.prompt": "Выбор проекта: ",
+        "recent.path": "Путь проекта: ",
+        "recent.invalid": "Некорректный выбор. Попробуйте ещё раз.",
+        "errors.keep_days_positive": "--keep-days должен быть не меньше 1",
+        "message.progress": (
+            "Прогресс: {current}/{total} файлов ({percent:.0f}%) — " "{processed_size}/{total_size}; осталось: {eta}"
+        ),
+    }
+)
+
+
 _ALIASES = {
     "russian": "ru",
     "русский": "ru",
