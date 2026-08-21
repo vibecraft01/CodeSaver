@@ -191,6 +191,15 @@ class BackupManagerTests(unittest.TestCase):
                 BackupManager(root).restore_backup(archive)
             self.assertEqual(context.exception.key, "errors.invalid_zip")
 
+    def test_verify_backup_checks_zip_integrity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "app.py").write_text("pass\n", encoding="utf-8")
+            manager = BackupManager(root)
+            archive = manager.create_backup()
+            self.assertEqual(manager.verify_backup(archive), 1)
+
     def test_permission_error_is_reported_as_backup_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

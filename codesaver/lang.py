@@ -866,6 +866,28 @@ TRANSLATIONS["ru"].update(
 )
 
 
+_V15_COMMON = {
+    "help.dry_run": "List files and sizes without creating an archive",
+    "help.verify": "Verify the ZIP archive after creation or before restore",
+    "help.exclude_dir": "Exclude this directory name (repeatable)",
+    "message.dry_run": "Dry run: {count} files, {size}; no archive created",
+    "message.backup_verified": "Backup verified successfully: {count} files",
+    "errors.exclude_dir_invalid": "--exclude-dir must not be empty",
+}
+for _language in TRANSLATIONS:
+    TRANSLATIONS[_language].update(_V15_COMMON)
+TRANSLATIONS["ru"].update(
+    {
+        "help.dry_run": "Показать файлы и размеры без создания архива",
+        "help.verify": "Проверить ZIP после создания или перед восстановлением",
+        "help.exclude_dir": "Исключить папку по имени (можно повторять)",
+        "message.dry_run": "Пробный запуск: {count} файлов, {size}; архив не создан",
+        "message.backup_verified": "Бэкап успешно проверен: файлов {count}",
+        "errors.exclude_dir_invalid": "--exclude-dir не должен быть пустым",
+    }
+)
+
+
 _ALIASES = {
     "russian": "ru",
     "русский": "ru",

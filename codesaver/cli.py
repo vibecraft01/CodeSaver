@@ -58,6 +58,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--interval", type=int, default=None, help=translate("help.interval", language))
     parser.add_argument("--no-autosave", action="store_true", help=translate("help.no_autosave", language))
     parser.add_argument("--backup-now", action="store_true", help=translate("help.backup_now", language))
+    parser.add_argument("--dry-run", action="store_true", help=translate("help.dry_run", language))
+    parser.add_argument("--verify", action="store_true", help=translate("help.verify", language))
+    parser.add_argument(
+        "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
+    )
     parser.add_argument(
         "--exclude-ext",
         action="append",
@@ -152,14 +157,31 @@ def _format_bytes(value: int) -> str:
     return f"{value} B"
 
 
-def _create_backup(manager: BackupManager, language: str, logger: logging.Logger) -> Path:
+def _create_backup(manager: BackupManager, language: str, logger: logging.Logger, verify: bool = False) -> Path:
     logger.info("Starting backup: project=%s backup_dir=%s", manager.project_dir, manager.backup_dir)
     archive = manager.create_backup(detailed_progress_callback=_progress_callback(language))
     if manager.last_cleanup_count:
         logger.info("Removed old backups: count=%s", manager.last_cleanup_count)
         print(translate("message.backups_removed", language, count=manager.last_cleanup_count))
     logger.info("Backup created: %s", archive)
+    if verify:
+        members = manager.verify_backup(archive)
+        logger.info("Backup verified: archive=%s members=%s", archive, members)
+        print(translate("message.backup_verified", language, count=members))
     return archive
+
+
+def _dry_run(manager: BackupManager, language: str) -> None:
+    files = manager.list_files()
+    total_size = 0
+    for path in files:
+        try:
+            total_size += path.stat().st_size
+        except OSError:
+            continue
+    print(translate("message.dry_run", language, count=len(files), size=_format_bytes(total_size)))
+    for path in files:
+        print(f"  {path.relative_to(manager.project_dir).as_posix()}")
 
 
 def _file_error_callback(language: str, logger: logging.Logger):
@@ -318,6 +340,12 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
         )
     except ValueError as exc:
         raise BackupError("errors.exclude_ext_invalid", value=args.exclude_ext) from exc
+    excluded_dirs = set(config.excluded_dirs)
+    for value in args.exclude_dir or []:
+        value = value.strip()
+        if not value:
+            raise BackupError("errors.exclude_dir_invalid")
+        excluded_dirs.add(value)
     compress = config.compress if args.compress is None else args.compress
     use_gitignore = config.use_gitignore if args.no_gitignore is None else not args.no_gitignore
     effective = Config(
@@ -325,7 +353,7 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
         language=language,
         backup_dir=args.backup_dir or config.backup_dir,
         log_path=args.log or config.log_path,
-        excluded_dirs=config.excluded_dirs,
+        excluded_dirs=frozenset(excluded_dirs),
         excluded_extensions=excluded_extensions,
         excluded_patterns=config.excluded_patterns,
         compress=compress,
@@ -380,11 +408,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         if args.restore:
+            if args.verify:
+                members = manager.verify_backup(args.restore)
+                print(translate("message.backup_verified", language, count=members))
             count = manager.restore_backup(args.restore, overwrite=args.overwrite)
             logger.info("Backup restored: archive=%s files=%s", args.restore, count)
             print(translate("message.restore_completed", language, count=count))
+        elif args.dry_run:
+            _dry_run(manager, language)
         elif args.backup_now:
-            print(translate("message.backup_created", language, path=_create_backup(manager, language, logger)))
+            print(
+                translate(
+                    "message.backup_created", language, path=_create_backup(manager, language, logger, args.verify)
+                )
+            )
         else:
             run_menu(
                 manager, autosave=not args.no_autosave, interval=settings.interval, language=language, logger=logger

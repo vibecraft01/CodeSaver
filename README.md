@@ -8,7 +8,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.1.4** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.4) |
+| CodeSaver CLI | **1.1.5** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.5) |
 | CodeSaver Desktop | **1.0.2** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.2) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
@@ -36,6 +36,10 @@ The CLI and Desktop applications share the same tested backup and restore engine
 - Optional symbolic-link traversal with `--follow-symlinks`.
 - Recent-project selection when starting `codesaver` without arguments.
 - Unreadable files are reported with their path and skipped so the backup can continue.
+- Dry-run file listing with `--dry-run`.
+- ZIP integrity validation with `--verify`.
+- Repeatable command-line directory exclusions with `--exclude-dir`.
+- Final verification and operation summary output.
 - Optional operation logs with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
 - Python 3.9+ dependency-free runtime.
@@ -150,6 +154,12 @@ codesaver --backup-now --follow-symlinks
 # Exclude temporary and log files by extension.
 codesaver --backup-now --exclude-ext .tmp --exclude-ext .log
 
+# Preview files without creating an archive.
+codesaver --project-dir ./my-project --dry-run
+
+# Exclude a generated directory and verify the resulting ZIP.
+codesaver --backup-now --exclude-dir generated --verify
+
 # Ignore the project's .gitignore for this run.
 codesaver --backup-now --no-gitignore
 ```
@@ -219,7 +229,7 @@ The current stable binary is available in the [Desktop v1.0.2 release](https://g
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.1.4 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.4) is also available.
+The stable [CLI v1.1.5 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.5) is available.
 
 ### Build from source
 

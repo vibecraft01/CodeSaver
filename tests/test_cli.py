@@ -17,9 +17,14 @@ from codesaver.cli import (
 
 class CliFeatureTests(unittest.TestCase):
     def test_parser_exposes_new_options(self):
-        args = build_parser("en").parse_args(["--keep-days", "30", "--follow-symlinks"])
+        args = build_parser("en").parse_args(
+            ["--keep-days", "30", "--follow-symlinks", "--dry-run", "--verify", "--exclude-dir", "generated"]
+        )
         self.assertEqual(args.keep_days, 30)
         self.assertTrue(args.follow_symlinks)
+        self.assertTrue(args.dry_run)
+        self.assertTrue(args.verify)
+        self.assertEqual(args.exclude_dir, ["generated"])
 
     def test_eta_is_included_in_progress_output(self):
         output = io.StringIO()

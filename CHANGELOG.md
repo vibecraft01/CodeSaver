@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.1.5] - 2026-08-21
+
+- Added `--dry-run` to inspect files and total size without creating an archive.
+- Added `--verify` to validate ZIP CRCs after backup creation or before restore.
+- Added repeatable `--exclude-dir` command-line directory exclusions.
+- Added clearer dry-run, verification, and operation summary messages.
+
 ## [Desktop 1.0.2] - 2026-08-21
 
 - Added drag-and-drop project folder selection.
