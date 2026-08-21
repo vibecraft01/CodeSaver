@@ -15,6 +15,8 @@ from codesaver.core import DEFAULT_EXCLUDED_DIRS
 
 DESKTOP_CONFIG_PATH = Path.home() / ".codesaver-desktop.json"
 DESKTOP_DEFAULT_EXCLUDED_DIRS = tuple(dict.fromkeys((*DEFAULT_EXCLUDED_DIRS, "node_modules", "dist", "build")))
+DESKTOP_THEMES = ("system", "dark", "light", "midnight", "ocean", "forest", "high-contrast")
+DESKTOP_LANGUAGES = ("auto", "ru", "en")
 
 
 @dataclass
@@ -27,12 +29,14 @@ class DesktopSettings:
     excluded_extensions: tuple[str, ...] = ()
     interval_minutes: int = 10
     keep_last: int = 0
-    language: str = "ru"
+    language: str = "auto"
     theme: str = "system"
+    accent_color: str = "#58A6FF"
     minimize_to_tray: bool = True
     compress: bool = True
     max_size: Optional[int] = None
     recent_projects: tuple[str, ...] = ()
+    backup_on_start: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -61,8 +65,11 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             for item in raw.get("recent_projects", [])
             if isinstance(item, str) and item
         )[:5]
-        language = raw.get("language", "ru") if raw.get("language", "ru") in {"ru", "en"} else "ru"
-        theme = raw.get("theme", "system") if raw.get("theme", "system") in {"system", "dark", "light"} else "system"
+        language = raw.get("language", "auto") if raw.get("language", "auto") in DESKTOP_LANGUAGES else "auto"
+        theme = raw.get("theme", "system") if raw.get("theme", "system") in DESKTOP_THEMES else "system"
+        accent_color = str(raw.get("accent_color", "#58A6FF"))
+        if not _is_hex_color(accent_color):
+            accent_color = "#58A6FF"
         return DesktopSettings(
             project_dir=_path_value(raw.get("project_dir")),
             backup_dir=_path_value(raw.get("backup_dir")),
@@ -72,10 +79,12 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             keep_last=keep_last,
             language=language,
             theme=theme,
+            accent_color=accent_color,
             minimize_to_tray=bool(raw.get("minimize_to_tray", True)),
             compress=bool(raw.get("compress", True)),
             max_size=max_size,
             recent_projects=recent_projects,
+            backup_on_start=bool(raw.get("backup_on_start", False)),
         )
     except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
         return DesktopSettings()
@@ -104,6 +113,48 @@ def detect_system_theme() -> str:
         return "light" if int(value) == 1 else "dark"
     except (ImportError, OSError, TypeError, ValueError):
         return "dark"
+
+
+def detect_system_language() -> str:
+    """Return the desktop UI language supported by the current locale."""
+    candidates = []
+    try:
+        import locale
+
+        candidates.append(locale.getlocale()[0])
+    except (AttributeError, ValueError):
+        pass
+    candidates.extend((os.environ.get("LC_ALL"), os.environ.get("LANG"), os.environ.get("LANGUAGE")))
+    for value in candidates:
+        normalized = str(value or "").lower().replace("-", "_")
+        if normalized.startswith("ru"):
+            return "ru"
+    return "en"
+
+
+def _is_hex_color(value: str) -> bool:
+    return len(value) == 7 and value.startswith("#") and all(char in "0123456789abcdefABCDEF" for char in value[1:])
+
+
+def theme_colors(theme: str, accent: str = "#58A6FF") -> dict[str, str]:
+    """Return a small, dependency-free color palette for the desktop UI."""
+    palettes = {
+        "dark": ("#0D1117", "#161B22", "#21262D", "#FFFFFF", "#30363D"),
+        "light": ("#FFFFFF", "#F6F8FA", "#FFFFFF", "#1F2328", "#D0D7DE"),
+        "midnight": ("#080B14", "#101629", "#17213A", "#E6EDF7", "#283653"),
+        "ocean": ("#071A26", "#0B2B3A", "#123E50", "#E8FAFF", "#245A6D"),
+        "forest": ("#0B1712", "#12251B", "#1B3525", "#E8F5EC", "#31543C"),
+        "high-contrast": ("#000000", "#101010", "#202020", "#FFFFFF", "#FFFFFF"),
+    }
+    background, panel, button, text, border = palettes.get(theme, palettes["dark"])
+    return {
+        "background": background,
+        "panel": panel,
+        "button": button,
+        "text": text,
+        "border": border,
+        "accent": accent,
+    }
 
 
 def format_bytes(value: int) -> str:

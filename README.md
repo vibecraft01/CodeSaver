@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | **1.1.5** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.5) |
-| CodeSaver Desktop | **1.0.2** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.2) |
+| CodeSaver Desktop | **1.0.3** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.3) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -46,7 +46,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ### Desktop version
 
-CodeSaver Desktop `1.0.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.0.3` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -54,7 +54,8 @@ CodeSaver Desktop `1.0.2` is a graphical alternative for developers who prefer a
 - Double-click restore from the archive list.
 - Real-time progress for files and processed bytes.
 - Settings for excluded directories, excluded extensions, compression, autosave, retention, language, theme, backup location, and tray behavior.
-- Dark GitHub-style theme and light theme.
+- System, dark, light, Midnight, Ocean, Forest, and High Contrast themes with a custom accent color.
+- Automatic system-language detection, Russian/English switching, and optional backup on startup.
 - Optional system-tray mode and desktop notifications.
 - Drag-and-drop project folder selection.
 - Recent-project menu with the five latest project folders.

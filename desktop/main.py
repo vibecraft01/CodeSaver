@@ -19,6 +19,10 @@ def _configure_qt_plugin_path() -> None:
         bundle_root / "Qt5" / "plugins",
         installed_root / "Qt5" / "plugins",
     )
+    # Ignore inherited Qt paths: a system Qt installation can make a bundled
+    # PyQt5 application load an incompatible platform plugin.
+    os.environ.pop("QT_PLUGIN_PATH", None)
+    os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
     for plugin_path in candidates:
         platforms_path = plugin_path / "platforms"
         if platforms_path.is_dir():

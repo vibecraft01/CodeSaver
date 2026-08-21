@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.0.3] - 2026-08-21
+
+- Added customizable Midnight, Ocean, Forest, and High Contrast themes.
+- Added a user-selectable accent color with a native color picker.
+- Added automatic desktop-language detection with Russian and English UI options.
+- Added an optional backup-on-start workflow for hands-off protection.
+- Preserved recent projects when changing settings and expanded the settings model for future customization.
+
 ## [CLI 1.1.5] - 2026-08-21
 
 - Added `--dry-run` to inspect files and total size without creating an archive.

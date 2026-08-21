@@ -29,7 +29,16 @@ from codesaver.core import BackupError
 from .backup_manager import DesktopBackupManager
 from .settings_dialog import SettingsDialog
 from .tray_icon import TrayIcon
-from .utils import DesktopSettings, archive_details, detect_system_theme, format_bytes, load_settings, save_settings
+from .utils import (
+    DesktopSettings,
+    archive_details,
+    detect_system_language,
+    detect_system_theme,
+    format_bytes,
+    load_settings,
+    save_settings,
+    theme_colors,
+)
 
 TEXT = {
     "ru": {
@@ -179,6 +188,7 @@ class MainWindow(QMainWindow):
         self.worker: BackupWorker | None = None
         self._operation = ""
         self._allow_close = False
+        self._active_language = detect_system_language() if self.settings.language == "auto" else self.settings.language
         self.setAcceptDrops(True)
         self.setMinimumSize(820, 560)
         self._build_ui()
@@ -189,7 +199,7 @@ class MainWindow(QMainWindow):
             self._set_project(Path(self.settings.project_dir))
 
     def _text(self, key: str, **values: object) -> str:
-        return TEXT[self.settings.language].get(key, key).format(**values)
+        return TEXT[self._active_language].get(key, key).format(**values)
 
     def _build_ui(self) -> None:
         self.setWindowTitle(self._text("title"))
@@ -285,20 +295,21 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self) -> None:
         theme = detect_system_theme() if self.settings.theme == "system" else self.settings.theme
-        if theme == "dark":
-            self.setStyleSheet(
-                "QMainWindow,QWidget{background:#0D1117;color:#FFFFFF;}"
-                "QFrame{border:1px solid #30363D;border-radius:6px;}"
-                "QPushButton{background:#21262D;color:#FFFFFF;border:1px solid #30363D;"
-                "padding:8px 14px;border-radius:5px;}"
-                "QPushButton:hover{background:#30363D;border-color:#58A6FF;}"
-                "QTableWidget{background:#161B22;gridline-color:#30363D;border:1px solid #30363D;}"
-                "QHeaderView::section{background:#21262D;color:#FFFFFF;padding:6px;border:0;}"
-                "QProgressBar{border:1px solid #30363D;border-radius:4px;text-align:center;}"
-                "QProgressBar::chunk{background:#58A6FF;}"
-            )
-        else:
-            self.setStyleSheet("QPushButton{padding:8px 14px;} QTableWidget{gridline-color:#D0D7DE;}")
+        colors = theme_colors(theme, self.settings.accent_color)
+        stylesheet = (
+            "QMainWindow,QWidget{{background:{background};color:{text};}}"
+            "QFrame{{border:1px solid {border};border-radius:6px;}}"
+            "QPushButton{{background:{button};color:{text};border:1px solid {border};"
+            "padding:8px 14px;border-radius:5px;}}"
+            "QPushButton:hover{{background:{panel};border-color:{accent};}}"
+            "QTableWidget{{background:{panel};color:{text};gridline-color:{border};border:1px solid {border};}}"
+            "QHeaderView::section{{background:{button};color:{text};padding:6px;border:0;}}"
+            "QProgressBar{{border:1px solid {border};border-radius:4px;text-align:center;}}"
+            "QProgressBar::chunk{{background:{accent};}}"
+            "QLineEdit,QSpinBox,QComboBox{{background:{panel};color:{text};border:1px solid {border};padding:4px;}}"
+            "QMenu{{background:{panel};color:{text};border:1px solid {border};}}"
+        ).format(**colors)
+        self.setStyleSheet(stylesheet)
 
     def _configure_autosave(self) -> None:
         if hasattr(self, "autosave_timer"):
@@ -307,6 +318,8 @@ class MainWindow(QMainWindow):
         if self.settings.interval_minutes > 0:
             self.autosave_timer.timeout.connect(self._autosave)
             self.autosave_timer.start(self.settings.interval_minutes * 60 * 1000)
+        if self.settings.backup_on_start:
+            QTimer.singleShot(1200, lambda: self._start_backup_internal(automatic=True))
 
     def _choose_project(self) -> None:
         directory = QFileDialog.getExistingDirectory(self, self._text("open"))
@@ -437,7 +450,7 @@ class MainWindow(QMainWindow):
         self._animate_progress(0)
         self.statusBar().showMessage(self._text("backup_started"))
         self._set_busy(True)
-        self.worker = BackupWorker(self.manager, "backup", language=self.settings.language)
+        self.worker = BackupWorker(self.manager, "backup", language=self._active_language)
         self._connect_worker()
         self.worker.start()
 
@@ -490,7 +503,7 @@ class MainWindow(QMainWindow):
         self._operation = "restore"
         self.statusBar().showMessage(self._text("backup_started"))
         self._set_busy(True)
-        self.worker = BackupWorker(self.manager, "restore", archive, language=self.settings.language)
+        self.worker = BackupWorker(self.manager, "restore", archive, language=self._active_language)
         self._connect_worker()
         self.worker.start()
 
@@ -567,6 +580,9 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec_() == dialog.Accepted:
             self.settings = dialog.value()
+            self._active_language = (
+                detect_system_language() if self.settings.language == "auto" else self.settings.language
+            )
             save_settings(self.settings)
             self._retranslate_ui()
             self._apply_theme()

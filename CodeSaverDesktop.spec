@@ -22,7 +22,7 @@ a = Analysis(
     hiddenimports=collect_submodules("desktop") + pyqt_hiddenimports + ["PyQt5.sip"],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(project_dir / "scripts" / "qt_runtime_hook.py")],
     excludes=[],
     noarchive=False,
 )

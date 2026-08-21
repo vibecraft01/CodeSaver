@@ -10,9 +10,11 @@ from desktop.utils import (
     DesktopSettings,
     archive_details,
     detect_system_theme,
+    detect_system_language,
     format_bytes,
     load_settings,
     save_settings,
+    theme_colors,
 )
 
 
@@ -54,9 +56,11 @@ class DesktopSupportTests(unittest.TestCase):
                 excluded_extensions=(".log",),
                 interval_minutes=5,
                 keep_last=3,
-                language="en",
                 theme="light",
+                accent_color="#FF8800",
                 compress=False,
+                language="auto",
+                backup_on_start=True,
                 recent_projects=(str(Path(tmp) / "project"),),
             )
             save_settings(settings, config_path)
@@ -65,8 +69,17 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(loaded.excluded_extensions, settings.excluded_extensions)
             self.assertEqual(loaded.keep_last, 3)
             self.assertEqual(loaded.theme, "light")
+            self.assertEqual(loaded.accent_color, "#FF8800")
+            self.assertTrue(loaded.backup_on_start)
             self.assertEqual(loaded.recent_projects, (str(Path(tmp) / "project"),))
             self.assertEqual(format_bytes(1024 * 1024), "1.0 MB")
+
+    def test_custom_theme_palette_and_language_detection(self):
+        palette = theme_colors("ocean", "#AA33CC")
+        self.assertEqual(palette["background"], "#071A26")
+        self.assertEqual(palette["accent"], "#AA33CC")
+        with patch.dict("os.environ", {"LC_ALL": "ru_RU.UTF-8", "LANG": ""}, clear=False):
+            self.assertEqual(detect_system_language(), "ru")
 
     def test_recent_projects_are_limited_to_five(self):
         with tempfile.TemporaryDirectory() as tmp:
