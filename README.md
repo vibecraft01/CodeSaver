@@ -8,7 +8,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.1.5** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.5) |
+| CodeSaver CLI | **1.1.6** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.6) |
 | CodeSaver Desktop | **1.0.3** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.3) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
@@ -38,6 +38,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 - Unreadable files are reported with their path and skipped so the backup can continue.
 - Dry-run file listing with `--dry-run`.
 - ZIP integrity validation with `--verify`.
+- SHA-256 file manifests with `--manifest` for auditable archive contents.
 - Repeatable command-line directory exclusions with `--exclude-dir`.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.
@@ -145,6 +146,7 @@ codesaver --backup-now --compress --max-size 100M
 
 # Keep only the five newest backups.
 codesaver --backup-now --keep-last 5
+codesaver --backup-now --manifest --verify
 
 # Delete backups older than 30 days.
 codesaver --backup-now --keep-days 30

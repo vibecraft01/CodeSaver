@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from fnmatch import fnmatchcase
+import hashlib
+import json
 from pathlib import Path
 import os
 import tempfile
@@ -202,6 +204,7 @@ class BackupManager:
         self,
         progress_callback: Optional[ProgressCallback] = None,
         detailed_progress_callback: Optional[DetailedProgressCallback] = None,
+        include_manifest: bool = False,
     ) -> Path:
         """Create a timestamped ZIP archive and return its path.
 
@@ -235,6 +238,7 @@ class BackupManager:
                 if not files and detailed_progress_callback:
                     detailed_progress_callback(0, 0, self.project_dir, 0, 0)
                 processed_bytes = 0
+                manifest: list[dict[str, object]] = []
                 for current, path in enumerate(files, start=1):
                     try:
                         archive.write(path, path.relative_to(self.project_dir).as_posix())
@@ -243,6 +247,18 @@ class BackupManager:
                         continue
                     try:
                         processed_bytes += path.stat().st_size
+                        if include_manifest:
+                            digest = hashlib.sha256()
+                            with path.open("rb") as source:
+                                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                    digest.update(chunk)
+                            manifest.append(
+                                {
+                                    "path": path.relative_to(self.project_dir).as_posix(),
+                                    "size": path.stat().st_size,
+                                    "sha256": digest.hexdigest(),
+                                }
+                            )
                     except (PermissionError, OSError) as exc:
                         self._report_file_error(path, exc)
                         continue
@@ -250,6 +266,15 @@ class BackupManager:
                         progress_callback(current, len(files), path)
                     if detailed_progress_callback:
                         detailed_progress_callback(current, len(files), path, processed_bytes, total_bytes)
+                if include_manifest:
+                    archive.writestr(
+                        ".codesaver-manifest.json",
+                        json.dumps(
+                            {"version": 1, "algorithm": "sha256", "files": manifest},
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                    )
             temp_path.replace(destination)
             self.last_cleanup_count = self.cleanup_old_backups()
             return destination
@@ -272,6 +297,16 @@ class BackupManager:
                 corrupted_member = source.testzip()
                 if corrupted_member:
                     raise BackupError("errors.invalid_zip", archive=archive)
+                if ".codesaver-manifest.json" in source.namelist():
+                    try:
+                        manifest = json.loads(source.read(".codesaver-manifest.json").decode("utf-8"))
+                        for item in manifest.get("files", []):
+                            member = str(item["path"])
+                            digest = hashlib.sha256(source.read(member)).hexdigest()
+                            if digest != item["sha256"]:
+                                raise BackupError("errors.invalid_zip", archive=archive)
+                    except (KeyError, TypeError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
+                        raise BackupError("errors.invalid_zip", archive=archive) from exc
                 return len(source.infolist())
         except BackupError:
             raise

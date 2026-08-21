@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 import os
 import time
@@ -199,6 +200,19 @@ class BackupManagerTests(unittest.TestCase):
             manager = BackupManager(root)
             archive = manager.create_backup()
             self.assertEqual(manager.verify_backup(archive), 1)
+
+    def test_manifest_contains_sha256_and_is_verified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "app.py").write_text("print('safe')\n", encoding="utf-8")
+            manager = BackupManager(root)
+            archive = manager.create_backup(include_manifest=True)
+            with ZipFile(archive) as zip_file:
+                manifest = json.loads(zip_file.read(".codesaver-manifest.json"))
+                self.assertEqual(manifest["algorithm"], "sha256")
+                self.assertEqual(manifest["files"][0]["path"], "app.py")
+            self.assertEqual(manager.verify_backup(archive), 2)
 
     def test_permission_error_is_reported_as_backup_error(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.1.6] - 2026-08-21
+
+- Added optional SHA-256 manifests with `--manifest` for auditable backup contents.
+- Extended `--verify` to validate manifest hashes as well as ZIP CRC integrity.
+- Added localized manifest status messages and automated coverage for manifest creation and verification.
+
 ## [Desktop 1.0.3] - 2026-08-21
 
 - Added customizable Midnight, Ocean, Forest, and High Contrast themes.

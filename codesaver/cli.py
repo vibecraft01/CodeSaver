@@ -60,6 +60,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--backup-now", action="store_true", help=translate("help.backup_now", language))
     parser.add_argument("--dry-run", action="store_true", help=translate("help.dry_run", language))
     parser.add_argument("--verify", action="store_true", help=translate("help.verify", language))
+    parser.add_argument("--manifest", action="store_true", help=translate("help.manifest", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
     )
@@ -157,9 +158,15 @@ def _format_bytes(value: int) -> str:
     return f"{value} B"
 
 
-def _create_backup(manager: BackupManager, language: str, logger: logging.Logger, verify: bool = False) -> Path:
+def _create_backup(
+    manager: BackupManager,
+    language: str,
+    logger: logging.Logger,
+    verify: bool = False,
+    manifest: bool = False,
+) -> Path:
     logger.info("Starting backup: project=%s backup_dir=%s", manager.project_dir, manager.backup_dir)
-    archive = manager.create_backup(detailed_progress_callback=_progress_callback(language))
+    archive = manager.create_backup(detailed_progress_callback=_progress_callback(language), include_manifest=manifest)
     if manager.last_cleanup_count:
         logger.info("Removed old backups: count=%s", manager.last_cleanup_count)
         print(translate("message.backups_removed", language, count=manager.last_cleanup_count))
@@ -168,6 +175,8 @@ def _create_backup(manager: BackupManager, language: str, logger: logging.Logger
         members = manager.verify_backup(archive)
         logger.info("Backup verified: archive=%s members=%s", archive, members)
         print(translate("message.backup_verified", language, count=members))
+    if manifest:
+        print(translate("message.manifest_created", language, count=len(manager.list_files())))
     return archive
 
 
@@ -419,7 +428,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.backup_now:
             print(
                 translate(
-                    "message.backup_created", language, path=_create_backup(manager, language, logger, args.verify)
+                    "message.backup_created",
+                    language,
+                    path=_create_backup(manager, language, logger, args.verify, args.manifest),
                 )
             )
         else:
