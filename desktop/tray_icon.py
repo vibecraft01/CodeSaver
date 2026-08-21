@@ -5,7 +5,7 @@ from PyQt5.QtGui import QColor, QIcon, QPainter, QPixmap
 from PyQt5.QtWidgets import QAction, QMenu, QSystemTrayIcon
 
 
-def create_icon() -> QIcon:
+def create_icon(progress: int | None = None) -> QIcon:
     pixmap = QPixmap(32, 32)
     pixmap.fill(QColor("#58A6FF"))
     painter = QPainter(pixmap)
@@ -14,6 +14,9 @@ def create_icon() -> QIcon:
     painter.drawLine(11, 11, 21, 11)
     painter.drawLine(11, 16, 21, 16)
     painter.drawLine(11, 21, 18, 21)
+    if progress is not None:
+        painter.setPen(QColor("#0D1117"))
+        painter.drawText(5, 30, f"{max(0, min(100, progress))}%")
     painter.end()
     return QIcon(pixmap)
 
@@ -39,6 +42,10 @@ class TrayIcon(QObject):
         menu.addAction(quit_action)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._activated)
+
+    def set_progress(self, progress: int | None) -> None:
+        """Show backup progress in the tray icon where the platform allows it."""
+        self.tray.setIcon(create_icon(progress))
 
     def _activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):

@@ -2,20 +2,30 @@
 
 from __future__ import annotations
 
-import sys
 import os
 from pathlib import Path
+import sys
 
 
 def _configure_qt_plugin_path() -> None:
-    """Point Qt to PyQt5 plugins explicitly, including non-ASCII Windows paths."""
+    """Point Qt to bundled or installed PyQt5 plugins before QApplication starts."""
     import PyQt5
     from PyQt5.QtCore import QCoreApplication
 
-    plugin_path = Path(PyQt5.__file__).resolve().parent / "Qt5" / "plugins"
-    if plugin_path.is_dir():
-        os.environ["QT_PLUGIN_PATH"] = str(plugin_path)
-        QCoreApplication.addLibraryPath(str(plugin_path))
+    bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    installed_root = Path(PyQt5.__file__).resolve().parent
+    candidates = (
+        bundle_root / "PyQt5" / "Qt5" / "plugins",
+        bundle_root / "Qt5" / "plugins",
+        installed_root / "Qt5" / "plugins",
+    )
+    for plugin_path in candidates:
+        platforms_path = plugin_path / "platforms"
+        if platforms_path.is_dir():
+            os.environ["QT_PLUGIN_PATH"] = str(plugin_path)
+            os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(platforms_path)
+            QCoreApplication.setLibraryPaths([str(plugin_path), *QCoreApplication.libraryPaths()])
+            return
 
 
 def main() -> int:

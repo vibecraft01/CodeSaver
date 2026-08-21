@@ -4,6 +4,15 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.0.2] - 2026-08-21
+
+- Added drag-and-drop project folder selection.
+- Added a recent-project menu retaining up to five folders.
+- Added explicit restore and old-backup cleanup confirmations.
+- Added a 1 GB free-space warning before backup creation.
+- Added backup percentage rendering in the system-tray icon.
+- Added clearer reporting for files skipped because they could not be read.
+
 ## [CLI 1.1.4] - 2026-08-20
 
 - Added ETA output to CLI backup progress messages.

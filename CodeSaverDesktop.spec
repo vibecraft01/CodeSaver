@@ -8,17 +8,18 @@ Build with:
 from pathlib import Path
 import sys
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 project_dir = Path(SPECPATH).resolve()
 entry_point = project_dir / "scripts" / "build_desktop_entry.py"
+pyqt_datas, pyqt_binaries, pyqt_hiddenimports = collect_all("PyQt5")
 
 a = Analysis(
     [str(entry_point)],
     pathex=[str(project_dir)],
-    binaries=[],
-    datas=[],
-    hiddenimports=collect_submodules("desktop") + ["PyQt5.sip"],
+    binaries=pyqt_binaries,
+    datas=pyqt_datas,
+    hiddenimports=collect_submodules("desktop") + pyqt_hiddenimports + ["PyQt5.sip"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

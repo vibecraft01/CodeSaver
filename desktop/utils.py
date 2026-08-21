@@ -32,6 +32,7 @@ class DesktopSettings:
     minimize_to_tray: bool = True
     compress: bool = True
     max_size: Optional[int] = None
+    recent_projects: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -55,6 +56,11 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
         interval = max(0, int(raw.get("interval_minutes", 10)))
         keep_last = max(0, int(raw.get("keep_last", 0)))
         max_size = parse_size(raw.get("max_size"))
+        recent_projects = tuple(
+            str(Path(item).expanduser().resolve())
+            for item in raw.get("recent_projects", [])
+            if isinstance(item, str) and item
+        )[:5]
         language = raw.get("language", "ru") if raw.get("language", "ru") in {"ru", "en"} else "ru"
         theme = raw.get("theme", "system") if raw.get("theme", "system") in {"system", "dark", "light"} else "system"
         return DesktopSettings(
@@ -69,6 +75,7 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             minimize_to_tray=bool(raw.get("minimize_to_tray", True)),
             compress=bool(raw.get("compress", True)),
             max_size=max_size,
+            recent_projects=recent_projects,
         )
     except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
         return DesktopSettings()

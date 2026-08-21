@@ -14,6 +14,7 @@ class DesktopBackupManager:
     """Expose the core manager with settings suitable for the desktop UI."""
 
     def __init__(self, project_dir: Union[Path, str], settings: DesktopSettings) -> None:
+        self.last_errors: list[tuple[Path, BaseException]] = []
         backup_dir = settings.backup_dir or str(Path(project_dir).parent / f"{Path(project_dir).name}-backups")
         self.core = BackupManager(
             project_dir,
@@ -24,7 +25,11 @@ class DesktopBackupManager:
             max_size=settings.max_size,
             keep_last=settings.keep_last or None,
             use_gitignore=True,
+            file_error_callback=self._record_file_error,
         )
+
+    def _record_file_error(self, path: Path, error: BaseException) -> None:
+        self.last_errors.append((path, error))
 
     @property
     def project_dir(self) -> Path:
@@ -38,7 +43,11 @@ class DesktopBackupManager:
         return self.core.list_files()
 
     def create_backup(self, progress_callback: Optional[Callable[..., None]] = None) -> Path:
+        self.last_errors.clear()
         return self.core.create_backup(detailed_progress_callback=progress_callback)
 
     def restore_backup(self, archive_path: Union[Path, str], overwrite: bool = False) -> int:
         return self.core.restore_backup(archive_path, overwrite=overwrite)
+
+    def cleanup_old_backups(self) -> int:
+        return self.core.cleanup_old_backups()

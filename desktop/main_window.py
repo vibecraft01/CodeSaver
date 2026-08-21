@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QMenu,
     QProgressBar,
     QPushButton,
     QTableWidget,
@@ -110,6 +111,34 @@ TEXT["en"].update(
     }
 )
 
+_DESKTOP_1_0_2_TEXT = {
+    "recent": "Recent projects",
+    "cleanup": "Clean old backups",
+    "cleanup_confirm": "Delete old backups according to the retention setting? This cannot be undone.",
+    "cleanup_done": "Backups removed: {count}",
+    "recent_empty": "No recent projects",
+    "drop_project": "Drop a project folder here",
+    "backup_warning": "Less than 1 GB of free disk space remains. Continue?",
+    "file_warning": "Backup created, but {count} file(s) were skipped.",
+    "restore_warning": "Existing project files may be overwritten. Restore this archive?",
+    "operation_failed": "Backup operation failed: {error}",
+}
+TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
+TEXT["ru"].update(
+    {
+        "recent": "\u041d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u044b",
+        "cleanup": "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u0431\u044d\u043a\u0430\u043f\u044b",
+        "cleanup_confirm": "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0441\u0442\u0430\u0440\u044b\u0435?",
+        "cleanup_done": "\u041e\u0447\u0438\u0449\u0435\u043d\u043e: {count}",
+        "recent_empty": "\u041d\u0435\u0442 \u043f\u0440\u043e\u0435\u043a\u0442\u043e\u0432",
+        "drop_project": "Перетащите папку сюда",
+        "backup_warning": "Меньше 1 ГБ. Продолжить?",
+        "file_warning": "Пропущено файлов: {count}",
+        "restore_warning": "Файлы могут быть заменены. Восстановить?",
+        "operation_failed": "Ошибка операции: {error}",
+    }
+)
+
 
 class BackupWorker(QThread):
     progress = pyqtSignal(int, int, int, int)
@@ -135,6 +164,8 @@ class BackupWorker(QThread):
                 self.succeeded.emit(str(count))
         except (BackupError, OSError, ValueError) as exc:
             self.failed.emit(exc.localized(self.language) if isinstance(exc, BackupError) else str(exc))
+        except Exception as exc:  # Keep unexpected filesystem/ZIP errors visible in the GUI.
+            self.failed.emit(TEXT[self.language].get("operation_failed", "Operation failed").format(error=exc))
 
     def _progress(self, current: int, total: int, _path: Path, processed: int, total_bytes: int) -> None:
         self.progress.emit(current, total, processed, total_bytes)
@@ -148,6 +179,7 @@ class MainWindow(QMainWindow):
         self.worker: BackupWorker | None = None
         self._operation = ""
         self._allow_close = False
+        self.setAcceptDrops(True)
         self.setMinimumSize(820, 560)
         self._build_ui()
         self._setup_tray()
@@ -175,6 +207,9 @@ class MainWindow(QMainWindow):
         self.open_backups_button = QPushButton(self._text("open_backups"))
         self.open_backups_button.clicked.connect(self._open_backup_folder)
         header.addWidget(self.open_backups_button)
+        self.recent_button = QPushButton(self._text("recent"))
+        self.recent_button.setMenu(QMenu(self.recent_button))
+        header.addWidget(self.recent_button)
         project_layout.addLayout(header)
         self.path_label = QLabel(self._text("path", path="—"))
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -190,8 +225,11 @@ class MainWindow(QMainWindow):
         self.restore_button.clicked.connect(self._restore_selected)
         self.settings_button = QPushButton(self._text("settings"))
         self.settings_button.clicked.connect(self._open_settings)
+        self.cleanup_button = QPushButton(self._text("cleanup"))
+        self.cleanup_button.clicked.connect(self._cleanup_old_backups)
         actions.addWidget(self.backup_button)
         actions.addWidget(self.restore_button)
+        actions.addWidget(self.cleanup_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
@@ -217,6 +255,11 @@ class MainWindow(QMainWindow):
         progress_row.addWidget(self.progress_text)
         layout.addLayout(progress_row)
         self.setCentralWidget(central)
+        self.drop_hint = QLabel(self._text("drop_project"))
+        self.drop_hint.setAlignment(Qt.AlignCenter)
+        self.drop_hint.setObjectName("dropHint")
+        layout.addWidget(self.drop_hint)
+        self._refresh_recent_projects_menu()
         self._retranslate_ui()
         self.statusBar().showMessage(self._text("ready"))
 
@@ -225,9 +268,12 @@ class MainWindow(QMainWindow):
         self.project_header.setText(f"<b>{self._text('project')}</b>")
         self.open_button.setText(self._text("open"))
         self.open_backups_button.setText(self._text("open_backups"))
+        self.recent_button.setText(self._text("recent"))
         self.backup_button.setText(self._text("backup"))
         self.restore_button.setText(self._text("restore"))
+        self.cleanup_button.setText(self._text("cleanup"))
         self.settings_button.setText(self._text("settings"))
+        self.drop_hint.setText(self._text("drop_project"))
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
 
     def _setup_tray(self) -> None:
@@ -267,13 +313,53 @@ class MainWindow(QMainWindow):
         if directory:
             self._set_project(Path(directory))
 
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls() and any(
+            url.isLocalFile() and Path(url.toLocalFile()).is_dir() for url in event.mimeData().urls()
+        ):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                path = Path(url.toLocalFile())
+                if path.is_dir():
+                    self._set_project(path)
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def _refresh_recent_projects_menu(self) -> None:
+        menu = self.recent_button.menu()
+        menu.clear()
+        projects = [Path(value) for value in self.settings.recent_projects if Path(value).is_dir()]
+        if not projects:
+            action = menu.addAction(self._text("recent_empty"))
+            action.setEnabled(False)
+            return
+        for project in projects[:5]:
+            action = menu.addAction(str(project))
+            action.triggered.connect(lambda _checked=False, path=project: self._set_project(path))
+
+    def _remember_recent_project(self, path: Path) -> None:
+        value = str(path.resolve())
+        recent = [value, *self.settings.recent_projects]
+        self.settings.recent_projects = tuple(dict.fromkeys(recent))[:5]
+
     def _set_project(self, path: Path) -> None:
+        if not path.is_dir():
+            self._show_error(f"{self._text('error')}: {path}")
+            return
         self.settings.project_dir = str(path.resolve())
+        self._remember_recent_project(path)
         self.manager = DesktopBackupManager(path, self.settings)
         self.path_label.setText(self._text("path", path=path.resolve()))
         self._refresh_project_info()
         self._refresh_backups()
         save_settings(self.settings)
+        self._refresh_recent_projects_menu()
         self.statusBar().showMessage(self._text("ready"))
 
     def _open_backup_folder(self) -> None:
@@ -335,10 +421,15 @@ class MainWindow(QMainWindow):
         self.progress_animation.start()
 
     def _start_backup(self) -> None:
+        self._start_backup_internal(automatic=False)
+
+    def _start_backup_internal(self, automatic: bool) -> None:
         if not self.manager:
             self.statusBar().showMessage(self._text("choose_project"))
             return
         if self.worker and self.worker.isRunning():
+            return
+        if not self._has_enough_disk_space(automatic):
             return
         self._operation = "backup"
         self.progress.setValue(0)
@@ -352,7 +443,32 @@ class MainWindow(QMainWindow):
 
     def _autosave(self) -> None:
         if self.manager and not (self.worker and self.worker.isRunning()):
-            self._start_backup()
+            self._start_backup_internal(automatic=True)
+
+    def _has_enough_disk_space(self, automatic: bool) -> bool:
+        if not self.manager:
+            return False
+        location = self.manager.backup_dir if self.manager.backup_dir.exists() else self.manager.backup_dir.parent
+        try:
+            free = disk_usage(location).free
+        except OSError as exc:
+            self._show_error(f"{self._text('error')}: {exc}")
+            return False
+        if free >= 1024**3:
+            return True
+        self.tray.notify(self._text("error"), self._text("disk_warning", free=format_bytes(free)), error=True)
+        if automatic:
+            return True
+        return (
+            QMessageBox.warning(
+                self,
+                self._text("error"),
+                self._text("backup_warning"),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            == QMessageBox.Yes
+        )
 
     def _restore_selected(self) -> None:
         if not self.manager:
@@ -362,7 +478,13 @@ class MainWindow(QMainWindow):
         if row < 0:
             return
         archive = Path(self.table.item(row, 0).data(Qt.UserRole))
-        answer = QMessageBox.question(self, self._text("confirm"), self._text("confirm_restore"))
+        answer = QMessageBox.warning(
+            self,
+            self._text("confirm"),
+            self._text("confirm_restore") + "\n\n" + self._text("restore_warning"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
         if answer != QMessageBox.Yes:
             return
         self._operation = "restore"
@@ -382,12 +504,20 @@ class MainWindow(QMainWindow):
         percent = 100 if total == 0 else int(current / total * 100)
         self._animate_progress(percent)
         self.progress_text.setText(self._progress_text(current, total, processed, total_bytes))
+        self.tray.set_progress(percent)
 
     def _worker_succeeded(self, value: str) -> None:
         if self._operation == "backup":
             self._animate_progress(100)
+            self.tray.set_progress(100)
             self.statusBar().showMessage(self._text("backup_done"))
             self.tray.notify(self._text("title"), self._text("backup_done"))
+            if self.manager and self.manager.last_errors:
+                self.tray.notify(
+                    self._text("error"),
+                    self._text("file_warning", count=len(self.manager.last_errors)),
+                    error=True,
+                )
             if self.manager:
                 free_space = disk_usage(self.manager.backup_dir).free
                 if free_space < 100 * 1024 * 1024:
@@ -402,6 +532,7 @@ class MainWindow(QMainWindow):
     def _worker_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"{self._text('error')}: {message}")
         self.tray.notify(self._text("error"), message, error=True)
+        self.tray.set_progress(None)
         self._show_error(message)
 
     def _set_busy(self, busy: bool) -> None:
@@ -410,6 +541,27 @@ class MainWindow(QMainWindow):
         self.open_button.setEnabled(not busy)
         self.open_backups_button.setEnabled(not busy)
         self.settings_button.setEnabled(not busy)
+        self.cleanup_button.setEnabled(not busy)
+
+    def _cleanup_old_backups(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        answer = QMessageBox.warning(
+            self,
+            self._text("confirm"),
+            self._text("cleanup_confirm"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            count = self.manager.cleanup_old_backups()
+            self.statusBar().showMessage(self._text("cleanup_done", count=count))
+            self._refresh_backups()
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self.settings, self)

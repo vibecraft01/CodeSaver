@@ -57,6 +57,7 @@ class DesktopSupportTests(unittest.TestCase):
                 language="en",
                 theme="light",
                 compress=False,
+                recent_projects=(str(Path(tmp) / "project"),),
             )
             save_settings(settings, config_path)
             loaded = load_settings(config_path)
@@ -64,7 +65,24 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(loaded.excluded_extensions, settings.excluded_extensions)
             self.assertEqual(loaded.keep_last, 3)
             self.assertEqual(loaded.theme, "light")
+            self.assertEqual(loaded.recent_projects, (str(Path(tmp) / "project"),))
             self.assertEqual(format_bytes(1024 * 1024), "1.0 MB")
+
+    def test_recent_projects_are_limited_to_five(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            projects = []
+            for index in range(6):
+                project = root / f"project-{index}"
+                project.mkdir()
+                projects.append(str(project))
+            settings = DesktopSettings(recent_projects=tuple(projects))
+            self.assertEqual(len(settings.recent_projects), 6)
+            config_path = root / "desktop.json"
+            save_settings(settings, config_path)
+            loaded = load_settings(config_path)
+            self.assertEqual(len(loaded.recent_projects), 5)
+            self.assertEqual(loaded.recent_projects[0], str(Path(projects[0]).resolve()))
 
     def test_desktop_manager_creates_archive_and_lists_details(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,6 +98,21 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(manager.restore_backup(archive), 1)
             with ZipFile(archive) as zip_file:
                 self.assertEqual(zip_file.namelist(), ["app.py"])
+
+    def test_cleanup_old_backups_uses_keep_last(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            (root / "app.py").write_text("pass\n", encoding="utf-8")
+            settings = DesktopSettings(backup_dir=str(backups), keep_last=0)
+            manager = DesktopBackupManager(root, settings)
+            first = manager.create_backup()
+            first.rename(backups / "project_old.zip")
+            manager.create_backup()
+            manager.core.keep_last = 1
+            self.assertEqual(manager.cleanup_old_backups(), 1)
+            self.assertEqual(len(list(backups.glob("*.zip"))), 1)
 
 
 if __name__ == "__main__":

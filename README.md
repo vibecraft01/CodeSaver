@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | **1.1.4** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.4) |
-| CodeSaver Desktop | **1.0.1** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.1) |
+| CodeSaver Desktop | **1.0.2** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.2) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -42,7 +42,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ### Desktop version
 
-CodeSaver Desktop `1.0.1` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.0.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -52,6 +52,12 @@ CodeSaver Desktop `1.0.1` is a graphical alternative for developers who prefer a
 - Settings for excluded directories, excluded extensions, compression, autosave, retention, language, theme, backup location, and tray behavior.
 - Dark GitHub-style theme and light theme.
 - Optional system-tray mode and desktop notifications.
+- Drag-and-drop project folder selection.
+- Recent-project menu with the five latest project folders.
+- Confirmation dialogs before restore and old-backup cleanup.
+- Low-disk-space warning below 1 GB before a backup starts.
+- Backup progress percentage displayed in the system-tray icon.
+- Clear warnings when individual files cannot be read.
 - No API keys or external services.
 
 ## Desktop interface preview
@@ -207,7 +213,7 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.0.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.1):
+The current stable binary is available in the [Desktop v1.0.2 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.2):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
