@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QMenu,
     QProgressBar,
     QPushButton,
+    QLineEdit,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -132,7 +133,15 @@ _DESKTOP_1_0_2_TEXT = {
     "restore_warning": "Existing project files may be overwritten. Restore this archive?",
     "operation_failed": "Backup operation failed: {error}",
 }
+_DESKTOP_1_0_4_TEXT = {
+    "verify": "Verify backup",
+    "verify_started": "Verifying backup…",
+    "verify_done": "Backup verified: {count} archive entries",
+    "search_archives": "Search backups…",
+    "no_archive_selected": "Select a backup first.",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
+TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["ru"].update(
     {
         "recent": "\u041d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u044b",
@@ -145,6 +154,15 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "verify": "Проверить бэкап",
+        "verify_started": "Проверка бэкапа…",
+        "verify_done": "Бэкап проверен: элементов в архиве {count}",
+        "search_archives": "Поиск по бэкапам…",
+        "no_archive_selected": "Сначала выберите бэкап.",
     }
 )
 
@@ -168,6 +186,9 @@ class BackupWorker(QThread):
             if self.operation == "backup":
                 archive = self.manager.create_backup(self._progress)
                 self.succeeded.emit(str(archive))
+            elif self.operation == "verify":
+                count = self.manager.verify_backup(self.archive)
+                self.succeeded.emit(str(count))
             else:
                 count = self.manager.restore_backup(self.archive, overwrite=True)
                 self.succeeded.emit(str(count))
@@ -233,17 +254,24 @@ class MainWindow(QMainWindow):
         self.backup_button.clicked.connect(self._start_backup)
         self.restore_button = QPushButton(self._text("restore"))
         self.restore_button.clicked.connect(self._restore_selected)
+        self.verify_button = QPushButton(self._text("verify"))
+        self.verify_button.clicked.connect(self._verify_selected)
         self.settings_button = QPushButton(self._text("settings"))
         self.settings_button.clicked.connect(self._open_settings)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
         actions.addWidget(self.backup_button)
         actions.addWidget(self.restore_button)
+        actions.addWidget(self.verify_button)
         actions.addWidget(self.cleanup_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
 
+        self.archive_search = QLineEdit()
+        self.archive_search.setPlaceholderText(self._text("search_archives"))
+        self.archive_search.textChanged.connect(self._refresh_backups)
+        layout.addWidget(self.archive_search)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -281,9 +309,11 @@ class MainWindow(QMainWindow):
         self.recent_button.setText(self._text("recent"))
         self.backup_button.setText(self._text("backup"))
         self.restore_button.setText(self._text("restore"))
+        self.verify_button.setText(self._text("verify"))
         self.cleanup_button.setText(self._text("cleanup"))
         self.settings_button.setText(self._text("settings"))
         self.drop_hint.setText(self._text("drop_project"))
+        self.archive_search.setPlaceholderText(self._text("search_archives"))
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
 
     def _setup_tray(self) -> None:
@@ -400,12 +430,15 @@ class MainWindow(QMainWindow):
         except (BackupError, OSError) as exc:
             self._show_error(str(exc))
 
-    def _refresh_backups(self) -> None:
+    def _refresh_backups(self, _query: str = "") -> None:
         self.table.setRowCount(0)
         if not self.manager:
             return
         try:
-            for row, (path, date, size) in enumerate(archive_details(self.manager.backup_dir)):
+            query = self.archive_search.text().strip().lower()
+            archives = archive_details(self.manager.backup_dir)
+            archives = [item for item in archives if not query or query in item[0].name.lower()]
+            for row, (path, date, size) in enumerate(archives):
                 self.table.insertRow(row)
                 item = QTableWidgetItem(path.name)
                 item.setData(Qt.UserRole, str(path))
@@ -507,6 +540,22 @@ class MainWindow(QMainWindow):
         self._connect_worker()
         self.worker.start()
 
+    def _verify_selected(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        row = self.table.currentRow()
+        if row < 0:
+            self.statusBar().showMessage(self._text("no_archive_selected"))
+            return
+        archive = Path(self.table.item(row, 0).data(Qt.UserRole))
+        self._operation = "verify"
+        self.statusBar().showMessage(self._text("verify_started"))
+        self._set_busy(True)
+        self.worker = BackupWorker(self.manager, "verify", archive, language=self._active_language)
+        self._connect_worker()
+        self.worker.start()
+
     def _connect_worker(self) -> None:
         self.worker.progress.connect(self._update_progress)
         self.worker.succeeded.connect(self._worker_succeeded)
@@ -537,6 +586,9 @@ class MainWindow(QMainWindow):
                     self.tray.notify(
                         self._text("error"), self._text("disk_warning", free=format_bytes(free_space)), error=True
                     )
+        elif self._operation == "verify":
+            self.statusBar().showMessage(self._text("verify_done", count=value))
+            self.tray.notify(self._text("title"), self._text("verify_done", count=value))
         else:
             self.statusBar().showMessage(self._text("restore_done", count=value))
         self._refresh_project_info()
@@ -551,6 +603,7 @@ class MainWindow(QMainWindow):
     def _set_busy(self, busy: bool) -> None:
         self.backup_button.setEnabled(not busy)
         self.restore_button.setEnabled(not busy)
+        self.verify_button.setEnabled(not busy)
         self.open_button.setEnabled(not busy)
         self.open_backups_button.setEnabled(not busy)
         self.settings_button.setEnabled(not busy)

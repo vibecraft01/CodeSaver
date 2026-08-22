@@ -214,6 +214,16 @@ class BackupManagerTests(unittest.TestCase):
                 self.assertEqual(manifest["files"][0]["path"], "app.py")
             self.assertEqual(manager.verify_backup(archive), 2)
 
+    def test_list_backup_returns_sorted_members_without_restore(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "z.txt").write_text("z", encoding="utf-8")
+            (root / "a.txt").write_text("a", encoding="utf-8")
+            manager = BackupManager(root)
+            archive = manager.create_backup()
+            self.assertEqual(manager.list_backup(archive), ["a.txt", "z.txt"])
+
     def test_permission_error_is_reported_as_backup_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

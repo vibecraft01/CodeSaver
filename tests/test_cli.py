@@ -25,6 +25,10 @@ class CliFeatureTests(unittest.TestCase):
                 "--dry-run",
                 "--verify",
                 "--manifest",
+                "--list",
+                "backup.zip",
+                "--exclude-pattern",
+                "*.tmp",
                 "--exclude-dir",
                 "generated",
             ]
@@ -34,6 +38,8 @@ class CliFeatureTests(unittest.TestCase):
         self.assertTrue(args.dry_run)
         self.assertTrue(args.verify)
         self.assertTrue(args.manifest)
+        self.assertEqual(args.list, Path("backup.zip"))
+        self.assertEqual(args.exclude_pattern, ["*.tmp"])
         self.assertEqual(args.exclude_dir, ["generated"])
 
     def test_eta_is_included_in_progress_output(self):

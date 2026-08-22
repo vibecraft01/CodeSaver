@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.1.6** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.6) |
-| CodeSaver Desktop | **1.0.3** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.3) |
+| CodeSaver CLI | **1.1.7** (local) | Python 3.9+ | Upcoming CLI release |
+| CodeSaver Desktop | **1.0.4** (local) | Python 3.10+ with PyQt5 | Upcoming Desktop release |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -40,6 +40,8 @@ The CLI and Desktop applications share the same tested backup and restore engine
 - ZIP integrity validation with `--verify`.
 - SHA-256 file manifests with `--manifest` for auditable archive contents.
 - Repeatable command-line directory exclusions with `--exclude-dir`.
+- Safe archive inspection with `--list ARCHIVE` without restoring files.
+- Repeatable command-line glob exclusions with `--exclude-pattern`.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
@@ -64,6 +66,7 @@ CodeSaver Desktop `1.0.3` is a graphical alternative for developers who prefer a
 - Low-disk-space warning below 1 GB before a backup starts.
 - Backup progress percentage displayed in the system-tray icon.
 - Clear warnings when individual files cannot be read.
+- Real-time archive search and background integrity verification for selected backups.
 - No API keys or external services.
 
 ## Desktop interface preview
@@ -147,6 +150,8 @@ codesaver --backup-now --compress --max-size 100M
 # Keep only the five newest backups.
 codesaver --backup-now --keep-last 5
 codesaver --backup-now --manifest --verify
+codesaver --list ./backups/project_2026-08-21_23-21-31.zip
+codesaver --backup-now --exclude-pattern "*.tmp" --exclude-pattern "temp_*"
 
 # Delete backups older than 30 days.
 codesaver --backup-now --keep-days 30

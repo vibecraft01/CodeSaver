@@ -61,8 +61,16 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help=translate("help.dry_run", language))
     parser.add_argument("--verify", action="store_true", help=translate("help.verify", language))
     parser.add_argument("--manifest", action="store_true", help=translate("help.manifest", language))
+    parser.add_argument("--list", type=Path, metavar="ARCHIVE", help=translate("help.list", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
+    )
+    parser.add_argument(
+        "--exclude-pattern",
+        action="append",
+        default=None,
+        metavar="PATTERN",
+        help=translate("help.exclude_pattern", language),
     )
     parser.add_argument(
         "--exclude-ext",
@@ -355,6 +363,12 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
         if not value:
             raise BackupError("errors.exclude_dir_invalid")
         excluded_dirs.add(value)
+    excluded_patterns = set(config.excluded_patterns)
+    for value in args.exclude_pattern or []:
+        value = value.strip()
+        if not value:
+            raise BackupError("errors.exclude_pattern_invalid")
+        excluded_patterns.add(value)
     compress = config.compress if args.compress is None else args.compress
     use_gitignore = config.use_gitignore if args.no_gitignore is None else not args.no_gitignore
     effective = Config(
@@ -364,7 +378,7 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
         log_path=args.log or config.log_path,
         excluded_dirs=frozenset(excluded_dirs),
         excluded_extensions=excluded_extensions,
-        excluded_patterns=config.excluded_patterns,
+        excluded_patterns=frozenset(excluded_patterns),
         compress=compress,
         max_size=max_size,
         keep_last=keep_last,
@@ -416,7 +430,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
-        if args.restore:
+        if args.list:
+            members = manager.list_backup(args.list)
+            print(translate("message.archive_contents", language, count=len(members)))
+            for member in members:
+                print(f"  {member}")
+        elif args.restore:
             if args.verify:
                 members = manager.verify_backup(args.restore)
                 print(translate("message.backup_verified", language, count=members))

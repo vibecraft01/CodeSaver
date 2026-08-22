@@ -4,6 +4,18 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.1.7] - 2026-08-22
+
+- Added `--list ARCHIVE` to inspect a backup without restoring files.
+- Added repeatable `--exclude-pattern` for command-line glob exclusions.
+- Added validated archive listing and localized output for automation-friendly inspection.
+
+## [Desktop 1.0.4] - 2026-08-22
+
+- Added real-time backup archive search.
+- Added background integrity verification for selected archives, including ZIP CRCs and SHA-256 manifests.
+- Added clearer verification status and notification feedback.
+
 ## [CLI 1.1.6] - 2026-08-21
 
 - Added optional SHA-256 manifests with `--manifest` for auditable backup contents.

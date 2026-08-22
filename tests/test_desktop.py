@@ -112,6 +112,15 @@ class DesktopSupportTests(unittest.TestCase):
             with ZipFile(archive) as zip_file:
                 self.assertEqual(zip_file.namelist(), ["app.py"])
 
+    def test_desktop_manager_verifies_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "app.py").write_text("pass\n", encoding="utf-8")
+            manager = DesktopBackupManager(root, DesktopSettings(backup_dir=str(Path(tmp) / "backups")))
+            archive = manager.create_backup()
+            self.assertEqual(manager.verify_backup(archive), 1)
+
     def test_cleanup_old_backups_uses_keep_last(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

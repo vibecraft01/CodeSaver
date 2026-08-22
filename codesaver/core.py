@@ -315,6 +315,23 @@ class BackupManager:
         except OSError as exc:
             raise BackupError("errors.restore_failed", error=exc) from exc
 
+    def list_backup(self, archive_path: Union[Path, str]) -> list[str]:
+        """Return sorted archive members after validating the ZIP container."""
+        archive = Path(archive_path).expanduser().resolve()
+        if not archive.is_file():
+            raise BackupError("errors.archive_missing", archive=archive)
+        try:
+            with ZipFile(archive, "r") as source:
+                if source.testzip():
+                    raise BackupError("errors.invalid_zip", archive=archive)
+                return sorted(source.namelist())
+        except BackupError:
+            raise
+        except (BadZipFile, EOFError, RuntimeError) as exc:
+            raise BackupError("errors.invalid_zip", archive=archive) from exc
+        except OSError as exc:
+            raise BackupError("errors.restore_failed", error=exc) from exc
+
     def cleanup_old_backups(self) -> int:
         """Keep only the configured number of backups for this project."""
         if self.keep_last is None and self.keep_days is None:

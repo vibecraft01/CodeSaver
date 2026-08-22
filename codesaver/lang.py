@@ -871,10 +871,14 @@ _V15_COMMON = {
     "help.verify": "Verify the ZIP archive after creation or before restore",
     "help.exclude_dir": "Exclude this directory name (repeatable)",
     "help.manifest": "Embed a SHA-256 file manifest in the archive",
+    "help.list": "List archive contents without restoring files",
+    "help.exclude_pattern": "Exclude files matching a glob pattern (repeatable)",
+    "message.archive_contents": "Archive contents: {count} entries",
     "message.manifest_created": "SHA-256 manifest added: {count} files",
     "message.dry_run": "Dry run: {count} files, {size}; no archive created",
     "message.backup_verified": "Backup verified successfully: {count} files",
     "errors.exclude_dir_invalid": "--exclude-dir must not be empty",
+    "errors.exclude_pattern_invalid": "--exclude-pattern must not be empty",
 }
 for _language in TRANSLATIONS:
     TRANSLATIONS[_language].update(_V15_COMMON)
@@ -884,10 +888,14 @@ TRANSLATIONS["ru"].update(
         "help.verify": "Проверить ZIP после создания или перед восстановлением",
         "help.exclude_dir": "Исключить папку по имени (можно повторять)",
         "help.manifest": "Добавить в архив манифест файлов с SHA-256",
+        "help.list": "Показать содержимое архива без восстановления файлов",
+        "help.exclude_pattern": "Исключить файлы по glob-шаблону (можно повторять)",
+        "message.archive_contents": "Содержимое архива: элементов {count}",
         "message.manifest_created": "Манифест SHA-256 добавлен: файлов {count}",
         "message.dry_run": "Пробный запуск: {count} файлов, {size}; архив не создан",
         "message.backup_verified": "Бэкап успешно проверен: файлов {count}",
         "errors.exclude_dir_invalid": "--exclude-dir не должен быть пустым",
+        "errors.exclude_pattern_invalid": "--exclude-pattern не должен быть пустым",
     }
 )
 
