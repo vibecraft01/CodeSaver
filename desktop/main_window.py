@@ -140,8 +140,13 @@ _DESKTOP_1_0_4_TEXT = {
     "search_archives": "Search backups…",
     "no_archive_selected": "Select a backup first.",
 }
+_DESKTOP_1_0_5_TEXT = {
+    "refresh": "Refresh backups",
+    "auto_refresh": "Backups refresh automatically every 30 seconds",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
+TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
 TEXT["ru"].update(
     {
         "recent": "\u041d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u044b",
@@ -156,6 +161,7 @@ TEXT["ru"].update(
         "operation_failed": "Ошибка операции: {error}",
     }
 )
+TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "Бэкапы обновляются каждые 30 секунд"})
 TEXT["ru"].update(
     {
         "verify": "Проверить бэкап",
@@ -216,6 +222,7 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         self._apply_theme()
         self._configure_autosave()
+        self._configure_backup_refresh()
         if self.settings.project_dir and Path(self.settings.project_dir).is_dir():
             self._set_project(Path(self.settings.project_dir))
 
@@ -241,6 +248,9 @@ class MainWindow(QMainWindow):
         self.recent_button = QPushButton(self._text("recent"))
         self.recent_button.setMenu(QMenu(self.recent_button))
         header.addWidget(self.recent_button)
+        self.refresh_button = QPushButton(self._text("refresh"))
+        self.refresh_button.clicked.connect(self._refresh_backups)
+        header.addWidget(self.refresh_button)
         project_layout.addLayout(header)
         self.path_label = QLabel(self._text("path", path="—"))
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -307,6 +317,7 @@ class MainWindow(QMainWindow):
         self.open_button.setText(self._text("open"))
         self.open_backups_button.setText(self._text("open_backups"))
         self.recent_button.setText(self._text("recent"))
+        self.refresh_button.setText(self._text("refresh"))
         self.backup_button.setText(self._text("backup"))
         self.restore_button.setText(self._text("restore"))
         self.verify_button.setText(self._text("verify"))
@@ -350,6 +361,13 @@ class MainWindow(QMainWindow):
             self.autosave_timer.start(self.settings.interval_minutes * 60 * 1000)
         if self.settings.backup_on_start:
             QTimer.singleShot(1200, lambda: self._start_backup_internal(automatic=True))
+
+    def _configure_backup_refresh(self) -> None:
+        if hasattr(self, "backup_refresh_timer"):
+            self.backup_refresh_timer.stop()
+        self.backup_refresh_timer = QTimer(self)
+        self.backup_refresh_timer.timeout.connect(self._refresh_backups)
+        self.backup_refresh_timer.start(30 * 1000)
 
     def _choose_project(self) -> None:
         directory = QFileDialog.getExistingDirectory(self, self._text("open"))
@@ -606,6 +624,7 @@ class MainWindow(QMainWindow):
         self.verify_button.setEnabled(not busy)
         self.open_button.setEnabled(not busy)
         self.open_backups_button.setEnabled(not busy)
+        self.refresh_button.setEnabled(not busy)
         self.settings_button.setEnabled(not busy)
         self.cleanup_button.setEnabled(not busy)
 
@@ -664,4 +683,5 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.worker.wait(3000)
         self.autosave_timer.stop()
+        self.backup_refresh_timer.stop()
         event.accept()

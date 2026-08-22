@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.0.5] - 2026-08-22
+
+- Added manual backup-list refresh.
+- Added automatic backup-list refresh every 30 seconds.
+
 ## [CLI 1.1.7] - 2026-08-22
 
 - Added `--list ARCHIVE` to inspect a backup without restoring files.
