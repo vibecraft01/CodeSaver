@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.1.8] - 2026-08-22
+
+- Added `--quiet` for clean automation and CI output.
+- Added `--json` backup results for scripts and integrations.
+
 ## [Desktop 1.0.5] - 2026-08-22
 
 - Added manual backup-list refresh.

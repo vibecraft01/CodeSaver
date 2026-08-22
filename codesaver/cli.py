@@ -72,6 +72,8 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         metavar="PATTERN",
         help=translate("help.exclude_pattern", language),
     )
+    parser.add_argument("--quiet", action="store_true", help=translate("help.quiet", language))
+    parser.add_argument("--json", action="store_true", help=translate("help.json", language))
     parser.add_argument(
         "--exclude-ext",
         action="append",
@@ -120,10 +122,12 @@ def _format_duration(seconds: Optional[float], language: str) -> str:
     return f"{secs}s"
 
 
-def _progress_callback(language: str):
+def _progress_callback(language: str, quiet: bool = False):
     started: Optional[float] = None
 
     def show_progress(current: int, total: int, _path: Path, processed_bytes: int, total_bytes: int) -> None:
+        if quiet:
+            return
         nonlocal started
         now = time.monotonic()
         if started is None:
@@ -172,19 +176,26 @@ def _create_backup(
     logger: logging.Logger,
     verify: bool = False,
     manifest: bool = False,
+    quiet: bool = False,
+    emit_messages: bool = True,
 ) -> Path:
     logger.info("Starting backup: project=%s backup_dir=%s", manager.project_dir, manager.backup_dir)
-    archive = manager.create_backup(detailed_progress_callback=_progress_callback(language), include_manifest=manifest)
+    archive = manager.create_backup(
+        detailed_progress_callback=_progress_callback(language, quiet), include_manifest=manifest
+    )
     if manager.last_cleanup_count:
         logger.info("Removed old backups: count=%s", manager.last_cleanup_count)
-        print(translate("message.backups_removed", language, count=manager.last_cleanup_count))
+        if emit_messages:
+            print(translate("message.backups_removed", language, count=manager.last_cleanup_count))
     logger.info("Backup created: %s", archive)
     if verify:
         members = manager.verify_backup(archive)
         logger.info("Backup verified: archive=%s members=%s", archive, members)
-        print(translate("message.backup_verified", language, count=members))
+        if emit_messages:
+            print(translate("message.backup_verified", language, count=members))
     if manifest:
-        print(translate("message.manifest_created", language, count=len(manager.list_files())))
+        if emit_messages:
+            print(translate("message.manifest_created", language, count=len(manager.list_files())))
     return archive
 
 
@@ -445,13 +456,28 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.dry_run:
             _dry_run(manager, language)
         elif args.backup_now:
-            print(
-                translate(
-                    "message.backup_created",
-                    language,
-                    path=_create_backup(manager, language, logger, args.verify, args.manifest),
-                )
+            archive = _create_backup(
+                manager,
+                language,
+                logger,
+                args.verify,
+                args.manifest,
+                quiet=args.quiet or args.json,
+                emit_messages=not args.json,
             )
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "operation": "backup",
+                            "archive": str(archive),
+                            "verified": args.verify,
+                            "manifest": args.manifest,
+                        }
+                    )
+                )
+            elif not args.quiet:
+                print(translate("message.backup_created", language, path=archive))
         else:
             run_menu(
                 manager, autosave=not args.no_autosave, interval=settings.interval, language=language, logger=logger
