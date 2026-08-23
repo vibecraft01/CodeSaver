@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from shutil import disk_usage
+import time
 
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QKeySequence
@@ -114,6 +115,17 @@ TEXT["ru"].update(
         "disk_warning": "На диске осталось мало места: {free}",
     }
 )
+
+TEXT["ru"].update(
+    {
+        "verify_all": "Проверить все бэкапы",
+        "verify_all_started": "Проверка всех бэкапов…",
+        "verify_all_done": "Состояние бэкапов: {verified}/{total} проверено",
+        "autosave_status": "Автосохранение: {status}",
+        "autosave_off": "\u0432\u044b\043a\u043b\044e\0447\u0435\u043d\u043e",
+        "autosave_next": "every {minutes} min • next in {remaining}",
+    }
+)
 TEXT["ru"].update(
     {
         "backup_stats": (
@@ -166,9 +178,18 @@ _DESKTOP_1_0_5_TEXT = {
     "refresh": "Refresh backups",
     "auto_refresh": "Backups refresh automatically every 30 seconds",
 }
+_DESKTOP_1_0_7_TEXT = {
+    "verify_all": "Verify all backups",
+    "verify_all_started": "Verifying all backups…",
+    "verify_all_done": "Backup health: {verified}/{total} verified",
+    "autosave_status": "Autosave: {status}",
+    "autosave_off": "off",
+    "autosave_next": "every {minutes} min • next in {remaining}",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
+TEXT["en"].update(_DESKTOP_1_0_7_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -209,13 +230,19 @@ class BackupWorker(QThread):
     failed = pyqtSignal(str)
 
     def __init__(
-        self, manager: DesktopBackupManager, operation: str, archive: Path | None = None, language: str = "en"
+        self,
+        manager: DesktopBackupManager,
+        operation: str,
+        archive: Path | None = None,
+        language: str = "en",
+        archives: list[Path] | None = None,
     ) -> None:
         super().__init__()
         self.manager = manager
         self.operation = operation
         self.archive = archive
         self.language = language
+        self.archives = archives or []
 
     def run(self) -> None:
         try:
@@ -225,6 +252,17 @@ class BackupWorker(QThread):
             elif self.operation == "verify":
                 count = self.manager.verify_backup(self.archive)
                 self.succeeded.emit(str(count))
+            elif self.operation == "verify_all":
+                verified = 0
+                for current, archive in enumerate(self.archives, start=1):
+                    try:
+                        self.manager.verify_backup(archive)
+                        verified += 1
+                    except (BackupError, OSError, ValueError):
+                        pass
+                    finally:
+                        self.progress.emit(current, len(self.archives), archive, current, len(self.archives))
+                self.succeeded.emit(f"{verified}/{len(self.archives)}")
             else:
                 count = self.manager.restore_backup(self.archive, overwrite=True)
                 self.succeeded.emit(str(count))
@@ -245,6 +283,9 @@ class MainWindow(QMainWindow):
         self.worker: BackupWorker | None = None
         self._operation = ""
         self._allow_close = False
+        # _retranslate_ui() runs while _build_ui() is assembling widgets, so
+        # this state must exist before the autosave controls are rendered.
+        self.next_autosave_at: float | None = None
         self._active_language = detect_system_language() if self.settings.language == "auto" else self.settings.language
         self.setAcceptDrops(True)
         self.setMinimumSize(820, 560)
@@ -286,9 +327,11 @@ class MainWindow(QMainWindow):
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.stats_label = QLabel(self._text("stats", count=0, size=format_bytes(0)))
         self.backup_stats_label = QLabel(self._text("backup_stats", count=0, size=format_bytes(0)))
+        self.autosave_status_label = QLabel()
         project_layout.addWidget(self.path_label)
         project_layout.addWidget(self.stats_label)
         project_layout.addWidget(self.backup_stats_label)
+        project_layout.addWidget(self.autosave_status_label)
         layout.addWidget(project_frame)
 
         actions = QHBoxLayout()
@@ -298,6 +341,8 @@ class MainWindow(QMainWindow):
         self.restore_button.clicked.connect(self._restore_selected)
         self.verify_button = QPushButton(self._text("verify"))
         self.verify_button.clicked.connect(self._verify_selected)
+        self.verify_all_button = QPushButton(self._text("verify_all"))
+        self.verify_all_button.clicked.connect(self._verify_all)
         self.settings_button = QPushButton(self._text("settings"))
         self.settings_button.clicked.connect(self._open_settings)
         self.cleanup_button = QPushButton(self._text("cleanup"))
@@ -305,6 +350,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.backup_button)
         actions.addWidget(self.restore_button)
         actions.addWidget(self.verify_button)
+        actions.addWidget(self.verify_all_button)
         actions.addWidget(self.cleanup_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
@@ -351,6 +397,7 @@ class MainWindow(QMainWindow):
         self._refresh_recent_projects_menu()
         self._retranslate_ui()
         self.statusBar().showMessage(self._text("ready"))
+        self._update_autosave_status()
 
     def _retranslate_ui(self) -> None:
         self.setWindowTitle(self._text("title"))
@@ -362,8 +409,10 @@ class MainWindow(QMainWindow):
         self.backup_button.setText(self._text("backup"))
         self.restore_button.setText(self._text("restore"))
         self.verify_button.setText(self._text("verify"))
+        self.verify_all_button.setText(self._text("verify_all"))
         self.cleanup_button.setText(self._text("cleanup"))
         self.settings_button.setText(self._text("settings"))
+        self._update_autosave_status()
         self.drop_hint.setText(self._text("drop_project"))
         self.archive_search.setPlaceholderText(self._text("search_archives"))
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
@@ -396,12 +445,35 @@ class MainWindow(QMainWindow):
     def _configure_autosave(self) -> None:
         if hasattr(self, "autosave_timer"):
             self.autosave_timer.stop()
+        if hasattr(self, "autosave_countdown_timer"):
+            self.autosave_countdown_timer.stop()
         self.autosave_timer = QTimer(self)
+        self.next_autosave_at = None
         if self.settings.interval_minutes > 0:
             self.autosave_timer.timeout.connect(self._autosave)
             self.autosave_timer.start(self.settings.interval_minutes * 60 * 1000)
+            self.next_autosave_at = time.monotonic() + self.settings.interval_minutes * 60
+            self.autosave_countdown_timer = QTimer(self)
+            self.autosave_countdown_timer.timeout.connect(self._update_autosave_status)
+            self.autosave_countdown_timer.start(1000)
         if self.settings.backup_on_start:
             QTimer.singleShot(1200, lambda: self._start_backup_internal(automatic=True))
+        self._update_autosave_status()
+
+    def _update_autosave_status(self) -> None:
+        if not hasattr(self, "autosave_status_label"):
+            return
+        if self.settings.interval_minutes <= 0 or self.next_autosave_at is None:
+            status = self._text("autosave_off")
+        else:
+            remaining = max(0, int(self.next_autosave_at - time.monotonic()))
+            minutes, seconds = divmod(remaining, 60)
+            status = self._text(
+                "autosave_next",
+                minutes=self.settings.interval_minutes,
+                remaining=f"{minutes:02d}:{seconds:02d}",
+            )
+        self.autosave_status_label.setText(self._text("autosave_status", status=status))
 
     def _configure_backup_refresh(self) -> None:
         if hasattr(self, "backup_refresh_timer"):
@@ -567,6 +639,8 @@ class MainWindow(QMainWindow):
         self.worker.start()
 
     def _autosave(self) -> None:
+        if self.settings.interval_minutes > 0:
+            self.next_autosave_at = time.monotonic() + self.settings.interval_minutes * 60
         if self.manager and not (self.worker and self.worker.isRunning()):
             self._start_backup_internal(automatic=True)
 
@@ -635,6 +709,27 @@ class MainWindow(QMainWindow):
         self._connect_worker()
         self.worker.start()
 
+    def _verify_all(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        archives = [item[0] for item in archive_details(self.manager.backup_dir)]
+        if not archives:
+            self.statusBar().showMessage(self._text("no_archive_selected"))
+            return
+        self._operation = "verify_all"
+        self.statusBar().showMessage(self._text("verify_all_started"))
+        self._set_busy(True)
+        self.progress.setValue(0)
+        self.worker = BackupWorker(
+            self.manager,
+            "verify_all",
+            language=self._active_language,
+            archives=archives,
+        )
+        self._connect_worker()
+        self.worker.start()
+
     def _connect_worker(self) -> None:
         self.worker.progress.connect(self._update_progress)
         self.worker.succeeded.connect(self._worker_succeeded)
@@ -668,6 +763,10 @@ class MainWindow(QMainWindow):
         elif self._operation == "verify":
             self.statusBar().showMessage(self._text("verify_done", count=value))
             self.tray.notify(self._text("title"), self._text("verify_done", count=value))
+        elif self._operation == "verify_all":
+            verified, total = str(value).split("/", 1)
+            self.statusBar().showMessage(self._text("verify_all_done", verified=verified, total=total))
+            self.tray.notify(self._text("title"), self._text("verify_all_done", verified=verified, total=total))
         else:
             self.statusBar().showMessage(self._text("restore_done", count=value))
         self._refresh_project_info()
@@ -683,6 +782,7 @@ class MainWindow(QMainWindow):
         self.backup_button.setEnabled(not busy)
         self.restore_button.setEnabled(not busy)
         self.verify_button.setEnabled(not busy)
+        self.verify_all_button.setEnabled(not busy)
         self.open_button.setEnabled(not busy)
         self.open_backups_button.setEnabled(not busy)
         self.refresh_button.setEnabled(not busy)
@@ -745,4 +845,6 @@ class MainWindow(QMainWindow):
             self.worker.wait(3000)
         self.autosave_timer.stop()
         self.backup_refresh_timer.stop()
+        if hasattr(self, "autosave_countdown_timer"):
+            self.autosave_countdown_timer.stop()
         event.accept()

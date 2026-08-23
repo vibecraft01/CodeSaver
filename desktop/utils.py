@@ -172,7 +172,7 @@ def archive_details(backup_dir: Path) -> list[tuple[Path, str, str]]:
     archives.sort(key=lambda path: path.stat().st_mtime, reverse=True)
     return [
         (
-            path,
+            path.resolve(),
             datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             format_bytes(path.stat().st_size),
         )

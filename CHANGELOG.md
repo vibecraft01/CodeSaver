@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.0.7] - 2026-08-23
+
+- Added background verification for all saved archives.
+- Added a verified/total backup health summary.
+- Added a live countdown to the next autosave.
+
 ## [CLI 1.1.9] - 2026-08-23
 
 - Added `--report FILE` to write an auditable JSON summary for CI pipelines and backup reviews.

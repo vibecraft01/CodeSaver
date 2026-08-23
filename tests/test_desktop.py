@@ -66,7 +66,7 @@ class DesktopSupportTests(unittest.TestCase):
             )
             save_settings(settings, config_path)
             loaded = load_settings(config_path)
-            self.assertEqual(loaded.project_dir, settings.project_dir)
+            self.assertEqual(Path(loaded.project_dir), Path(settings.project_dir).resolve())
             self.assertEqual(loaded.excluded_extensions, settings.excluded_extensions)
             self.assertEqual(loaded.keep_last, 3)
             self.assertEqual(loaded.theme, "light")
@@ -107,7 +107,7 @@ class DesktopSupportTests(unittest.TestCase):
             settings = DesktopSettings(backup_dir=str(backups), language="en")
             manager = DesktopBackupManager(root, settings)
             archive = manager.create_backup()
-            self.assertEqual(archive_details(backups)[0][0], archive)
+            self.assertEqual(archive_details(backups)[0][0], archive.resolve())
             (root / "app.py").unlink()
             self.assertEqual(manager.restore_backup(archive), 1)
             with ZipFile(archive) as zip_file:
