@@ -15,7 +15,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ## Impact snapshot
 
-GitHub repository snapshot for **23 August 2026**:
+GitHub repository snapshot for **22 August 2026**:
 
 | Metric | Value |
 | --- | ---: |
