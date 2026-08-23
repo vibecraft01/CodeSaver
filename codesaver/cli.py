@@ -62,6 +62,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--verify", action="store_true", help=translate("help.verify", language))
     parser.add_argument("--manifest", action="store_true", help=translate("help.manifest", language))
     parser.add_argument("--list", type=Path, metavar="ARCHIVE", help=translate("help.list", language))
+    parser.add_argument("--diff", type=Path, metavar="ARCHIVE", help=translate("help.diff", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
     )
@@ -480,6 +481,29 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(translate("message.archive_contents", language, count=len(members)))
             for member in members:
                 print(f"  {member}")
+        elif args.diff:
+            diff = manager.compare_backup(args.diff)
+            if args.json:
+                print(json.dumps({"operation": "diff", "archive": str(args.diff), **diff}, ensure_ascii=False))
+            else:
+                print(
+                    translate(
+                        "message.diff_summary",
+                        language,
+                        added=len(diff["added"]),
+                        modified=len(diff["modified"]),
+                        missing=len(diff["missing"]),
+                    )
+                )
+                for key, label_key in (
+                    ("added", "message.diff_added"),
+                    ("modified", "message.diff_modified"),
+                    ("missing", "message.diff_missing"),
+                ):
+                    if diff[key]:
+                        print(translate(label_key, language) + ":")
+                        for item in diff[key]:
+                            print(f"  {item}")
         elif args.restore:
             if args.verify:
                 members = manager.verify_backup(args.restore)

@@ -1,5 +1,7 @@
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -19,6 +21,19 @@ from codesaver.core import BackupManager
 
 
 class CliFeatureTests(unittest.TestCase):
+    def test_module_entrypoint_returns_nonzero_for_invalid_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "broken.zip"
+            archive.write_bytes(b"not a ZIP archive")
+            result = subprocess.run(
+                [sys.executable, "-m", "codesaver", "--language", "en", "--project-dir", tmp, "--diff", archive],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("damaged", result.stdout)
+
     def test_parser_exposes_new_options(self):
         args = build_parser("en").parse_args(
             [

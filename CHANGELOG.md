@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.0] - 2026-08-23
+
+- Added `--diff ARCHIVE` to audit project drift against a ZIP backup.
+- Added translated diff summaries and `--json` output for CI integrations.
+
 ## [Desktop 1.0.7] - 2026-08-23
 
 - Added background verification for all saved archives.

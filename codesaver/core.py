@@ -332,6 +332,34 @@ class BackupManager:
         except OSError as exc:
             raise BackupError("errors.restore_failed", error=exc) from exc
 
+    def compare_backup(self, archive_path: Union[Path, str]) -> dict[str, list[str]]:
+        """Compare the current project state with a ZIP snapshot."""
+        archive = Path(archive_path).expanduser().resolve()
+        self.verify_backup(archive)
+        current_paths = {path.relative_to(self.project_dir).as_posix(): path for path in self.list_files()}
+        try:
+            with ZipFile(archive, "r") as source:
+                archived_paths = {
+                    info.filename
+                    for info in source.infolist()
+                    if not info.is_dir() and info.filename != ".codesaver-manifest.json"
+                }
+                added = sorted(set(current_paths) - archived_paths)
+                missing = sorted(archived_paths - set(current_paths))
+                modified: list[str] = []
+                for name in sorted(set(current_paths) & archived_paths):
+                    digest = hashlib.sha256()
+                    with current_paths[name].open("rb") as current_file:
+                        for chunk in iter(lambda: current_file.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                    if digest.hexdigest() != hashlib.sha256(source.read(name)).hexdigest():
+                        modified.append(name)
+                return {"added": added, "modified": modified, "missing": missing}
+        except (BadZipFile, EOFError, RuntimeError) as exc:
+            raise BackupError("errors.invalid_zip", archive=archive) from exc
+        except (OSError, ValueError) as exc:
+            raise BackupError("errors.restore_failed", error=exc) from exc
+
     def cleanup_old_backups(self) -> int:
         """Keep only the configured number of backups for this project."""
         if self.keep_last is None and self.keep_days is None:

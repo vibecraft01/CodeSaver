@@ -8,7 +8,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.1.9** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.9) |
+| CodeSaver CLI | **1.2.0** (local) | Python 3.9+ | Planned for 2026-08-23 |
 | CodeSaver Desktop | **1.0.7** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.7) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
@@ -60,6 +60,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Repeatable command-line glob exclusions with `--exclude-pattern`.
 - Quiet automation mode with `--quiet` and machine-readable backup results with `--json`.
 - Auditable JSON backup reports with `--report report.json`.
+- Project drift auditing with `--diff ARCHIVE`, showing added, modified, and missing files; use `--json` for CI.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
@@ -163,6 +164,13 @@ Create one backup and exit:
 
 ```bash
 codesaver --project-dir ./my-project --backup-dir ./backups --backup-now
+```
+
+Compare the current project with an existing backup before restoring it:
+
+```bash
+codesaver --project-dir ./my-project --diff ./backups/latest.zip
+codesaver --project-dir ./my-project --diff ./backups/latest.zip --json
 ```
 
 Useful backup controls:

@@ -11,6 +11,22 @@ from codesaver.core import BackupError, BackupManager
 
 
 class BackupManagerTests(unittest.TestCase):
+    def test_compare_backup_reports_added_modified_and_missing_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            (root / "changed.txt").write_text("before", encoding="utf-8")
+            (root / "removed.txt").write_text("gone", encoding="utf-8")
+            archive = BackupManager(root, backups).create_backup()
+            (root / "changed.txt").write_text("after", encoding="utf-8")
+            (root / "removed.txt").unlink()
+            (root / "added.txt").write_text("new", encoding="utf-8")
+            diff = BackupManager(root, backups).compare_backup(archive)
+            self.assertEqual(diff["added"], ["added.txt"])
+            self.assertEqual(diff["modified"], ["changed.txt"])
+            self.assertEqual(diff["missing"], ["removed.txt"])
+
     def test_backup_excludes_service_directories_and_can_restore(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"
@@ -115,7 +131,7 @@ class BackupManagerTests(unittest.TestCase):
                 ).create_backup()
             with ZipFile(archive) as zip_file:
                 self.assertEqual(zip_file.namelist(), ["keep.py"])
-            self.assertEqual(errors[0][0], skipped)
+            self.assertEqual(errors[0][0], skipped.resolve())
 
     def test_compression_max_size_and_detailed_progress(self):
         with tempfile.TemporaryDirectory() as tmp:

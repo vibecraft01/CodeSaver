@@ -929,6 +929,23 @@ for _language in SUPPORTED_LANGUAGES:
     # Keep the translation schema consistent; languages without a dedicated
     # report phrase safely use the English technical wording.
     TRANSLATIONS[_language].setdefault("help.report", TRANSLATIONS["en"]["help.report"])
+    TRANSLATIONS[_language].setdefault("help.diff", "Compare the project with a ZIP backup")
+    TRANSLATIONS[_language].setdefault(
+        "message.diff_summary", "Backup diff: {added} added, {modified} modified, {missing} missing"
+    )
+    TRANSLATIONS[_language].setdefault("message.diff_added", "Added files")
+    TRANSLATIONS[_language].setdefault("message.diff_modified", "Modified files")
+    TRANSLATIONS[_language].setdefault("message.diff_missing", "Missing files")
+
+TRANSLATIONS["ru"].update(
+    {
+        "help.diff": "Сравнить проект с ZIP-бэкапом и показать добавленные, изменённые и отсутствующие файлы",
+        "message.diff_summary": "Разница с бэкапом: добавлено {added}, изменено {modified}, отсутствует {missing}",
+        "message.diff_added": "Добавленные файлы",
+        "message.diff_modified": "Изменённые файлы",
+        "message.diff_missing": "Отсутствующие файлы",
+    }
+)
 
 
 def normalize_language(value: Optional[str]) -> str:
