@@ -6,8 +6,9 @@ from pathlib import Path
 from shutil import disk_usage
 
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtGui import QDesktopServices, QKeySequence
 from PyQt5.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -17,6 +18,7 @@ from PyQt5.QtWidgets import (
     QMenu,
     QProgressBar,
     QPushButton,
+    QShortcut,
     QLineEdit,
     QTableWidget,
     QTableWidgetItem,
@@ -33,6 +35,7 @@ from .tray_icon import TrayIcon
 from .utils import (
     DesktopSettings,
     archive_details,
+    backup_summary,
     detect_system_language,
     detect_system_theme,
     format_bytes,
@@ -111,6 +114,25 @@ TEXT["ru"].update(
         "disk_warning": "На диске осталось мало места: {free}",
     }
 )
+TEXT["ru"].update(
+    {
+        "backup_stats": (
+            "\u0411\u044d\u043a\u0430\u043f\u044b: {count} \u2022 " "\u0417\u0430\u043d\u044f\u0442\u043e: {size}"
+        ),
+        "copy_archive_path": (
+            "\u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c "
+            "\u043f\u0443\u0442\u044c \u0430\u0440\u0445\u0438\u0432\u0430"
+        ),
+        "archive_path_copied": (
+            "\u041f\u0443\u0442\u044c \u0430\u0440\u0445\u0438\u0432\u0430 "
+            "\u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d"
+        ),
+        "open_archive_folder": (
+            "\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043f\u0430\u043f\u043a\u0443 "
+            "\u0430\u0440\u0445\u0438\u0432\u0430"
+        ),
+    }
+)
 TEXT["en"].update(
     {
         "open_backups": "Open backups folder",
@@ -147,6 +169,14 @@ _DESKTOP_1_0_5_TEXT = {
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
+TEXT["en"].update(
+    {
+        "backup_stats": "Backups: {count} • Stored: {size}",
+        "copy_archive_path": "Copy archive path",
+        "archive_path_copied": "Archive path copied",
+        "open_archive_folder": "Open archive folder",
+    }
+)
 TEXT["ru"].update(
     {
         "recent": "\u041d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u044b",
@@ -255,8 +285,10 @@ class MainWindow(QMainWindow):
         self.path_label = QLabel(self._text("path", path="—"))
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.stats_label = QLabel(self._text("stats", count=0, size=format_bytes(0)))
+        self.backup_stats_label = QLabel(self._text("backup_stats", count=0, size=format_bytes(0)))
         project_layout.addWidget(self.path_label)
         project_layout.addWidget(self.stats_label)
+        project_layout.addWidget(self.backup_stats_label)
         layout.addWidget(project_frame)
 
         actions = QHBoxLayout()
@@ -288,7 +320,16 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.cellDoubleClicked.connect(lambda _row, _column: self._restore_selected())
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_archive_menu)
         layout.addWidget(self.table, 1)
+
+        self.backup_shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
+        self.backup_shortcut.activated.connect(self._start_backup)
+        self.restore_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        self.restore_shortcut.activated.connect(self._restore_selected)
+        self.refresh_shortcut = QShortcut(QKeySequence("F5"), self)
+        self.refresh_shortcut.activated.connect(self._refresh_backups)
 
         progress_row = QHBoxLayout()
         self.progress = QProgressBar()
@@ -451,10 +492,14 @@ class MainWindow(QMainWindow):
     def _refresh_backups(self, _query: str = "") -> None:
         self.table.setRowCount(0)
         if not self.manager:
+            self.backup_stats_label.setText(self._text("backup_stats", count=0, size=format_bytes(0)))
             return
         try:
             query = self.archive_search.text().strip().lower()
-            archives = archive_details(self.manager.backup_dir)
+            all_archives = archive_details(self.manager.backup_dir)
+            count, total_size = backup_summary(self.manager.backup_dir)
+            self.backup_stats_label.setText(self._text("backup_stats", count=count, size=format_bytes(total_size)))
+            archives = all_archives
             archives = [item for item in archives if not query or query in item[0].name.lower()]
             for row, (path, date, size) in enumerate(archives):
                 self.table.insertRow(row)
@@ -465,6 +510,22 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row, 2, QTableWidgetItem(size))
         except OSError as exc:
             self._show_error(str(exc))
+
+    def _show_archive_menu(self, position) -> None:
+        row = self.table.rowAt(position.y())
+        if row < 0:
+            return
+        self.table.selectRow(row)
+        archive = Path(self.table.item(row, 0).data(Qt.UserRole))
+        menu = QMenu(self)
+        copy_action = menu.addAction(self._text("copy_archive_path"))
+        open_action = menu.addAction(self._text("open_archive_folder"))
+        selected = menu.exec_(self.table.viewport().mapToGlobal(position))
+        if selected == copy_action:
+            QApplication.clipboard().setText(str(archive))
+            self.statusBar().showMessage(self._text("archive_path_copied"))
+        elif selected == open_action:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(archive.parent)))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

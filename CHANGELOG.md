@@ -4,6 +4,16 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.1.9] - 2026-08-23
+
+- Added `--report FILE` to write an auditable JSON summary for CI pipelines and backup reviews.
+
+## [Desktop 1.0.6] - 2026-08-23
+
+- Added backup storage summary with archive count and total disk usage.
+- Added archive context actions to copy a path or open its containing folder.
+- Added `Ctrl+B`, `Ctrl+R`, and `F5` keyboard shortcuts for common actions.
+
 ## [CLI 1.1.8] - 2026-08-22
 
 - Added `--quiet` for clean automation and CI output.

@@ -32,6 +32,7 @@ LANGUAGE_NAMES = {
 
 TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
     "en": {
+        "help.report": "Write a JSON backup report to FILE (for CI and audit trails)",
         "help.exclude_ext": "Exclude files by extension (repeat or comma-separate, for example .tmp,.log)",
         "errors.exclude_ext_invalid": "Invalid excluded extension list: {value}",
         "help.description": "Automatic ZIP backups for a code project",
@@ -71,6 +72,7 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "errors.restore_failed": "Could not restore backup: {error}",
     },
     "ru": {
+        "help.report": "Сохранить JSON-отчёт о бэкапе в FILE (для CI и аудита)",
         "help.exclude_ext": "Исключать файлы по расширению (например, .tmp,.log)",
         "errors.exclude_ext_invalid": "Некорректный список исключаемых расширений: {value}",
         "help.description": "Автоматические ZIP-бэкапы проекта с исходным кодом",
@@ -921,6 +923,12 @@ _ALIASES = {
     "hindi": "hi",
     "arabic": "ar",
 }
+
+
+for _language in SUPPORTED_LANGUAGES:
+    # Keep the translation schema consistent; languages without a dedicated
+    # report phrase safely use the English technical wording.
+    TRANSLATIONS[_language].setdefault("help.report", TRANSLATIONS["en"]["help.report"])
 
 
 def normalize_language(value: Optional[str]) -> str:

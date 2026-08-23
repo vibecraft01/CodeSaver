@@ -9,6 +9,7 @@ from desktop.backup_manager import DesktopBackupManager
 from desktop.utils import (
     DesktopSettings,
     archive_details,
+    backup_summary,
     detect_system_theme,
     detect_system_language,
     format_bytes,
@@ -135,6 +136,19 @@ class DesktopSupportTests(unittest.TestCase):
             manager.core.keep_last = 1
             self.assertEqual(manager.cleanup_old_backups(), 1)
             self.assertEqual(len(list(backups.glob("*.zip"))), 1)
+
+    def test_backup_summary_reports_archive_count_and_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            manager = DesktopBackupManager(root, DesktopSettings(backup_dir=str(backups)))
+            first = manager.create_backup()
+            first = first.rename(backups / "first.zip")
+            second = manager.create_backup()
+            count, size = backup_summary(backups)
+            self.assertEqual(count, 2)
+            self.assertEqual(size, first.stat().st_size + second.stat().st_size)
 
 
 if __name__ == "__main__":

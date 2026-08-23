@@ -74,6 +74,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--quiet", action="store_true", help=translate("help.quiet", language))
     parser.add_argument("--json", action="store_true", help=translate("help.json", language))
+    parser.add_argument("--report", type=Path, metavar="FILE", help=translate("help.report", language))
     parser.add_argument(
         "--exclude-ext",
         action="append",
@@ -210,6 +211,39 @@ def _dry_run(manager: BackupManager, language: str) -> None:
     print(translate("message.dry_run", language, count=len(files), size=_format_bytes(total_size)))
     for path in files:
         print(f"  {path.relative_to(manager.project_dir).as_posix()}")
+
+
+def _write_backup_report(
+    report_path: Path,
+    manager: BackupManager,
+    archive: Path,
+    duration: float,
+    verified: bool,
+    manifest: bool,
+) -> dict[str, object]:
+    """Write a portable JSON summary that can be attached to CI artifacts."""
+    files = manager.list_files()
+    total_bytes = 0
+    for path in files:
+        try:
+            total_bytes += path.stat().st_size
+        except OSError:
+            continue
+    report: dict[str, object] = {
+        "operation": "backup",
+        "project": str(manager.project_dir),
+        "archive": str(archive),
+        "files": len(files),
+        "total_bytes": total_bytes,
+        "duration_seconds": round(duration, 3),
+        "verified": verified,
+        "manifest": manifest,
+        "removed_old_backups": manager.last_cleanup_count,
+    }
+    report_path = report_path.expanduser()
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return report
 
 
 def _file_error_callback(language: str, logger: logging.Logger):
@@ -456,6 +490,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.dry_run:
             _dry_run(manager, language)
         elif args.backup_now:
+            started = time.perf_counter()
             archive = _create_backup(
                 manager,
                 language,
@@ -465,26 +500,37 @@ def main(argv: Optional[list[str]] = None) -> int:
                 quiet=args.quiet or args.json,
                 emit_messages=not args.json,
             )
-            if args.json:
-                print(
-                    json.dumps(
-                        {
-                            "operation": "backup",
-                            "archive": str(archive),
-                            "verified": args.verify,
-                            "manifest": args.manifest,
-                        }
-                    )
+            report = None
+            if args.report:
+                report = _write_backup_report(
+                    args.report,
+                    manager,
+                    archive,
+                    time.perf_counter() - started,
+                    args.verify,
+                    args.manifest,
                 )
+            if args.json:
+                result = {
+                    "operation": "backup",
+                    "archive": str(archive),
+                    "verified": args.verify,
+                    "manifest": args.manifest,
+                }
+                if report:
+                    result["report"] = str(args.report)
+                print(json.dumps(result))
             elif not args.quiet:
                 print(translate("message.backup_created", language, path=archive))
+                if args.report:
+                    print(f"Report written: {args.report}")
         else:
             run_menu(
                 manager, autosave=not args.no_autosave, interval=settings.interval, language=language, logger=logger
             )
         logger.info("CodeSaver finished successfully")
         return 0
-    except (BackupError, ValueError) as exc:
+    except (BackupError, OSError, ValueError) as exc:
         if logger:
             logger.error("CodeSaver failed: %s", _error_text(exc, language))
         print(translate("message.error", language, error=_error_text(exc, language)))

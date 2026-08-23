@@ -178,3 +178,9 @@ def archive_details(backup_dir: Path) -> list[tuple[Path, str, str]]:
         )
         for path in archives
     ]
+
+
+def backup_summary(backup_dir: Path) -> tuple[int, int]:
+    """Return the number and total on-disk size of backup archives."""
+    archives = [path for path in backup_dir.glob("*.zip") if path.is_file()]
+    return len(archives), sum(path.stat().st_size for path in archives)

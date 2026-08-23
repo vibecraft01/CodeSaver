@@ -8,10 +8,26 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.1.8** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.8) |
-| CodeSaver Desktop | **1.0.5** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.5) |
+| CodeSaver CLI | **1.1.9** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.9) |
+| CodeSaver Desktop | **1.0.6** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.6) |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
+
+## Impact snapshot
+
+GitHub Insights snapshot for **22 August 2026**:
+
+| Metric | Value |
+| --- | ---: |
+| Git clones (last 14 days) | 557 |
+| Unique cloners | 38 |
+| Repository views | 310 |
+| Unique visitors | 12 |
+| GitHub stars | 7 |
+| Public releases | 14 |
+| Commits | 21 |
+
+These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 
 ## Features
 
@@ -43,6 +59,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 - Safe archive inspection with `--list ARCHIVE` without restoring files.
 - Repeatable command-line glob exclusions with `--exclude-pattern`.
 - Quiet automation mode with `--quiet` and machine-readable backup results with `--json`.
+- Auditable JSON backup reports with `--report report.json`.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.
 - JSON configuration through `.codesaver.json` or `--config`.
@@ -50,7 +67,7 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ### Desktop version
 
-CodeSaver Desktop `1.0.3` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.0.6` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -69,6 +86,9 @@ CodeSaver Desktop `1.0.3` is a graphical alternative for developers who prefer a
 - Clear warnings when individual files cannot be read.
 - Real-time archive search and background integrity verification for selected backups.
 - Manual and automatic backup-list refresh every 30 seconds.
+- Backup storage summary with archive count and total disk usage.
+- Archive context menu for copying paths and opening the containing folder.
+- Keyboard shortcuts: `Ctrl+B` backup, `Ctrl+R` restore, and `F5` refresh.
 - No API keys or external services.
 
 ## Desktop interface preview

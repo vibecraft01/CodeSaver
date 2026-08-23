@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -12,7 +13,9 @@ from codesaver.cli import (
     _remember_project,
     _select_recent_project,
     build_parser,
+    _write_backup_report,
 )
+from codesaver.core import BackupManager
 
 
 class CliFeatureTests(unittest.TestCase):
@@ -31,6 +34,8 @@ class CliFeatureTests(unittest.TestCase):
                 "*.tmp",
                 "--exclude-dir",
                 "generated",
+                "--report",
+                "report.json",
             ]
         )
         self.assertEqual(args.keep_days, 30)
@@ -41,6 +46,22 @@ class CliFeatureTests(unittest.TestCase):
         self.assertEqual(args.list, Path("backup.zip"))
         self.assertEqual(args.exclude_pattern, ["*.tmp"])
         self.assertEqual(args.exclude_dir, ["generated"])
+        self.assertEqual(args.report, Path("report.json"))
+
+    def test_backup_report_contains_audit_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            (root / "hello.py").write_text("print('ok')", encoding="utf-8")
+            manager = BackupManager(root, backups)
+            archive = manager.create_backup()
+            report_path = Path(tmp) / "reports" / "backup.json"
+            report = _write_backup_report(report_path, manager, archive, 1.25, True, False)
+            self.assertTrue(report_path.is_file())
+            self.assertEqual(report["files"], 1)
+            self.assertEqual(report["verified"], True)
+            self.assertEqual(json.loads(report_path.read_text(encoding="utf-8"))["archive"], str(archive))
 
     def test_eta_is_included_in_progress_output(self):
         output = io.StringIO()
