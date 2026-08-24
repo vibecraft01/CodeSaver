@@ -1,6 +1,6 @@
 # CodeSaver Desktop v1.0.8
 
-Planned release date: 2026-08-24
+Released: 2026-08-24
 
 ## Highlights
 
