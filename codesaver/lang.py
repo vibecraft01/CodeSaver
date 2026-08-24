@@ -43,6 +43,7 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "help.backup_now": "Create one backup and exit",
         "help.restore": "Restore an archive and exit",
         "help.health": "Verify every ZIP backup and return a failure code if any is damaged",
+        "help.stats": "Show backup count, total size, and oldest/newest archive",
         "help.overwrite": "Allow restore to replace existing files",
         "help.language": "Interface language (default: detected from system locale)",
         "help.language_choices": "language code",
@@ -65,6 +66,9 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "message.error": "Error: {error}",
         "message.health_summary": "Backup health: {verified}/{total} archives verified",
         "message.health_failed": "Damaged or unreadable archive: {path}",
+        "message.stats_summary": "Backups: {count}; total stored size: {total_bytes}",
+        "message.stats_newest": "Newest backup: {path}",
+        "message.stats_oldest": "Oldest backup: {path}",
         "errors.interval_positive": "Autosave interval must be greater than zero",
         "errors.project_missing": "Project directory does not exist: {project}",
         "errors.project_not_dir": "Project path is not a directory: {project}",
@@ -952,8 +956,12 @@ TRANSLATIONS["ru"].update(
 
 for _language in SUPPORTED_LANGUAGES:
     TRANSLATIONS[_language].setdefault("help.health", TRANSLATIONS["en"]["help.health"])
+    TRANSLATIONS[_language].setdefault("help.stats", TRANSLATIONS["en"]["help.stats"])
     TRANSLATIONS[_language].setdefault("message.health_summary", TRANSLATIONS["en"]["message.health_summary"])
     TRANSLATIONS[_language].setdefault("message.health_failed", TRANSLATIONS["en"]["message.health_failed"])
+    TRANSLATIONS[_language].setdefault("message.stats_summary", TRANSLATIONS["en"]["message.stats_summary"])
+    TRANSLATIONS[_language].setdefault("message.stats_newest", TRANSLATIONS["en"]["message.stats_newest"])
+    TRANSLATIONS[_language].setdefault("message.stats_oldest", TRANSLATIONS["en"]["message.stats_oldest"])
 
 
 def normalize_language(value: Optional[str]) -> str:

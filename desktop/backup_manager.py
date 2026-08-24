@@ -54,5 +54,9 @@ class DesktopBackupManager:
         """Validate ZIP CRCs and any embedded SHA-256 manifest."""
         return self.core.verify_backup(archive_path)
 
+    def compare_backup(self, archive_path: Union[Path, str]) -> dict[str, list[str]]:
+        """Compare the current project with an archive for a restore preview."""
+        return self.core.compare_backup(archive_path)
+
     def cleanup_old_backups(self) -> int:
         return self.core.cleanup_old_backups()

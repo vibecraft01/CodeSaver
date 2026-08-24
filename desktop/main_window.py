@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from shutil import disk_usage
 import time
@@ -186,10 +187,18 @@ _DESKTOP_1_0_7_TEXT = {
     "autosave_off": "off",
     "autosave_next": "every {minutes} min • next in {remaining}",
 }
+_DESKTOP_1_0_9_TEXT = {
+    "compare": "Compare",
+    "compare_started": "Comparing project with backup…",
+    "compare_title": "Backup comparison",
+    "compare_summary": "Added: {added}\nModified: {modified}\nMissing: {missing}",
+    "compare_details": "Added files:\n{added}\n\nModified files:\n{modified}\n\nMissing files:\n{missing}",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_7_TEXT)
+TEXT["en"].update(_DESKTOP_1_0_9_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -220,6 +229,19 @@ TEXT["ru"].update(
         "verify_done": "Бэкап проверен: элементов в архиве {count}",
         "search_archives": "Поиск по бэкапам…",
         "no_archive_selected": "Сначала выберите бэкап.",
+    }
+)
+
+
+TEXT["ru"].update(
+    {
+        "compare": "Сравнить",
+        "compare_started": "Сравнение проекта с бэкапом…",
+        "compare_title": "Сравнение бэкапа",
+        "compare_summary": "Добавлено: {added}\nИзменено: {modified}\nОтсутствует: {missing}",
+        "compare_details": (
+            "Добавленные файлы:\n{added}\n\n" "Изменённые файлы:\n{modified}\n\n" "Отсутствующие файлы:\n{missing}"
+        ),
     }
 )
 
@@ -265,6 +287,9 @@ class BackupWorker(QThread):
                     finally:
                         self.progress.emit(current, len(self.archives), archive, current, len(self.archives))
                 self.succeeded.emit(f"{verified}/{len(self.archives)}")
+            elif self.operation == "compare":
+                result = self.manager.compare_backup(self.archive)
+                self.succeeded.emit(json.dumps(result, ensure_ascii=False))
             else:
                 count = self.manager.restore_backup(self.archive, overwrite=True)
                 self.succeeded.emit(str(count))
@@ -345,6 +370,8 @@ class MainWindow(QMainWindow):
         self.verify_button.clicked.connect(self._verify_selected)
         self.verify_all_button = QPushButton(self._text("verify_all"))
         self.verify_all_button.clicked.connect(self._verify_all)
+        self.compare_button = QPushButton(self._text("compare"))
+        self.compare_button.clicked.connect(self._compare_selected)
         self.settings_button = QPushButton(self._text("settings"))
         self.settings_button.clicked.connect(self._open_settings)
         self.cleanup_button = QPushButton(self._text("cleanup"))
@@ -353,6 +380,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.restore_button)
         actions.addWidget(self.verify_button)
         actions.addWidget(self.verify_all_button)
+        actions.addWidget(self.compare_button)
         actions.addWidget(self.cleanup_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
@@ -380,6 +408,8 @@ class MainWindow(QMainWindow):
         self.refresh_shortcut.activated.connect(self._refresh_backups)
         self.verify_shortcut = QShortcut(QKeySequence("Ctrl+Shift+V"), self)
         self.verify_shortcut.activated.connect(self._verify_selected)
+        self.compare_shortcut = QShortcut(QKeySequence("Ctrl+D"), self)
+        self.compare_shortcut.activated.connect(self._compare_selected)
 
         progress_row = QHBoxLayout()
         self.progress = QProgressBar()
@@ -414,6 +444,7 @@ class MainWindow(QMainWindow):
         self.restore_button.setText(self._text("restore"))
         self.verify_button.setText(self._text("verify"))
         self.verify_all_button.setText(self._text("verify_all"))
+        self.compare_button.setText(self._text("compare"))
         self.cleanup_button.setText(self._text("cleanup"))
         self.settings_button.setText(self._text("settings"))
         self._update_autosave_status()
@@ -713,6 +744,22 @@ class MainWindow(QMainWindow):
         self._connect_worker()
         self.worker.start()
 
+    def _compare_selected(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        row = self.table.currentRow()
+        if row < 0:
+            self.statusBar().showMessage(self._text("no_archive_selected"))
+            return
+        archive = Path(self.table.item(row, 0).data(Qt.UserRole))
+        self._operation = "compare"
+        self.statusBar().showMessage(self._text("compare_started"))
+        self._set_busy(True)
+        self.worker = BackupWorker(self.manager, "compare", archive, language=self._active_language)
+        self._connect_worker()
+        self.worker.start()
+
     def _verify_all(self) -> None:
         if not self.manager:
             self.statusBar().showMessage(self._text("choose_project"))
@@ -767,6 +814,20 @@ class MainWindow(QMainWindow):
         elif self._operation == "verify":
             self.statusBar().showMessage(self._text("verify_done", count=value))
             self.tray.notify(self._text("title"), self._text("verify_done", count=value))
+        elif self._operation == "compare":
+            result = json.loads(value)
+            added = result["added"]
+            modified = result["modified"]
+            missing = result["missing"]
+            self.statusBar().showMessage(
+                self._text(
+                    "compare_summary",
+                    added=len(added),
+                    modified=len(modified),
+                    missing=len(missing),
+                )
+            )
+            self._show_compare_result(result)
         elif self._operation == "verify_all":
             verified, total = str(value).split("/", 1)
             self.statusBar().showMessage(self._text("verify_all_done", verified=verified, total=total))
@@ -775,6 +836,18 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(self._text("restore_done", count=value))
         self._refresh_project_info()
         self._refresh_backups()
+
+    def _show_compare_result(self, result: dict[str, list[str]]) -> None:
+        def lines(items: list[str]) -> str:
+            return "\n".join(f"  • {item}" for item in items) or "  —"
+
+        body = self._text(
+            "compare_details",
+            added=lines(result["added"]),
+            modified=lines(result["modified"]),
+            missing=lines(result["missing"]),
+        )
+        QMessageBox.information(self, self._text("compare_title"), body)
 
     def _worker_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"{self._text('error')}: {message}")
@@ -787,6 +860,7 @@ class MainWindow(QMainWindow):
         self.restore_button.setEnabled(not busy)
         self.verify_button.setEnabled(not busy)
         self.verify_all_button.setEnabled(not busy)
+        self.compare_button.setEnabled(not busy)
         self.open_button.setEnabled(not busy)
         self.open_backups_button.setEnabled(not busy)
         self.refresh_button.setEnabled(not busy)

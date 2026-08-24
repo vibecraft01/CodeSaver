@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.2.1** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.1) |
-| CodeSaver Desktop | **1.0.8** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.8) |
+| CodeSaver CLI | **1.2.2** (local) | Python 3.9+ | Planned for 2026-08-24 |
+| CodeSaver Desktop | **1.0.9** (local) | Python 3.10+ with PyQt5 | Planned for 2026-08-24 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -61,6 +61,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Quiet automation mode with `--quiet` and machine-readable backup results with `--json`.
 - Auditable JSON backup reports with `--report report.json`.
 - Archive health checks with `--health` and CI-friendly `--health --json` output.
+- Backup inventory reports with `--stats` and `--stats --json`.
 - Project drift auditing with `--diff ARCHIVE`, showing added, modified, and missing files; use `--json` for CI.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.
@@ -93,6 +94,9 @@ CodeSaver Desktop `1.0.7` is a graphical alternative for developers who prefer a
 - Keyboard shortcuts: `Ctrl+B` backup, `Ctrl+R` restore, and `F5` refresh.
 - Verify all saved archives in the background with a health summary.
 - Live countdown to the next scheduled autosave.
+- Compare the current project with any selected backup before restoring.
+- View added, modified, and missing files in a restore-safety report.
+- Use `Ctrl+D` to compare the selected archive instantly.
 - Automatic ZIP integrity verification after each backup (configurable).
 - `Ctrl+Shift+V` shortcut to verify the selected backup immediately.
 - No API keys or external services.
