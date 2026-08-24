@@ -42,6 +42,7 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "help.no_autosave": "Disable the background autosave thread",
         "help.backup_now": "Create one backup and exit",
         "help.restore": "Restore an archive and exit",
+        "help.health": "Verify every ZIP backup and return a failure code if any is damaged",
         "help.overwrite": "Allow restore to replace existing files",
         "help.language": "Interface language (default: detected from system locale)",
         "help.language_choices": "language code",
@@ -62,6 +63,8 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "message.invalid_choice": "Enter 1, 2, or 3.",
         "message.stopping": "Stopping CodeSaver...",
         "message.error": "Error: {error}",
+        "message.health_summary": "Backup health: {verified}/{total} archives verified",
+        "message.health_failed": "Damaged or unreadable archive: {path}",
         "errors.interval_positive": "Autosave interval must be greater than zero",
         "errors.project_missing": "Project directory does not exist: {project}",
         "errors.project_not_dir": "Project path is not a directory: {project}",
@@ -946,6 +949,11 @@ TRANSLATIONS["ru"].update(
         "message.diff_missing": "Отсутствующие файлы",
     }
 )
+
+for _language in SUPPORTED_LANGUAGES:
+    TRANSLATIONS[_language].setdefault("help.health", TRANSLATIONS["en"]["help.health"])
+    TRANSLATIONS[_language].setdefault("message.health_summary", TRANSLATIONS["en"]["message.health_summary"])
+    TRANSLATIONS[_language].setdefault("message.health_failed", TRANSLATIONS["en"]["message.health_failed"])
 
 
 def normalize_language(value: Optional[str]) -> str:

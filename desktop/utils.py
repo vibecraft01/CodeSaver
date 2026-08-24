@@ -37,6 +37,7 @@ class DesktopSettings:
     max_size: Optional[int] = None
     recent_projects: tuple[str, ...] = ()
     backup_on_start: bool = False
+    verify_after_backup: bool = True
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -85,6 +86,7 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             max_size=max_size,
             recent_projects=recent_projects,
             backup_on_start=bool(raw.get("backup_on_start", False)),
+            verify_after_backup=bool(raw.get("verify_after_backup", True)),
         )
     except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
         return DesktopSettings()

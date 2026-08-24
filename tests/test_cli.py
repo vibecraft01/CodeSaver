@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from codesaver.cli import (
     _select_recent_project,
     build_parser,
     _write_backup_report,
+    _health_check,
 )
 from codesaver.core import BackupManager
 
@@ -62,6 +64,20 @@ class CliFeatureTests(unittest.TestCase):
         self.assertEqual(args.exclude_pattern, ["*.tmp"])
         self.assertEqual(args.exclude_dir, ["generated"])
         self.assertEqual(args.report, Path("report.json"))
+
+    def test_health_check_reports_corrupt_archives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            root.joinpath("hello.py").write_text("print('ok')", encoding="utf-8")
+            manager = BackupManager(root, backups)
+            manager.create_backup()
+            broken = backups / "project_broken.zip"
+            broken.write_bytes(b"not a zip")
+            total, failed = _health_check(manager, logging.getLogger("test-health"))
+            self.assertEqual(total, 2)
+            self.assertEqual(failed, [broken])
 
     def test_backup_report_contains_audit_summary(self):
         with tempfile.TemporaryDirectory() as tmp:

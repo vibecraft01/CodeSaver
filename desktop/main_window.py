@@ -248,6 +248,8 @@ class BackupWorker(QThread):
         try:
             if self.operation == "backup":
                 archive = self.manager.create_backup(self._progress)
+                if self.manager.verify_after_backup:
+                    self.manager.verify_backup(archive)
                 self.succeeded.emit(str(archive))
             elif self.operation == "verify":
                 count = self.manager.verify_backup(self.archive)
@@ -376,6 +378,8 @@ class MainWindow(QMainWindow):
         self.restore_shortcut.activated.connect(self._restore_selected)
         self.refresh_shortcut = QShortcut(QKeySequence("F5"), self)
         self.refresh_shortcut.activated.connect(self._refresh_backups)
+        self.verify_shortcut = QShortcut(QKeySequence("Ctrl+Shift+V"), self)
+        self.verify_shortcut.activated.connect(self._verify_selected)
 
         progress_row = QHBoxLayout()
         self.progress = QProgressBar()

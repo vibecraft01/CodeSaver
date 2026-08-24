@@ -75,6 +75,10 @@ class SettingsDialog(QDialog):
         self.minimize_to_tray.setChecked(settings.minimize_to_tray)
         self.backup_on_start = QCheckBox("Создавать бэкап при запуске" if russian else "Create a backup on startup")
         self.backup_on_start.setChecked(settings.backup_on_start)
+        self.verify_after_backup = QCheckBox(
+            "Проверять ZIP после бэкапа" if russian else "Verify ZIP after every backup"
+        )
+        self.verify_after_backup.setChecked(settings.verify_after_backup)
 
         backup_row = QHBoxLayout()
         self.backup_dir = QLineEdit(settings.backup_dir or "")
@@ -96,6 +100,7 @@ class SettingsDialog(QDialog):
         form.addRow("", self.compress)
         form.addRow("", self.minimize_to_tray)
         form.addRow("", self.backup_on_start)
+        form.addRow("", self.verify_after_backup)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -141,4 +146,5 @@ class SettingsDialog(QDialog):
             max_size=self.settings_value.max_size,
             recent_projects=self.settings_value.recent_projects,
             backup_on_start=self.backup_on_start.isChecked(),
+            verify_after_backup=self.verify_after_backup.isChecked(),
         )

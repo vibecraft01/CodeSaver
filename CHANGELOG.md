@@ -4,6 +4,18 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.1] - 2026-08-24 (local)
+
+- Added `--health` to verify every saved ZIP and report damaged archives.
+- Added machine-readable health output with `--health --json`.
+- Returns a non-zero exit code when any archive fails verification, making it suitable for CI and cron.
+
+## [Desktop 1.0.8] - 2026-08-24 (local)
+
+- Added optional automatic ZIP integrity verification after every backup.
+- Added `Ctrl+Shift+V` to verify the selected backup quickly.
+- Kept verification enabled by default for safer unattended backups.
+
 ## [CLI 1.2.0] - 2026-08-23
 
 - Added `--diff ARCHIVE` to audit project drift against a ZIP backup.

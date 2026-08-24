@@ -63,6 +63,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--manifest", action="store_true", help=translate("help.manifest", language))
     parser.add_argument("--list", type=Path, metavar="ARCHIVE", help=translate("help.list", language))
     parser.add_argument("--diff", type=Path, metavar="ARCHIVE", help=translate("help.diff", language))
+    parser.add_argument("--health", action="store_true", help=translate("help.health", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
     )
@@ -439,6 +440,19 @@ def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, C
     return project_dir, effective, language, logger
 
 
+def _health_check(manager: BackupManager, logger: logging.Logger) -> tuple[int, list[Path]]:
+    """Verify every ZIP in the backup directory for CI and scheduled checks."""
+    archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.name)
+    failed: list[Path] = []
+    for archive in archives:
+        try:
+            manager.verify_backup(archive)
+        except (BackupError, OSError, ValueError) as exc:
+            failed.append(archive)
+            logger.error("Backup health check failed: archive=%s error=%s", archive, exc)
+    return len(archives), failed
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -476,7 +490,34 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
-        if args.list:
+        health_failed = False
+        if args.health:
+            total, failed = _health_check(manager, logger)
+            health_failed = bool(failed)
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "operation": "health",
+                            "total": total,
+                            "verified": total - len(failed),
+                            "failed": [str(path) for path in failed],
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            else:
+                print(
+                    translate(
+                        "message.health_summary",
+                        language,
+                        verified=total - len(failed),
+                        total=total,
+                    )
+                )
+                for archive in failed:
+                    print(translate("message.health_failed", language, path=archive))
+        elif args.list:
             members = manager.list_backup(args.list)
             print(translate("message.archive_contents", language, count=len(members)))
             for member in members:
@@ -552,6 +593,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             run_menu(
                 manager, autosave=not args.no_autosave, interval=settings.interval, language=language, logger=logger
             )
+        if args.health and health_failed:
+            return 1
         logger.info("CodeSaver finished successfully")
         return 0
     except (BackupError, OSError, ValueError) as exc:

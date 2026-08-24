@@ -72,6 +72,7 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(loaded.theme, "light")
             self.assertEqual(loaded.accent_color, "#FF8800")
             self.assertTrue(loaded.backup_on_start)
+            self.assertTrue(loaded.verify_after_backup)
             self.assertEqual(loaded.recent_projects, (str(Path(tmp) / "project"),))
             self.assertEqual(format_bytes(1024 * 1024), "1.0 MB")
 

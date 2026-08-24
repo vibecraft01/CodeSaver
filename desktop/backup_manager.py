@@ -15,6 +15,7 @@ class DesktopBackupManager:
 
     def __init__(self, project_dir: Union[Path, str], settings: DesktopSettings) -> None:
         self.last_errors: list[tuple[Path, BaseException]] = []
+        self.verify_after_backup = settings.verify_after_backup
         backup_dir = settings.backup_dir or str(Path(project_dir).parent / f"{Path(project_dir).name}-backups")
         self.core = BackupManager(
             project_dir,

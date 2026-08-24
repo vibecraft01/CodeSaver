@@ -8,21 +8,21 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | **1.2.0** | Python 3.9+ | [CLI release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.0) |
-| CodeSaver Desktop | **1.0.7** | Python 3.10+ with PyQt5 | [Desktop release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.0.7) |
+| CodeSaver CLI | **1.2.1** (local) | Python 3.9+ | Planned for 2026-08-24 |
+| CodeSaver Desktop | **1.0.8** (local) | Python 3.10+ with PyQt5 | Planned for 2026-08-24 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
 ## Impact snapshot
 
-GitHub repository snapshot for **22 August 2026**:
+GitHub repository snapshot for **23 August 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 557 |
-| Unique cloners | 38 |
-| Repository views | 310 |
-| Unique visitors | 12 |
+| Git clones (last 14 days) | 785 |
+| Unique cloners | 71 |
+| Repository views | 452 |
+| Unique visitors | 16 |
 | GitHub stars | 8 |
 | Public releases | 16 |
 | Commits | 22 |
@@ -60,6 +60,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Repeatable command-line glob exclusions with `--exclude-pattern`.
 - Quiet automation mode with `--quiet` and machine-readable backup results with `--json`.
 - Auditable JSON backup reports with `--report report.json`.
+- Archive health checks with `--health` and CI-friendly `--health --json` output.
 - Project drift auditing with `--diff ARCHIVE`, showing added, modified, and missing files; use `--json` for CI.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.
@@ -92,6 +93,8 @@ CodeSaver Desktop `1.0.7` is a graphical alternative for developers who prefer a
 - Keyboard shortcuts: `Ctrl+B` backup, `Ctrl+R` restore, and `F5` refresh.
 - Verify all saved archives in the background with a health summary.
 - Live countdown to the next scheduled autosave.
+- Automatic ZIP integrity verification after each backup (configurable).
+- `Ctrl+Shift+V` shortcut to verify the selected backup immediately.
 - No API keys or external services.
 
 ## Desktop interface preview
