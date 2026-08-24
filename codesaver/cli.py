@@ -64,6 +64,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--list", type=Path, metavar="ARCHIVE", help=translate("help.list", language))
     parser.add_argument("--diff", type=Path, metavar="ARCHIVE", help=translate("help.diff", language))
     parser.add_argument("--health", action="store_true", help=translate("help.health", language))
+    parser.add_argument("--stats", action="store_true", help=translate("help.stats", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
     )
@@ -453,6 +454,18 @@ def _health_check(manager: BackupManager, logger: logging.Logger) -> tuple[int, 
     return len(archives), failed
 
 
+def _backup_stats(manager: BackupManager) -> dict[str, object]:
+    """Return a stable inventory summary for scripts and backup monitoring."""
+    archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: (path.stat().st_mtime, path.name))
+    total_size = sum(path.stat().st_size for path in archives)
+    return {
+        "count": len(archives),
+        "total_bytes": total_size,
+        "newest": str(archives[-1]) if archives else None,
+        "oldest": str(archives[0]) if archives else None,
+    }
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -491,7 +504,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.health:
+        if args.stats:
+            stats = _backup_stats(manager)
+            if args.json:
+                print(json.dumps({"operation": "stats", **stats}, ensure_ascii=False))
+            else:
+                print(
+                    translate(
+                        "message.stats_summary",
+                        language,
+                        count=stats["count"],
+                        total_bytes=_format_bytes(int(stats["total_bytes"])),
+                    )
+                )
+                if stats["newest"]:
+                    print(translate("message.stats_newest", language, path=stats["newest"]))
+                if stats["oldest"]:
+                    print(translate("message.stats_oldest", language, path=stats["oldest"]))
+        elif args.health:
             total, failed = _health_check(manager, logger)
             health_failed = bool(failed)
             if args.json:

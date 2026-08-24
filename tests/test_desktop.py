@@ -123,6 +123,20 @@ class DesktopSupportTests(unittest.TestCase):
             archive = manager.create_backup()
             self.assertEqual(manager.verify_backup(archive), 1)
 
+    def test_desktop_manager_compares_archive_with_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "app.py").write_text("old\n", encoding="utf-8")
+            manager = DesktopBackupManager(root, DesktopSettings(backup_dir=str(Path(tmp) / "backups")))
+            archive = manager.create_backup()
+            (root / "app.py").write_text("new\n", encoding="utf-8")
+            (root / "added.txt").write_text("added\n", encoding="utf-8")
+            diff = manager.compare_backup(archive)
+            self.assertEqual(diff["added"], ["added.txt"])
+            self.assertEqual(diff["modified"], ["app.py"])
+            self.assertEqual(diff["missing"], [])
+
     def test_cleanup_old_backups_uses_keep_last(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

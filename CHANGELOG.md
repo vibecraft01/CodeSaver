@@ -4,6 +4,17 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.2] - 2026-08-24 (local)
+
+- Added `--stats` to report backup count, total storage, and oldest/newest archives.
+- Added machine-readable `--stats --json` output for monitoring and CI.
+
+## [Desktop 1.0.9] - 2026-08-24 (local)
+
+- Added a restore-safety comparison view for selected backups.
+- Added added/modified/missing file reporting before restore.
+- Added `Ctrl+D` to compare the selected archive quickly.
+
 ## [CLI 1.2.1] - 2026-08-24
 
 - Added `--health` to verify every saved ZIP and report damaged archives.

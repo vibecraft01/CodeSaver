@@ -18,6 +18,7 @@ from codesaver.cli import (
     build_parser,
     _write_backup_report,
     _health_check,
+    _backup_stats,
 )
 from codesaver.core import BackupManager
 
@@ -78,6 +79,20 @@ class CliFeatureTests(unittest.TestCase):
             total, failed = _health_check(manager, logging.getLogger("test-health"))
             self.assertEqual(total, 2)
             self.assertEqual(failed, [broken])
+
+    def test_backup_stats_reports_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            root.joinpath("hello.py").write_text("print('ok')", encoding="utf-8")
+            manager = BackupManager(root, backups)
+            archive = manager.create_backup()
+            stats = _backup_stats(manager)
+            self.assertEqual(stats["count"], 1)
+            self.assertEqual(stats["total_bytes"], archive.stat().st_size)
+            self.assertEqual(stats["newest"], str(archive))
+            self.assertEqual(stats["oldest"], str(archive))
 
     def test_backup_report_contains_audit_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
