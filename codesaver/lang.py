@@ -876,6 +876,8 @@ TRANSLATIONS["ru"].update(
 
 
 _V15_COMMON = {
+    "help.restore_files": "Restore selected files from an archive (ARCHIVE FILE [FILE ...])",
+    "message.restore_files_completed": "Selected files restored: {count}",
     "help.cleanup": "Remove old backups using the configured retention rules",
     "message.cleanup": "Cleanup complete: {count} old backups removed",
     "help.dry_run": "List files and sizes without creating an archive",
@@ -897,6 +899,8 @@ for _language in TRANSLATIONS:
     TRANSLATIONS[_language].update(_V15_COMMON)
 TRANSLATIONS["ru"].update(
     {
+        "help.restore_files": "Восстановить выбранные файлы из архива (АРХИВ ФАЙЛ [ФАЙЛ ...])",
+        "message.restore_files_completed": "Выбранных файлов восстановлено: {count}",
         "help.cleanup": "Удалить старые бэкапы по настроенным правилам хранения",
         "message.cleanup": "Очистка завершена: удалено старых бэкапов — {count}",
         "help.dry_run": "Показать файлы и размеры без создания архива",

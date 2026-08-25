@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.4] - 2026-08-25
+
+- Added `--restore-files ARCHIVE FILE [FILE ...]` for selective file restoration.
+- Added JSON output for selective restore operations.
+- Added safe path validation and overwrite protection for selected files.
+
 ## [Desktop 1.1.1] - 2026-08-25 (local)
 
 - Added selective file restore from a ZIP archive through the archive context menu.

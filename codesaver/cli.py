@@ -97,6 +97,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         "--no-gitignore", action="store_true", default=None, help=translate("help.no_gitignore", language)
     )
     parser.add_argument("--restore", type=Path, metavar="ARCHIVE", help=translate("help.restore", language))
+    parser.add_argument(
+        "--restore-files",
+        nargs="+",
+        metavar="ARCHIVE FILE",
+        help=translate("help.restore_files", language),
+    )
     parser.add_argument("--overwrite", action="store_true", help=translate("help.overwrite", language))
     parser.add_argument("--config", type=Path, metavar="FILE", help=translate("help.config", language))
     parser.add_argument("--log", type=Path, metavar="FILE", help=translate("help.log", language))
@@ -576,6 +582,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                         print(translate(label_key, language) + ":")
                         for item in diff[key]:
                             print(f"  {item}")
+        elif args.restore_files:
+            archive, *members = args.restore_files
+            count = manager.restore_files(archive, members, overwrite=args.overwrite)
+            logger.info("Selected files restored: archive=%s files=%s", archive, count)
+            if args.json:
+                print(json.dumps({"operation": "restore-files", "archive": str(archive), "files": count}))
+            else:
+                print(translate("message.restore_files_completed", language, count=count))
         elif args.restore:
             if args.verify:
                 members = manager.verify_backup(args.restore)
