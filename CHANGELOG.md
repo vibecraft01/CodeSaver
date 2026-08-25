@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.1.1] - 2026-08-25 (local)
+
+- Added selective file restore from a ZIP archive through the archive context menu.
+- Added safe path validation and overwrite protection for selected-file restores.
+
 ## [CLI 1.2.3] - 2026-08-24 (local)
 
 - Added `--cleanup` to apply retention rules manually from scripts and CI.

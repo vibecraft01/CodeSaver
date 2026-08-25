@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QShortcut,
     QLineEdit,
+    QInputDialog,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -164,6 +165,9 @@ _DESKTOP_1_0_2_TEXT = {
     "cleanup_done": "Backups removed: {count}",
     "export_report": "Export JSON report",
     "export_report_done": "Report exported: {path}",
+    "restore_files": "Restore selected files",
+    "restore_files_prompt": "Enter the archive paths to restore, one per line:",
+    "restore_files_done": "Selected files restored: {count}",
     "recent_empty": "No recent projects",
     "drop_project": "Drop a project folder here",
     "backup_warning": "Less than 1 GB of free disk space remains. Continue?",
@@ -226,6 +230,13 @@ TEXT["ru"].update(
 )
 TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "Бэкапы обновляются каждые 30 секунд"})
 TEXT["ru"].update({"export_report": "Экспорт JSON-отчёта", "export_report_done": "Отчёт сохранён: {path}"})
+TEXT["ru"].update(
+    {
+        "restore_files": "Восстановить выбранные файлы",
+        "restore_files_prompt": "Укажите пути файлов из архива, по одному в строке:",
+        "restore_files_done": "Выбранных файлов восстановлено: {count}",
+    }
+)
 TEXT["ru"].update(
     {
         "verify": "Проверить бэкап",
@@ -634,12 +645,15 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         copy_action = menu.addAction(self._text("copy_archive_path"))
         open_action = menu.addAction(self._text("open_archive_folder"))
+        restore_files_action = menu.addAction(self._text("restore_files"))
         selected = menu.exec_(self.table.viewport().mapToGlobal(position))
         if selected == copy_action:
             QApplication.clipboard().setText(str(archive))
             self.statusBar().showMessage(self._text("archive_path_copied"))
         elif selected == open_action:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(archive.parent)))
+        elif selected == restore_files_action:
+            self._restore_selected_files(archive)
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)
@@ -734,6 +748,26 @@ class MainWindow(QMainWindow):
         self.worker = BackupWorker(self.manager, "restore", archive, language=self._active_language)
         self._connect_worker()
         self.worker.start()
+
+    def _restore_selected_files(self, archive: Path) -> None:
+        if not self.manager:
+            return
+        try:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            value, accepted = QInputDialog.getMultiLineText(
+                self,
+                self._text("restore_files"),
+                self._text("restore_files_prompt"),
+                "\n".join(members),
+            )
+            if not accepted:
+                return
+            selected = [line.strip() for line in value.splitlines() if line.strip()]
+            count = self.manager.restore_files(archive, selected, overwrite=True)
+            self.statusBar().showMessage(self._text("restore_files_done", count=count))
+            self._refresh_project_info()
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
 
     def _verify_selected(self) -> None:
         if not self.manager:

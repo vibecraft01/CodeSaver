@@ -435,3 +435,38 @@ class BackupManager:
         except (OSError, ValueError) as exc:
             raise BackupError("errors.restore_failed", error=exc) from exc
         return count
+
+    def restore_files(self, archive_path: Union[Path, str], members: list[str], overwrite: bool = False) -> int:
+        """Restore only selected safe files from an archive."""
+        self._validate_project()
+        archive = Path(archive_path).expanduser().resolve()
+        requested = {str(member).replace("\\", "/") for member in members if str(member).strip()}
+        if not archive.is_file() or not requested:
+            raise BackupError("errors.archive_missing", archive=archive)
+        count = 0
+        try:
+            with ZipFile(archive, "r") as source:
+                if source.testzip():
+                    raise BackupError("errors.invalid_zip", archive=archive)
+                target_root = self.project_dir.resolve()
+                available = {info.filename: info for info in source.infolist() if not info.is_dir()}
+                for name in sorted(requested):
+                    member = available.get(name)
+                    if member is None or name == ".codesaver-manifest.json":
+                        continue
+                    target = (target_root / name).resolve()
+                    if target_root not in target.parents:
+                        raise BackupError("errors.unsafe_path", member=name)
+                    if target.exists() and not overwrite:
+                        raise BackupError("errors.file_exists", path=target)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with source.open(member) as input_file, target.open("wb") as output_file:
+                        output_file.write(input_file.read())
+                    count += 1
+        except BackupError:
+            raise
+        except (BadZipFile, EOFError, RuntimeError) as exc:
+            raise BackupError("errors.invalid_zip", archive=archive) from exc
+        except (OSError, ValueError) as exc:
+            raise BackupError("errors.restore_failed", error=exc) from exc
+        return count

@@ -198,6 +198,19 @@ class BackupManagerTests(unittest.TestCase):
             with self.assertRaises(BackupError):
                 BackupManager(root).restore_backup(archive)
 
+    def test_restore_files_restores_only_selected_members(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "keep.txt").write_text("keep", encoding="utf-8")
+            (root / "restore.txt").write_text("old", encoding="utf-8")
+            manager = BackupManager(root, Path(tmp) / "backups")
+            archive = manager.create_backup()
+            (root / "restore.txt").write_text("new", encoding="utf-8")
+            self.assertEqual(manager.restore_files(archive, ["restore.txt"], overwrite=True), 1)
+            self.assertEqual((root / "restore.txt").read_text(encoding="utf-8"), "old")
+            self.assertEqual((root / "keep.txt").read_text(encoding="utf-8"), "keep")
+
     def test_restore_rejects_damaged_zip(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

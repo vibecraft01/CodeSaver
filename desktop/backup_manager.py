@@ -50,6 +50,9 @@ class DesktopBackupManager:
     def restore_backup(self, archive_path: Union[Path, str], overwrite: bool = False) -> int:
         return self.core.restore_backup(archive_path, overwrite=overwrite)
 
+    def restore_files(self, archive_path: Union[Path, str], members: list[str], overwrite: bool = False) -> int:
+        return self.core.restore_files(archive_path, members, overwrite=overwrite)
+
     def verify_backup(self, archive_path: Union[Path, str]) -> int:
         """Validate ZIP CRCs and any embedded SHA-256 manifest."""
         return self.core.verify_backup(archive_path)
