@@ -10,6 +10,7 @@ from desktop.utils import (
     DesktopSettings,
     archive_details,
     backup_summary,
+    export_backup_report,
     detect_system_theme,
     detect_system_language,
     format_bytes,
@@ -73,7 +74,7 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(loaded.accent_color, "#FF8800")
             self.assertTrue(loaded.backup_on_start)
             self.assertTrue(loaded.verify_after_backup)
-            self.assertEqual(loaded.recent_projects, (str(Path(tmp) / "project"),))
+            self.assertEqual(loaded.recent_projects, (str((Path(tmp) / "project").resolve()),))
             self.assertEqual(format_bytes(1024 * 1024), "1.0 MB")
 
     def test_custom_theme_palette_and_language_detection(self):
@@ -164,6 +165,17 @@ class DesktopSupportTests(unittest.TestCase):
             count, size = backup_summary(backups)
             self.assertEqual(count, 2)
             self.assertEqual(size, first.stat().st_size + second.stat().st_size)
+
+    def test_export_backup_report_contains_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            backup_dir = Path(tmp) / "backups"
+            backup_dir.mkdir()
+            (backup_dir / "first.zip").write_bytes(b"zip")
+            report_path = Path(tmp) / "reports" / "inventory.json"
+            report = export_backup_report(backup_dir, report_path)
+            self.assertEqual(report["count"], 1)
+            self.assertEqual(report["archives"][0]["name"], "first.zip")
+            self.assertTrue(report_path.is_file())
 
 
 if __name__ == "__main__":

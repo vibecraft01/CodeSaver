@@ -876,6 +876,8 @@ TRANSLATIONS["ru"].update(
 
 
 _V15_COMMON = {
+    "help.cleanup": "Remove old backups using the configured retention rules",
+    "message.cleanup": "Cleanup complete: {count} old backups removed",
     "help.dry_run": "List files and sizes without creating an archive",
     "help.verify": "Verify the ZIP archive after creation or before restore",
     "help.exclude_dir": "Exclude this directory name (repeatable)",
@@ -895,6 +897,8 @@ for _language in TRANSLATIONS:
     TRANSLATIONS[_language].update(_V15_COMMON)
 TRANSLATIONS["ru"].update(
     {
+        "help.cleanup": "Удалить старые бэкапы по настроенным правилам хранения",
+        "message.cleanup": "Очистка завершена: удалено старых бэкапов — {count}",
         "help.dry_run": "Показать файлы и размеры без создания архива",
         "help.verify": "Проверить ZIP после создания или перед восстановлением",
         "help.exclude_dir": "Исключить папку по имени (можно повторять)",

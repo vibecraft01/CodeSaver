@@ -4,6 +4,18 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.3] - 2026-08-24 (local)
+
+- Added `--cleanup` to apply retention rules manually from scripts and CI.
+- Added JSON output for cleanup results with `--cleanup --json`.
+
+## [Desktop 1.1.0] - 2026-08-24 (local)
+
+- Added JSON backup inventory export with archive names, paths, sizes, and timestamps.
+- Added an `Export JSON report` action for audits and support diagnostics.
+- Added instant backup search by filename/date in the archive list.
+- Added automatic archive-list refresh every 30 seconds and an `F5` refresh shortcut.
+
 ## [CLI 1.2.2] - 2026-08-24 (local)
 
 - Added `--stats` to report backup count, total storage, and oldest/newest archives.

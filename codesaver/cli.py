@@ -65,6 +65,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--diff", type=Path, metavar="ARCHIVE", help=translate("help.diff", language))
     parser.add_argument("--health", action="store_true", help=translate("help.health", language))
     parser.add_argument("--stats", action="store_true", help=translate("help.stats", language))
+    parser.add_argument("--cleanup", action="store_true", help=translate("help.cleanup", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
     )
@@ -584,6 +585,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(translate("message.restore_completed", language, count=count))
         elif args.dry_run:
             _dry_run(manager, language)
+        elif args.cleanup:
+            removed = manager.cleanup_old_backups()
+            if args.json:
+                print(json.dumps({"operation": "cleanup", "removed": removed}))
+            else:
+                print(translate("message.cleanup", language, count=removed))
         elif args.backup_now:
             started = time.perf_counter()
             archive = _create_backup(

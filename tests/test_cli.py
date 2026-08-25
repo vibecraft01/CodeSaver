@@ -78,7 +78,7 @@ class CliFeatureTests(unittest.TestCase):
             broken.write_bytes(b"not a zip")
             total, failed = _health_check(manager, logging.getLogger("test-health"))
             self.assertEqual(total, 2)
-            self.assertEqual(failed, [broken])
+            self.assertEqual([path.resolve() for path in failed], [broken.resolve()])
 
     def test_backup_stats_reports_inventory(self):
         with tempfile.TemporaryDirectory() as tmp:

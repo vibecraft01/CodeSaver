@@ -186,3 +186,26 @@ def backup_summary(backup_dir: Path) -> tuple[int, int]:
     """Return the number and total on-disk size of backup archives."""
     archives = [path for path in backup_dir.glob("*.zip") if path.is_file()]
     return len(archives), sum(path.stat().st_size for path in archives)
+
+
+def export_backup_report(backup_dir: Path, destination: Path) -> dict[str, object]:
+    """Export a portable inventory report for audits and support requests."""
+    archives = [path for path in backup_dir.glob("*.zip") if path.is_file()]
+    archives.sort(key=lambda path: (path.stat().st_mtime, path.name), reverse=True)
+    report = {
+        "backup_directory": str(backup_dir.resolve()),
+        "count": len(archives),
+        "total_bytes": sum(path.stat().st_size for path in archives),
+        "archives": [
+            {
+                "name": path.name,
+                "path": str(path.resolve()),
+                "size_bytes": path.stat().st_size,
+                "modified": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
+            }
+            for path in archives
+        ],
+    }
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report

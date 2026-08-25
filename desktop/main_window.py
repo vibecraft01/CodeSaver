@@ -41,6 +41,7 @@ from .utils import (
     detect_system_language,
     detect_system_theme,
     format_bytes,
+    export_backup_report,
     load_settings,
     save_settings,
     theme_colors,
@@ -161,6 +162,8 @@ _DESKTOP_1_0_2_TEXT = {
     "cleanup": "Clean old backups",
     "cleanup_confirm": "Delete old backups according to the retention setting? This cannot be undone.",
     "cleanup_done": "Backups removed: {count}",
+    "export_report": "Export JSON report",
+    "export_report_done": "Report exported: {path}",
     "recent_empty": "No recent projects",
     "drop_project": "Drop a project folder here",
     "backup_warning": "Less than 1 GB of free disk space remains. Continue?",
@@ -222,6 +225,7 @@ TEXT["ru"].update(
     }
 )
 TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "Бэкапы обновляются каждые 30 секунд"})
+TEXT["ru"].update({"export_report": "Экспорт JSON-отчёта", "export_report_done": "Отчёт сохранён: {path}"})
 TEXT["ru"].update(
     {
         "verify": "Проверить бэкап",
@@ -376,12 +380,15 @@ class MainWindow(QMainWindow):
         self.settings_button.clicked.connect(self._open_settings)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
+        self.export_report_button = QPushButton(self._text("export_report"))
+        self.export_report_button.clicked.connect(self._export_report)
         actions.addWidget(self.backup_button)
         actions.addWidget(self.restore_button)
         actions.addWidget(self.verify_button)
         actions.addWidget(self.verify_all_button)
         actions.addWidget(self.compare_button)
         actions.addWidget(self.cleanup_button)
+        actions.addWidget(self.export_report_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
@@ -866,6 +873,22 @@ class MainWindow(QMainWindow):
         self.refresh_button.setEnabled(not busy)
         self.settings_button.setEnabled(not busy)
         self.cleanup_button.setEnabled(not busy)
+        self.export_report_button.setEnabled(not busy)
+
+    def _export_report(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_report"), "codesaver-backup-report.json", "JSON files (*.json)"
+        )
+        if not destination:
+            return
+        try:
+            export_backup_report(self.manager.backup_dir, Path(destination))
+            self.statusBar().showMessage(self._text("export_report_done", path=destination))
+        except (OSError, ValueError) as exc:
+            self._show_error(str(exc))
 
     def _cleanup_old_backups(self) -> None:
         if not self.manager:
