@@ -15,17 +15,17 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ## Impact snapshot
 
-GitHub repository snapshot for **24 August 2026**:
+GitHub repository snapshot for **25 August 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 935 |
-| Unique cloners | 76 |
-| Repository views | 520 |
+| Git clones (last 14 days) | 1,091 |
+| Unique cloners | 82 |
+| Repository views | 571 |
 | Unique visitors | 19 |
 | GitHub stars | 8 |
-| Public releases | 22|
-| Commits | 36 |
+| Public releases | 28|
+| Commits | 47 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 
@@ -70,7 +70,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.1.1` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.1.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
