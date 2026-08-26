@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.6] - 2026-08-26
+
+- Added `--checksum ARCHIVE` for reproducible SHA-256 verification.
+- Added `--doctor` to diagnose the backup environment before unattended jobs.
+- Added JSON output for checksum and doctor results.
+
 ## [Desktop 1.1.3] - 2026-08-26 (local)
 
 - Added SHA-256 checksums to exported backup inventory reports.

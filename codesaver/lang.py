@@ -876,6 +876,9 @@ TRANSLATIONS["ru"].update(
 
 
 _V15_COMMON = {
+    "help.checksum": "Print the SHA-256 checksum of an archive",
+    "help.doctor": "Check the project and backup environment for unattended jobs",
+    "message.doctor": "Doctor: project={project_exists}; backup writable={backup_directory_writable}; Python={python}",
     "help.git_context": "Show Git branch, commit, and working-tree status",
     "message.git_context": "Git: {branch} • {commit} • {dirty}",
     "message.git_not_repo": "Git: project is not a repository",
@@ -902,6 +905,11 @@ for _language in TRANSLATIONS:
     TRANSLATIONS[_language].update(_V15_COMMON)
 TRANSLATIONS["ru"].update(
     {
+        "help.checksum": "Показать SHA-256 контрольную сумму архива",
+        "help.doctor": "Проверить окружение проекта и бэкапов перед автозапуском",
+        "message.doctor": (
+            "Диагностика: проект={project_exists}; запись в бэкапы={backup_directory_writable}; Python={python}"
+        ),
         "help.git_context": "Показать Git-ветку, commit и статус рабочих изменений",
         "message.git_context": "Git: {branch} • {commit} • {dirty}",
         "message.git_not_repo": "Git: проект не является репозиторием",

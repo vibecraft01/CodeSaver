@@ -45,6 +45,9 @@ class CliFeatureTests(unittest.TestCase):
                 "--follow-symlinks",
                 "--dry-run",
                 "--git-context",
+                "--checksum",
+                "backup.zip",
+                "--doctor",
                 "--restore-files",
                 "backup.zip",
                 "src/app.py",
@@ -64,6 +67,8 @@ class CliFeatureTests(unittest.TestCase):
         self.assertTrue(args.follow_symlinks)
         self.assertTrue(args.dry_run)
         self.assertTrue(args.git_context)
+        self.assertEqual(args.checksum, Path("backup.zip"))
+        self.assertTrue(args.doctor)
         self.assertEqual(args.restore_files, ["backup.zip", "src/app.py"])
         self.assertTrue(args.verify)
         self.assertTrue(args.manifest)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -67,6 +68,8 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--health", action="store_true", help=translate("help.health", language))
     parser.add_argument("--stats", action="store_true", help=translate("help.stats", language))
     parser.add_argument("--git-context", action="store_true", help=translate("help.git_context", language))
+    parser.add_argument("--checksum", type=Path, metavar="ARCHIVE", help=translate("help.checksum", language))
+    parser.add_argument("--doctor", action="store_true", help=translate("help.doctor", language))
     parser.add_argument("--cleanup", action="store_true", help=translate("help.cleanup", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
@@ -493,6 +496,35 @@ def _git_context(project_dir: Path) -> dict[str, object]:
         return {"branch": None, "commit": None, "dirty": False}
 
 
+def _archive_checksum(archive: Path) -> str:
+    digest = hashlib.sha256()
+    with archive.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _doctor(manager: BackupManager) -> dict[str, object]:
+    """Run safe environment checks before unattended backup jobs."""
+    backup_dir = manager.backup_dir
+    writable = False
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        probe = backup_dir / ".codesaver-write-test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        writable = True
+    except OSError:
+        writable = False
+    return {
+        "project_exists": manager.project_dir.is_dir(),
+        "backup_directory": str(backup_dir),
+        "backup_directory_writable": writable,
+        "git": _git_context(manager.project_dir),
+        "python": python_version_text(),
+    }
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -531,7 +563,22 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.git_context:
+        if args.checksum:
+            archive = args.checksum.expanduser().resolve()
+            if not archive.is_file():
+                raise BackupError("errors.archive_missing", archive=archive)
+            checksum = _archive_checksum(archive)
+            if args.json:
+                print(json.dumps({"operation": "checksum", "archive": str(archive), "sha256": checksum}))
+            else:
+                print(f"SHA-256: {checksum}")
+        elif args.doctor:
+            report = _doctor(manager)
+            if args.json:
+                print(json.dumps({"operation": "doctor", **report}, ensure_ascii=False))
+            else:
+                print(translate("message.doctor", language, **report))
+        elif args.git_context:
             context = _git_context(manager.project_dir)
             if args.json:
                 print(json.dumps({"operation": "git-context", **context}, ensure_ascii=False))
