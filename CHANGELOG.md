@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.1.3] - 2026-08-26 (local)
+
+- Added SHA-256 checksums to exported backup inventory reports.
+- Added one-click JSON export for project-versus-archive comparison results.
+- Comparison reports include archive checksum and added/modified/missing summaries.
+
 ## [CLI 1.2.5] - 2026-08-26 (local)
 
 - Added `--git-context` to report the current branch, short commit, and working-tree status.

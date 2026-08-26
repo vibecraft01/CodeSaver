@@ -11,6 +11,7 @@ from desktop.utils import (
     archive_details,
     backup_summary,
     export_backup_report,
+    export_compare_report,
     git_context,
     detect_system_theme,
     detect_system_language,
@@ -183,6 +184,17 @@ class DesktopSupportTests(unittest.TestCase):
             context = git_context(Path(tmp))
             self.assertIsNone(context["branch"])
             self.assertIsNone(context["commit"])
+
+    def test_export_compare_report_contains_hash_and_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "backup.zip"
+            archive.write_bytes(b"archive")
+            destination = Path(tmp) / "compare.json"
+            report = export_compare_report(
+                archive, {"added": ["new.py"], "modified": [], "missing": ["old.py"]}, destination
+            )
+            self.assertEqual(report["summary"], {"added": 1, "modified": 0, "missing": 1})
+            self.assertEqual(len(report["archive_sha256"]), 64)
 
 
 if __name__ == "__main__":

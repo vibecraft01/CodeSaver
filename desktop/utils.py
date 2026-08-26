@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -203,9 +204,33 @@ def export_backup_report(backup_dir: Path, destination: Path) -> dict[str, objec
                 "path": str(path.resolve()),
                 "size_bytes": path.stat().st_size,
                 "modified": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
+                "sha256": _sha256_file(path),
             }
             for path in archives
         ],
+    }
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def export_compare_report(archive: Path, comparison: dict[str, list[str]], destination: Path) -> dict[str, object]:
+    """Write a machine-readable project-vs-archive comparison report."""
+    report = {
+        "archive": str(archive.resolve()),
+        "archive_sha256": _sha256_file(archive),
+        "added": comparison["added"],
+        "modified": comparison["modified"],
+        "missing": comparison["missing"],
+        "summary": {key: len(comparison[key]) for key in ("added", "modified", "missing")},
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -44,6 +44,7 @@ from .utils import (
     format_bytes,
     git_context,
     export_backup_report,
+    export_compare_report,
     load_settings,
     save_settings,
     theme_colors,
@@ -160,6 +161,8 @@ TEXT["en"].update(
 )
 
 _DESKTOP_1_0_2_TEXT = {
+    "export_compare": "Export comparison JSON",
+    "export_compare_done": "Comparison report exported: {path}",
     "git_status": "Git: {branch} • {commit} • {dirty}",
     "git_not_repo": "Git: not a repository",
     "recent": "Recent projects",
@@ -235,6 +238,8 @@ TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "
 TEXT["ru"].update({"export_report": "Экспорт JSON-отчёта", "export_report_done": "Отчёт сохранён: {path}"})
 TEXT["ru"].update(
     {
+        "export_compare": "Экспорт JSON-сравнения",
+        "export_compare_done": "Отчёт сравнения сохранён: {path}",
         "git_status": "Git: {branch} • {commit} • {dirty}",
         "git_not_repo": "Git: это не Git-репозиторий",
         "restore_files": "Восстановить выбранные файлы",
@@ -394,6 +399,8 @@ class MainWindow(QMainWindow):
         self.verify_all_button.clicked.connect(self._verify_all)
         self.compare_button = QPushButton(self._text("compare"))
         self.compare_button.clicked.connect(self._compare_selected)
+        self.export_compare_button = QPushButton(self._text("export_compare"))
+        self.export_compare_button.clicked.connect(self._export_compare_selected)
         self.settings_button = QPushButton(self._text("settings"))
         self.settings_button.clicked.connect(self._open_settings)
         self.cleanup_button = QPushButton(self._text("cleanup"))
@@ -405,6 +412,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.verify_button)
         actions.addWidget(self.verify_all_button)
         actions.addWidget(self.compare_button)
+        actions.addWidget(self.export_compare_button)
         actions.addWidget(self.cleanup_button)
         actions.addWidget(self.export_report_button)
         actions.addStretch()
@@ -816,6 +824,26 @@ class MainWindow(QMainWindow):
         self._connect_worker()
         self.worker.start()
 
+    def _export_compare_selected(self) -> None:
+        if not self.manager:
+            return
+        row = self.table.currentRow()
+        if row < 0:
+            self.statusBar().showMessage(self._text("no_archive_selected"))
+            return
+        archive = Path(self.table.item(row, 0).data(Qt.UserRole))
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_compare"), "codesaver-compare-report.json", "JSON files (*.json)"
+        )
+        if not destination:
+            return
+        try:
+            comparison = self.manager.compare_backup(archive)
+            export_compare_report(archive, comparison, Path(destination))
+            self.statusBar().showMessage(self._text("export_compare_done", path=destination))
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
     def _verify_all(self) -> None:
         if not self.manager:
             self.statusBar().showMessage(self._text("choose_project"))
@@ -917,6 +945,7 @@ class MainWindow(QMainWindow):
         self.verify_button.setEnabled(not busy)
         self.verify_all_button.setEnabled(not busy)
         self.compare_button.setEnabled(not busy)
+        self.export_compare_button.setEnabled(not busy)
         self.open_button.setEnabled(not busy)
         self.open_backups_button.setEnabled(not busy)
         self.refresh_button.setEnabled(not busy)
