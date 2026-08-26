@@ -42,6 +42,7 @@ from .utils import (
     detect_system_language,
     detect_system_theme,
     format_bytes,
+    git_context,
     export_backup_report,
     load_settings,
     save_settings,
@@ -159,6 +160,8 @@ TEXT["en"].update(
 )
 
 _DESKTOP_1_0_2_TEXT = {
+    "git_status": "Git: {branch} • {commit} • {dirty}",
+    "git_not_repo": "Git: not a repository",
     "recent": "Recent projects",
     "cleanup": "Clean old backups",
     "cleanup_confirm": "Delete old backups according to the retention setting? This cannot be undone.",
@@ -232,6 +235,8 @@ TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "
 TEXT["ru"].update({"export_report": "Экспорт JSON-отчёта", "export_report_done": "Отчёт сохранён: {path}"})
 TEXT["ru"].update(
     {
+        "git_status": "Git: {branch} • {commit} • {dirty}",
+        "git_not_repo": "Git: это не Git-репозиторий",
         "restore_files": "Восстановить выбранные файлы",
         "restore_files_prompt": "Укажите пути файлов из архива, по одному в строке:",
         "restore_files_done": "Выбранных файлов восстановлено: {count}",
@@ -370,10 +375,12 @@ class MainWindow(QMainWindow):
         self.stats_label = QLabel(self._text("stats", count=0, size=format_bytes(0)))
         self.backup_stats_label = QLabel(self._text("backup_stats", count=0, size=format_bytes(0)))
         self.autosave_status_label = QLabel()
+        self.git_status_label = QLabel()
         project_layout.addWidget(self.path_label)
         project_layout.addWidget(self.stats_label)
         project_layout.addWidget(self.backup_stats_label)
         project_layout.addWidget(self.autosave_status_label)
+        project_layout.addWidget(self.git_status_label)
         layout.addWidget(project_frame)
 
         actions = QHBoxLayout()
@@ -611,6 +618,14 @@ class MainWindow(QMainWindow):
             files = self.manager.list_files()
             total = sum(path.stat().st_size for path in files)
             self.stats_label.setText(self._text("stats", count=len(files), size=format_bytes(total)))
+            context = git_context(self.manager.project_dir)
+            if context["branch"]:
+                dirty = "modified" if context["dirty"] else "clean"
+                self.git_status_label.setText(
+                    self._text("git_status", branch=context["branch"], commit=context["commit"], dirty=dirty)
+                )
+            else:
+                self.git_status_label.setText(self._text("git_not_repo"))
         except (BackupError, OSError) as exc:
             self._show_error(str(exc))
 

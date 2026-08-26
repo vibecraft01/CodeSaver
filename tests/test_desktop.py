@@ -11,6 +11,7 @@ from desktop.utils import (
     archive_details,
     backup_summary,
     export_backup_report,
+    git_context,
     detect_system_theme,
     detect_system_language,
     format_bytes,
@@ -176,6 +177,12 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(report["count"], 1)
             self.assertEqual(report["archives"][0]["name"], "first.zip")
             self.assertTrue(report_path.is_file())
+
+    def test_git_context_handles_non_repository(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            context = git_context(Path(tmp))
+            self.assertIsNone(context["branch"])
+            self.assertIsNone(context["commit"])
 
 
 if __name__ == "__main__":

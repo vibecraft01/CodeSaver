@@ -44,6 +44,7 @@ class CliFeatureTests(unittest.TestCase):
                 "30",
                 "--follow-symlinks",
                 "--dry-run",
+                "--git-context",
                 "--restore-files",
                 "backup.zip",
                 "src/app.py",
@@ -62,6 +63,7 @@ class CliFeatureTests(unittest.TestCase):
         self.assertEqual(args.keep_days, 30)
         self.assertTrue(args.follow_symlinks)
         self.assertTrue(args.dry_run)
+        self.assertTrue(args.git_context)
         self.assertEqual(args.restore_files, ["backup.zip", "src/app.py"])
         self.assertTrue(args.verify)
         self.assertTrue(args.manifest)

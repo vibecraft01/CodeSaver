@@ -4,6 +4,16 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.5] - 2026-08-26 (local)
+
+- Added `--git-context` to report the current branch, short commit, and working-tree status.
+- Added JSON output for Git context in automation and CI workflows.
+
+## [Desktop 1.1.2] - 2026-08-26 (local)
+
+- Added Git branch, short commit, and working-tree status to the project panel.
+- Helps developers identify the exact source state associated with each backup.
+
 ## [CLI 1.2.4] - 2026-08-25
 
 - Added `--restore-files ARCHIVE FILE [FILE ...]` for selective file restoration.

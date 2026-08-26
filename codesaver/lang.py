@@ -876,6 +876,9 @@ TRANSLATIONS["ru"].update(
 
 
 _V15_COMMON = {
+    "help.git_context": "Show Git branch, commit, and working-tree status",
+    "message.git_context": "Git: {branch} • {commit} • {dirty}",
+    "message.git_not_repo": "Git: project is not a repository",
     "help.restore_files": "Restore selected files from an archive (ARCHIVE FILE [FILE ...])",
     "message.restore_files_completed": "Selected files restored: {count}",
     "help.cleanup": "Remove old backups using the configured retention rules",
@@ -899,6 +902,9 @@ for _language in TRANSLATIONS:
     TRANSLATIONS[_language].update(_V15_COMMON)
 TRANSLATIONS["ru"].update(
     {
+        "help.git_context": "Показать Git-ветку, commit и статус рабочих изменений",
+        "message.git_context": "Git: {branch} • {commit} • {dirty}",
+        "message.git_not_repo": "Git: проект не является репозиторием",
         "help.restore_files": "Восстановить выбранные файлы из архива (АРХИВ ФАЙЛ [ФАЙЛ ...])",
         "message.restore_files_completed": "Выбранных файлов восстановлено: {count}",
         "help.cleanup": "Удалить старые бэкапы по настроенным правилам хранения",

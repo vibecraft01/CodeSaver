@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 from typing import Optional
 
 from codesaver.config import normalize_extensions, parse_size
@@ -209,3 +210,21 @@ def export_backup_report(backup_dir: Path, destination: Path) -> dict[str, objec
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
+
+
+def git_context(project_dir: Path) -> dict[str, object]:
+    """Return lightweight Git context without failing for non-Git projects."""
+    try:
+
+        def run(*args: str) -> str:
+            return subprocess.check_output(
+                ["git", "-C", str(project_dir), *args], stderr=subprocess.DEVNULL, text=True
+            ).strip()
+
+        return {
+            "branch": run("branch", "--show-current") or "detached",
+            "commit": run("rev-parse", "--short", "HEAD"),
+            "dirty": bool(run("status", "--porcelain")),
+        }
+    except (OSError, subprocess.CalledProcessError):
+        return {"branch": None, "commit": None, "dirty": False}

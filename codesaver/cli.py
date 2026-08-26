@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
+import subprocess
 import sys
 import threading
 import time
@@ -65,6 +66,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--diff", type=Path, metavar="ARCHIVE", help=translate("help.diff", language))
     parser.add_argument("--health", action="store_true", help=translate("help.health", language))
     parser.add_argument("--stats", action="store_true", help=translate("help.stats", language))
+    parser.add_argument("--git-context", action="store_true", help=translate("help.git_context", language))
     parser.add_argument("--cleanup", action="store_true", help=translate("help.cleanup", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
@@ -473,6 +475,24 @@ def _backup_stats(manager: BackupManager) -> dict[str, object]:
     }
 
 
+def _git_context(project_dir: Path) -> dict[str, object]:
+    """Return Git metadata for automation without failing outside a repository."""
+    try:
+
+        def run(*args: str) -> str:
+            return subprocess.check_output(
+                ["git", "-C", str(project_dir), *args], stderr=subprocess.DEVNULL, text=True
+            ).strip()
+
+        return {
+            "branch": run("branch", "--show-current") or "detached",
+            "commit": run("rev-parse", "--short", "HEAD"),
+            "dirty": bool(run("status", "--porcelain")),
+        }
+    except (OSError, subprocess.CalledProcessError):
+        return {"branch": None, "commit": None, "dirty": False}
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -511,7 +531,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.stats:
+        if args.git_context:
+            context = _git_context(manager.project_dir)
+            if args.json:
+                print(json.dumps({"operation": "git-context", **context}, ensure_ascii=False))
+            elif context["branch"]:
+                print(translate("message.git_context", language, **context))
+            else:
+                print(translate("message.git_not_repo", language))
+        elif args.stats:
             stats = _backup_stats(manager)
             if args.json:
                 print(json.dumps({"operation": "stats", **stats}, ensure_ascii=False))
