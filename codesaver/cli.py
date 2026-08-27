@@ -103,6 +103,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--restore", type=Path, metavar="ARCHIVE", help=translate("help.restore", language))
     parser.add_argument("--restore-safe", action="store_true", help=translate("help.restore_safe", language))
+    parser.add_argument("--archive-info", type=Path, metavar="ARCHIVE", help="Show archive metadata")
+    parser.add_argument("--export-manifest", type=Path, metavar="ARCHIVE", help="Export archive file list")
+    parser.add_argument("--delete-backup", type=Path, metavar="ARCHIVE", help="Delete one backup archive")
+    parser.add_argument(
+        "--rename-backup", nargs=2, type=Path, metavar=("ARCHIVE", "NEW_NAME"), help="Rename one backup archive"
+    )
+    parser.add_argument("--find", metavar="TEXT", help="Find files in the project by name")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -564,7 +571,62 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.checksum:
+        if args.archive_info:
+            archive = args.archive_info.expanduser().resolve()
+            members = [item for item in manager.list_backup(archive) if not item.endswith("/")]
+            result = {
+                "operation": "archive-info",
+                "archive": str(archive),
+                "size": archive.stat().st_size,
+                "files": len(members),
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else f"Archive: {archive}\nSize: {result['size']} bytes\nFiles: {result['files']}"
+            )
+        elif args.export_manifest:
+            archive = args.export_manifest.expanduser().resolve()
+            destination = archive.with_suffix(archive.suffix + ".manifest.txt")
+            members = [item for item in manager.list_backup(archive) if not item.endswith("/")]
+            destination.write_text("\n".join(members) + "\n", encoding="utf-8")
+            print(
+                json.dumps({"operation": "export-manifest", "manifest": str(destination), "files": len(members)})
+                if args.json
+                else f"Manifest written: {destination}"
+            )
+        elif args.delete_backup:
+            archive = args.delete_backup.expanduser().resolve()
+            archive.unlink()
+            print(
+                json.dumps({"operation": "delete-backup", "archive": str(archive)})
+                if args.json
+                else f"Deleted: {archive}"
+            )
+        elif args.rename_backup:
+            archive, new_name = (item.expanduser().resolve() for item in args.rename_backup)
+            target = archive.with_name(new_name.name + ("" if new_name.suffix else ".zip"))
+            if target.exists():
+                raise ValueError(f"Target already exists: {target}")
+            archive.rename(target)
+            print(
+                json.dumps({"operation": "rename-backup", "archive": str(target)})
+                if args.json
+                else f"Renamed: {target}"
+            )
+        elif args.find:
+            query = args.find.casefold()
+            matches = [
+                str(path.relative_to(manager.project_dir))
+                for path in manager.list_files()
+                if query in path.name.casefold()
+            ]
+            print(
+                json.dumps({"operation": "find", "matches": matches}, ensure_ascii=False)
+                if args.json
+                else "\n".join(matches)
+            )
+        elif args.checksum:
             archive = args.checksum.expanduser().resolve()
             if not archive.is_file():
                 raise BackupError("errors.archive_missing", archive=archive)
