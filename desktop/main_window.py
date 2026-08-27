@@ -161,6 +161,7 @@ TEXT["en"].update(
 )
 
 _DESKTOP_1_0_2_TEXT = {
+    "restore_safety": "A safety backup of the current project will be created first.",
     "export_compare": "Export comparison JSON",
     "export_compare_done": "Comparison report exported: {path}",
     "git_status": "Git: {branch} • {commit} • {dirty}",
@@ -236,6 +237,7 @@ TEXT["ru"].update(
 )
 TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "Бэкапы обновляются каждые 30 секунд"})
 TEXT["ru"].update({"export_report": "Экспорт JSON-отчёта", "export_report_done": "Отчёт сохранён: {path}"})
+TEXT["ru"].update({"restore_safety": "Перед восстановлением будет создан аварийный бэкап текущего проекта."})
 TEXT["ru"].update(
     {
         "export_compare": "Экспорт JSON-сравнения",
@@ -316,7 +318,9 @@ class BackupWorker(QThread):
                 result = self.manager.compare_backup(self.archive)
                 self.succeeded.emit(json.dumps(result, ensure_ascii=False))
             else:
+                safety_archive = self.manager.create_backup()
                 count = self.manager.restore_backup(self.archive, overwrite=True)
+                self.safety_archive = safety_archive
                 self.succeeded.emit(str(count))
         except (BackupError, OSError, ValueError) as exc:
             self.failed.emit(exc.localized(self.language) if isinstance(exc, BackupError) else str(exc))
@@ -759,7 +763,11 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.warning(
             self,
             self._text("confirm"),
-            self._text("confirm_restore") + "\n\n" + self._text("restore_warning"),
+            self._text("confirm_restore")
+            + "\n\n"
+            + self._text("restore_warning")
+            + "\n\n"
+            + self._text("restore_safety"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )

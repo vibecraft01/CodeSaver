@@ -4,6 +4,16 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.2.7] - 2026-08-26 (local)
+
+- Added `--restore-safe` to create a safety snapshot before restoring an archive.
+- Added JSON output containing the generated safety-backup path.
+
+## [Desktop 1.1.4] - 2026-08-26 (local)
+
+- Added an automatic safety snapshot before every full restore.
+- Restore operations now provide a recoverable checkpoint of the pre-restore project state.
+
 ## [CLI 1.2.6] - 2026-08-26
 
 - Added `--checksum ARCHIVE` for reproducible SHA-256 verification.

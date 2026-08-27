@@ -102,6 +102,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         "--no-gitignore", action="store_true", default=None, help=translate("help.no_gitignore", language)
     )
     parser.add_argument("--restore", type=Path, metavar="ARCHIVE", help=translate("help.restore", language))
+    parser.add_argument("--restore-safe", action="store_true", help=translate("help.restore_safe", language))
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -665,13 +666,29 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(json.dumps({"operation": "restore-files", "archive": str(archive), "files": count}))
             else:
                 print(translate("message.restore_files_completed", language, count=count))
-        elif args.restore:
+        elif args.restore or args.restore_safe:
+            if args.restore_safe and not args.restore:
+                raise ValueError("--restore-safe requires --restore ARCHIVE")
+            safety_archive = manager.create_backup() if args.restore_safe else None
             if args.verify:
                 members = manager.verify_backup(args.restore)
                 print(translate("message.backup_verified", language, count=members))
             count = manager.restore_backup(args.restore, overwrite=args.overwrite)
             logger.info("Backup restored: archive=%s files=%s", args.restore, count)
-            print(translate("message.restore_completed", language, count=count))
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "operation": "restore",
+                            "files": count,
+                            "safety_backup": str(safety_archive) if safety_archive else None,
+                        }
+                    )
+                )
+            else:
+                print(translate("message.restore_completed", language, count=count))
+                if safety_archive:
+                    print(translate("message.restore_safety_created", language, path=safety_archive))
         elif args.dry_run:
             _dry_run(manager, language)
         elif args.cleanup:

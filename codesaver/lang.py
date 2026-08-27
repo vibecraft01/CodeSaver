@@ -876,6 +876,8 @@ TRANSLATIONS["ru"].update(
 
 
 _V15_COMMON = {
+    "help.restore_safe": "Create a safety backup before restoring an archive",
+    "message.restore_safety_created": "Safety backup created: {path}",
     "help.checksum": "Print the SHA-256 checksum of an archive",
     "help.doctor": "Check the project and backup environment for unattended jobs",
     "message.doctor": "Doctor: project={project_exists}; backup writable={backup_directory_writable}; Python={python}",
@@ -905,6 +907,8 @@ for _language in TRANSLATIONS:
     TRANSLATIONS[_language].update(_V15_COMMON)
 TRANSLATIONS["ru"].update(
     {
+        "help.restore_safe": "Создать аварийный бэкап перед восстановлением архива",
+        "message.restore_safety_created": "Аварийный бэкап создан: {path}",
         "help.checksum": "Показать SHA-256 контрольную сумму архива",
         "help.doctor": "Проверить окружение проекта и бэкапов перед автозапуском",
         "message.doctor": (

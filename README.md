@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.2.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.6) | Python 3.9+ | Updated 2026-08-26 |
-| CodeSaver Desktop | [**1.1.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.3) | Python 3.10+ with PyQt5 | Updated 2026-08-26 |
+| CodeSaver CLI | [**1.2.7**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.7) | Python 3.9+ | Updated 2026-08-27 |
+| CodeSaver Desktop | [**1.1.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.4) | Python 3.10+ with PyQt5 | Updated 2026-08-27 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -70,7 +70,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.1.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.1.4` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
