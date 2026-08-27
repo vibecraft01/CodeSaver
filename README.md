@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | [**1.2.7**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.7) | Python 3.9+ | Updated 2026-08-27 |
-| CodeSaver Desktop | [**1.1.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.4) | Python 3.10+ with PyQt5 | Updated 2026-08-27 |
+| CodeSaver Desktop | [**1.1.5**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.5) | Python 3.10+ with PyQt5 | Updated 2026-08-27 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -70,7 +70,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.1.4` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.1.5` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -99,6 +99,11 @@ CodeSaver Desktop `1.1.4` is a graphical alternative for developers who prefer a
 - Use `Ctrl+D` to compare the selected archive instantly.
 - Automatic ZIP integrity verification after each backup (configurable).
 - `Ctrl+Shift+V` shortcut to verify the selected backup immediately.
+- Archive details view with file count, size, creation date, and full path.
+- Plain-text archive manifest export for audits and indexing.
+- Safe archive renaming with collision protection.
+- Individual archive deletion with explicit confirmation.
+- One-click opening of the active project folder from an archive.
 - No API keys or external services.
 
 ## Desktop interface preview

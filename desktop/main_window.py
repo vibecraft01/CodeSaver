@@ -208,11 +208,25 @@ _DESKTOP_1_0_9_TEXT = {
     "compare_summary": "Added: {added}\nModified: {modified}\nMissing: {missing}",
     "compare_details": "Added files:\n{added}\n\nModified files:\n{modified}\n\nMissing files:\n{missing}",
 }
+_DESKTOP_1_1_5_TEXT = {
+    "archive_info": "Archive details",
+    "archive_info_body": "Name: {name}\nCreated: {date}\nSize: {size}\nFiles: {files}\nPath: {path}",
+    "export_manifest": "Export archive manifest",
+    "export_manifest_done": "Manifest exported: {path}",
+    "rename_archive": "Rename archive",
+    "rename_prompt": "New archive name:",
+    "rename_done": "Archive renamed",
+    "delete_archive": "Delete archive",
+    "delete_confirm": "Permanently delete {name}?",
+    "delete_done": "Archive deleted",
+    "open_project_folder": "Open project folder",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_7_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_9_TEXT)
+TEXT["en"].update(_DESKTOP_1_1_5_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -233,6 +247,21 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "archive_info": "Сведения об архиве",
+        "archive_info_body": "Имя: {name}\nСоздан: {date}\nРазмер: {size}\nФайлов: {files}\nПуть: {path}",
+        "export_manifest": "Экспортировать manifest",
+        "export_manifest_done": "Manifest сохранён: {path}",
+        "rename_archive": "Переименовать архив",
+        "rename_prompt": "Новое имя архива:",
+        "rename_done": "Архив переименован",
+        "delete_archive": "Удалить архив",
+        "delete_confirm": "Удалить {name} навсегда?",
+        "delete_done": "Архив удалён",
+        "open_project_folder": "Открыть папку проекта",
     }
 )
 TEXT["ru"].update({"refresh": "Обновить бэкапы", "auto_refresh": "Бэкапы обновляются каждые 30 секунд"})
@@ -670,17 +699,101 @@ class MainWindow(QMainWindow):
         self.table.selectRow(row)
         archive = Path(self.table.item(row, 0).data(Qt.UserRole))
         menu = QMenu(self)
+        info_action = menu.addAction(self._text("archive_info"))
+        manifest_action = menu.addAction(self._text("export_manifest"))
+        rename_action = menu.addAction(self._text("rename_archive"))
+        delete_action = menu.addAction(self._text("delete_archive"))
+        menu.addSeparator()
+        project_action = menu.addAction(self._text("open_project_folder"))
+        menu.addSeparator()
         copy_action = menu.addAction(self._text("copy_archive_path"))
         open_action = menu.addAction(self._text("open_archive_folder"))
         restore_files_action = menu.addAction(self._text("restore_files"))
         selected = menu.exec_(self.table.viewport().mapToGlobal(position))
-        if selected == copy_action:
+        if selected == info_action:
+            self._show_archive_info(archive)
+        elif selected == manifest_action:
+            self._export_archive_manifest(archive)
+        elif selected == rename_action:
+            self._rename_archive(archive)
+        elif selected == delete_action:
+            self._delete_archive(archive)
+        elif selected == project_action and self.manager:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.manager.project_dir)))
+        elif selected == copy_action:
             QApplication.clipboard().setText(str(archive))
             self.statusBar().showMessage(self._text("archive_path_copied"))
         elif selected == open_action:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(archive.parent)))
         elif selected == restore_files_action:
             self._restore_selected_files(archive)
+
+    def _show_archive_info(self, archive: Path) -> None:
+        try:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            details = next((item for item in archive_details(self.manager.backup_dir) if item[0] == archive), None)
+            date, size = (details[1], details[2]) if details else ("—", format_bytes(archive.stat().st_size))
+            QMessageBox.information(
+                self,
+                self._text("archive_info"),
+                self._text(
+                    "archive_info_body", name=archive.name, date=date, size=size, files=len(members), path=archive
+                ),
+            )
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _export_archive_manifest(self, archive: Path) -> None:
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_manifest"), f"{archive.stem}-manifest.txt"
+        )
+        if not destination:
+            return
+        try:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            Path(destination).write_text("\n".join(members) + "\n", encoding="utf-8")
+            self.statusBar().showMessage(self._text("export_manifest_done", path=destination))
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _rename_archive(self, archive: Path) -> None:
+        name, accepted = QInputDialog.getText(
+            self, self._text("rename_archive"), self._text("rename_prompt"), text=archive.name
+        )
+        if not accepted or not name.strip():
+            return
+        safe_name = Path(name.strip()).name
+        if not safe_name.lower().endswith(".zip"):
+            safe_name += ".zip"
+        target = archive.with_name(safe_name)
+        if target == archive or target.exists():
+            self._show_error(self._text("error"))
+            return
+        try:
+            archive.rename(target)
+            self.statusBar().showMessage(self._text("rename_done"))
+            self._refresh_backups()
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _delete_archive(self, archive: Path) -> None:
+        if (
+            QMessageBox.question(
+                self,
+                self._text("delete_archive"),
+                self._text("delete_confirm", name=archive.name),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            != QMessageBox.Yes
+        ):
+            return
+        try:
+            archive.unlink()
+            self.statusBar().showMessage(self._text("delete_done"))
+            self._refresh_backups()
+        except OSError as exc:
+            self._show_error(str(exc))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)
