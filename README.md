@@ -15,17 +15,17 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ## Impact snapshot
 
-GitHub repository snapshot for **26 August 2026**:
+GitHub repository snapshot for **27 August 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 1,253 |
-| Unique cloners | 96 |
-| Repository views | 662 |
+| Git clones (last 14 days) | 1,410 |
+| Unique cloners | 99 |
+| Repository views | 715 |
 | Unique visitors | 19 |
 | GitHub stars | 8 |
-| Public releases | 32|
-| Commits | 58 |
+| Public releases | 34|
+| Commits | 64 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 
@@ -64,7 +64,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Backup inventory reports with `--stats` and `--stats --json`.
 - Project drift auditing with `--diff ARCHIVE`, showing added, modified, and missing files; use `--json` for CI.
 - Final verification and operation summary output.
-- Optional operation logs with `--log`.
+- Optional operation logs with `--log`.х
 - JSON configuration through `.codesaver.json` or `--config`.
 - Python 3.9+ dependency-free runtime.
 
