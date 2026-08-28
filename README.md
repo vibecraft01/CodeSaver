@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.2.8**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.8) | Python 3.9+ | Updated 2026-08-27 |
-| CodeSaver Desktop | [**1.1.5**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.5) | Python 3.10+ with PyQt5 | Updated 2026-08-27 |
+| CodeSaver CLI | [**1.2.9**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.2.9) | Python 3.9+ | Updated 2026-08-28 |
+| CodeSaver Desktop | [**1.1.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.6) | Python 3.10+ with PyQt5 | Updated 2026-08-28 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -70,7 +70,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.1.5` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.1.6` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -104,6 +104,10 @@ CodeSaver Desktop `1.1.5` is a graphical alternative for developers who prefer a
 - Safe archive renaming with collision protection.
 - Individual archive deletion with explicit confirmation.
 - One-click opening of the active project folder from an archive.
+- SHA-256 checksum shown with archive details for reproducible artifact checks.
+- JSON manifest export for scripts, audits, and backup indexing.
+- Sortable archive table and live result count while filtering backups.
+- `Ctrl+F` shortcut to focus and select the backup search field.
 - No API keys or external services.
 
 ## Desktop interface preview

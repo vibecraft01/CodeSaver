@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from shutil import disk_usage
 import time
@@ -221,12 +222,18 @@ _DESKTOP_1_1_5_TEXT = {
     "delete_done": "Archive deleted",
     "open_project_folder": "Open project folder",
 }
+_DESKTOP_1_1_6_TEXT = {
+    "sha256": "SHA-256: {checksum}",
+    "search_results": "Showing {shown} of {total} backups",
+    "focus_search": "Focus backup search",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_7_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_9_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_5_TEXT)
+TEXT["en"].update(_DESKTOP_1_1_6_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -247,6 +254,13 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "sha256": "SHA-256: {checksum}",
+        "search_results": "Показано бэкапов: {shown} из {total}",
+        "focus_search": "Фокус на поиске бэкапов",
     }
 )
 TEXT["ru"].update(
@@ -461,6 +475,7 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSortingEnabled(True)
         self.table.cellDoubleClicked.connect(lambda _row, _column: self._restore_selected())
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_archive_menu)
@@ -476,6 +491,8 @@ class MainWindow(QMainWindow):
         self.verify_shortcut.activated.connect(self._verify_selected)
         self.compare_shortcut = QShortcut(QKeySequence("Ctrl+D"), self)
         self.compare_shortcut.activated.connect(self._compare_selected)
+        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.search_shortcut.activated.connect(self._focus_archive_search)
 
         progress_row = QHBoxLayout()
         self.progress = QProgressBar()
@@ -682,6 +699,7 @@ class MainWindow(QMainWindow):
             self.backup_stats_label.setText(self._text("backup_stats", count=count, size=format_bytes(total_size)))
             archives = all_archives
             archives = [item for item in archives if not query or query in item[0].name.lower()]
+            self.statusBar().showMessage(self._text("search_results", shown=len(archives), total=len(all_archives)))
             for row, (path, date, size) in enumerate(archives):
                 self.table.insertRow(row)
                 item = QTableWidgetItem(path.name)
@@ -733,6 +751,7 @@ class MainWindow(QMainWindow):
             members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
             details = next((item for item in archive_details(self.manager.backup_dir) if item[0] == archive), None)
             date, size = (details[1], details[2]) if details else ("—", format_bytes(archive.stat().st_size))
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             QMessageBox.information(
                 self,
                 self._text("archive_info"),
@@ -740,6 +759,7 @@ class MainWindow(QMainWindow):
                     "archive_info_body", name=archive.name, date=date, size=size, files=len(members), path=archive
                 ),
             )
+            self.statusBar().showMessage(self._text("sha256", checksum=digest))
         except (BackupError, OSError, ValueError) as exc:
             self._show_error(str(exc))
 
@@ -751,7 +771,9 @@ class MainWindow(QMainWindow):
             return
         try:
             members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
-            Path(destination).write_text("\n".join(members) + "\n", encoding="utf-8")
+            Path(destination).write_text(
+                json.dumps({"archive": str(archive), "files": members}, indent=2) + "\n", encoding="utf-8"
+            )
             self.statusBar().showMessage(self._text("export_manifest_done", path=destination))
         except (BackupError, OSError, ValueError) as exc:
             self._show_error(str(exc))
@@ -794,6 +816,10 @@ class MainWindow(QMainWindow):
             self._refresh_backups()
         except OSError as exc:
             self._show_error(str(exc))
+
+    def _focus_archive_search(self) -> None:
+        self.archive_search.setFocus()
+        self.archive_search.selectAll()
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

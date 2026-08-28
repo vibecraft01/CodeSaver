@@ -110,6 +110,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         "--rename-backup", nargs=2, type=Path, metavar=("ARCHIVE", "NEW_NAME"), help="Rename one backup archive"
     )
     parser.add_argument("--find", metavar="TEXT", help="Find files in the project by name")
+    parser.add_argument("--list-backups", action="store_true", help="List all backups with metadata")
+    parser.add_argument("--latest", action="store_true", help="Print the newest backup path")
+    parser.add_argument("--storage-report", action="store_true", help="Summarize backed-up file extensions")
+    parser.add_argument("--check-project", action="store_true", help="Check project files before creating a backup")
+    parser.add_argument("--plan", action="store_true", help="Show the backup plan without creating an archive")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -571,7 +576,51 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.archive_info:
+        if args.list_backups:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True)
+            result = [{"archive": str(path), "size": path.stat().st_size} for path in archives]
+            print(
+                json.dumps({"operation": "list-backups", "backups": result}, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['archive']} ({item['size']} bytes)" for item in result)
+            )
+        elif args.latest:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True)
+            latest = str(archives[0]) if archives else ""
+            print(json.dumps({"operation": "latest", "archive": latest}) if args.json else latest)
+        elif args.storage_report:
+            from collections import Counter
+
+            extensions = Counter(path.suffix.lower() or "[no extension]" for path in manager.list_files())
+            print(
+                json.dumps({"operation": "storage-report", "extensions": extensions}, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{key}: {value}" for key, value in sorted(extensions.items()))
+            )
+        elif args.check_project:
+            files = manager.list_files()
+            report = {
+                "operation": "check-project",
+                "files": len(files),
+                "errors": len(manager.last_errors) if hasattr(manager, "last_errors") else 0,
+            }
+            print(json.dumps(report, ensure_ascii=False) if args.json else f"Project check: {report['files']} files")
+        elif args.plan:
+            files = manager.list_files()
+            print(
+                json.dumps(
+                    {
+                        "operation": "plan",
+                        "project": str(manager.project_dir),
+                        "files": len(files),
+                        "backup_dir": str(manager.backup_dir),
+                    },
+                    ensure_ascii=False,
+                )
+                if args.json
+                else f"Project: {manager.project_dir}\nFiles: {len(files)}\nBackup directory: {manager.backup_dir}"
+            )
+        elif args.archive_info:
             archive = args.archive_info.expanduser().resolve()
             members = [item for item in manager.list_backup(archive) if not item.endswith("/")]
             result = {
