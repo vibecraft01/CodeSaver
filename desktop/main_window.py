@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import platform
+import subprocess
 from pathlib import Path
 from shutil import disk_usage
 import time
@@ -227,6 +229,15 @@ _DESKTOP_1_1_6_TEXT = {
     "search_results": "Showing {shown} of {total} backups",
     "focus_search": "Focus backup search",
 }
+_DESKTOP_1_1_7_TEXT = {
+    "copy_project_path": "Copy project path",
+    "project_path_copied": "Project path copied",
+    "open_terminal": "Open terminal here",
+    "terminal_failed": "Could not open terminal: {error}",
+    "copy_checksum": "Copy SHA-256",
+    "checksum_copied": "SHA-256 copied",
+    "clear_search": "Clear backup search",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
@@ -234,6 +245,7 @@ TEXT["en"].update(_DESKTOP_1_0_7_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_9_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_5_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_6_TEXT)
+TEXT["en"].update(_DESKTOP_1_1_7_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -254,6 +266,17 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "copy_project_path": "Копировать путь проекта",
+        "project_path_copied": "Путь проекта скопирован",
+        "open_terminal": "Открыть терминал здесь",
+        "terminal_failed": "Не удалось открыть терминал: {error}",
+        "copy_checksum": "Копировать SHA-256",
+        "checksum_copied": "SHA-256 скопирован",
+        "clear_search": "Очистить поиск бэкапов",
     }
 )
 TEXT["ru"].update(
@@ -493,6 +516,8 @@ class MainWindow(QMainWindow):
         self.compare_shortcut.activated.connect(self._compare_selected)
         self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         self.search_shortcut.activated.connect(self._focus_archive_search)
+        self.clear_search_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
+        self.clear_search_shortcut.activated.connect(self._clear_archive_search)
 
         progress_row = QHBoxLayout()
         self.progress = QProgressBar()
@@ -721,8 +746,11 @@ class MainWindow(QMainWindow):
         manifest_action = menu.addAction(self._text("export_manifest"))
         rename_action = menu.addAction(self._text("rename_archive"))
         delete_action = menu.addAction(self._text("delete_archive"))
+        checksum_action = menu.addAction(self._text("copy_checksum"))
         menu.addSeparator()
         project_action = menu.addAction(self._text("open_project_folder"))
+        copy_project_action = menu.addAction(self._text("copy_project_path"))
+        terminal_action = menu.addAction(self._text("open_terminal"))
         menu.addSeparator()
         copy_action = menu.addAction(self._text("copy_archive_path"))
         open_action = menu.addAction(self._text("open_archive_folder"))
@@ -736,8 +764,15 @@ class MainWindow(QMainWindow):
             self._rename_archive(archive)
         elif selected == delete_action:
             self._delete_archive(archive)
+        elif selected == checksum_action:
+            self._copy_archive_checksum(archive)
         elif selected == project_action and self.manager:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.manager.project_dir)))
+        elif selected == copy_project_action and self.manager:
+            QApplication.clipboard().setText(str(self.manager.project_dir))
+            self.statusBar().showMessage(self._text("project_path_copied"))
+        elif selected == terminal_action:
+            self._open_project_terminal()
         elif selected == copy_action:
             QApplication.clipboard().setText(str(archive))
             self.statusBar().showMessage(self._text("archive_path_copied"))
@@ -820,6 +855,33 @@ class MainWindow(QMainWindow):
     def _focus_archive_search(self) -> None:
         self.archive_search.setFocus()
         self.archive_search.selectAll()
+
+    def _clear_archive_search(self) -> None:
+        self.archive_search.clear()
+        self.archive_search.setFocus()
+
+    def _copy_archive_checksum(self, archive: Path) -> None:
+        try:
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            QApplication.clipboard().setText(digest)
+            self.statusBar().showMessage(self._text("checksum_copied"))
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _open_project_terminal(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        try:
+            directory = str(self.manager.project_dir)
+            if platform.system() == "Windows":
+                subprocess.Popen(["cmd.exe", "/K"], cwd=directory)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", "-a", "Terminal", directory])
+            else:
+                subprocess.Popen(["x-terminal-emulator"], cwd=directory)
+        except (OSError, ValueError) as exc:
+            self._show_error(self._text("terminal_failed", error=exc))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

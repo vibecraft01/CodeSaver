@@ -8,6 +8,7 @@ import json
 import logging
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import threading
 import time
@@ -115,6 +116,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--storage-report", action="store_true", help="Summarize backed-up file extensions")
     parser.add_argument("--check-project", action="store_true", help="Check project files before creating a backup")
     parser.add_argument("--plan", action="store_true", help="Show the backup plan without creating an archive")
+    parser.add_argument("--disk-check", action="store_true", help="Report free space at the backup destination")
+    parser.add_argument("--verify-latest", action="store_true", help="Verify the newest backup archive")
+    parser.add_argument("--file-report", action="store_true", help="Report project file counts and bytes by extension")
+    parser.add_argument("--archive-members", type=Path, metavar="ARCHIVE", help="List archive members as JSON")
+    parser.add_argument("--prune-preview", action="store_true", help="Preview backups eligible for cleanup")
+    parser.add_argument("--git-diff-summary", action="store_true", help="Show changed Git files and line summary")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -576,7 +583,66 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.list_backups:
+        if args.disk_check:
+            location = manager.backup_dir if manager.backup_dir.exists() else manager.backup_dir.parent
+            free = shutil.disk_usage(location).free
+            result = {"operation": "disk-check", "path": str(location), "free_bytes": free}
+            print(json.dumps(result) if args.json else f"Free space at {location}: {_format_bytes(free)}")
+        elif args.verify_latest:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True)
+            if not archives:
+                raise BackupError("errors.archive_missing", archive=manager.backup_dir)
+            count = manager.verify_backup(archives[0])
+            print(
+                json.dumps({"operation": "verify-latest", "archive": str(archives[0]), "entries": count})
+                if args.json
+                else f"Verified: {archives[0]} ({count} entries)"
+            )
+        elif args.file_report:
+            from collections import defaultdict
+
+            report: dict[str, dict[str, int]] = defaultdict(lambda: {"files": 0, "bytes": 0})
+            for path in manager.list_files():
+                key = path.suffix.lower() or "[no extension]"
+                report[key]["files"] += 1
+                report[key]["bytes"] += path.stat().st_size
+            print(
+                json.dumps({"operation": "file-report", "extensions": report}, ensure_ascii=False)
+                if args.json
+                else "\n".join(
+                    f"{key}: {value['files']} files, {_format_bytes(value['bytes'])}"
+                    for key, value in sorted(report.items())
+                )
+            )
+        elif args.archive_members:
+            members = [item for item in manager.list_backup(args.archive_members) if not item.endswith("/")]
+            print(
+                json.dumps(
+                    {"operation": "archive-members", "archive": str(args.archive_members), "members": members},
+                    ensure_ascii=False,
+                )
+            )
+        elif args.prune_preview:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True)
+            keep = manager.keep_last or 0
+            removable = archives[keep:] if keep else []
+            print(
+                json.dumps(
+                    {"operation": "prune-preview", "removable": [str(path) for path in removable]}, ensure_ascii=False
+                )
+                if args.json
+                else "\n".join(str(path) for path in removable)
+            )
+        elif args.git_diff_summary:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "diff", "--stat"], capture_output=True, text=True, check=False
+            )
+            print(
+                json.dumps({"operation": "git-diff-summary", "summary": result.stdout}, ensure_ascii=False)
+                if args.json
+                else result.stdout.rstrip()
+            )
+        elif args.list_backups:
             archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True)
             result = [{"archive": str(path), "size": path.stat().st_size} for path in archives]
             print(
