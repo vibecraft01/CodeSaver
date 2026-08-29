@@ -12,6 +12,7 @@ import shutil
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from .config import Config, load_config, normalize_extensions, parse_size
@@ -129,6 +130,14 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--directory-report", action="store_true", help="Summarize project files by directory")
     parser.add_argument("--project-check", action="store_true", help="Check that the project directory is readable")
     parser.add_argument("--estimate-size", action="store_true", help="Estimate uncompressed backup size")
+    parser.add_argument("--top-directories", type=int, metavar="N", help="Show the N largest project directories")
+    parser.add_argument("--empty-directories", action="store_true", help="List empty project directories")
+    parser.add_argument("--archive-age", type=Path, metavar="ARCHIVE", help="Show archive age in seconds")
+    parser.add_argument("--archive-size", type=Path, metavar="ARCHIVE", help="Show one archive size")
+    parser.add_argument("--git-branch", action="store_true", help="Print the current Git branch")
+    parser.add_argument("--git-commit", action="store_true", help="Print the current Git commit")
+    parser.add_argument("--excluded-paths", action="store_true", help="List configured exclusion rules")
+    parser.add_argument("--backup-dir-check", action="store_true", help="Check backup directory access")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -590,7 +599,63 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.largest_files:
+        if args.top_directories:
+            totals: dict[Path, int] = {}
+            for path in manager.list_files():
+                directory = path.parent
+                totals[directory] = totals.get(directory, 0) + path.stat().st_size
+            items = sorted(totals.items(), key=lambda item: item[1], reverse=True)[: max(args.top_directories, 0)]
+            result = [{"directory": str(path.relative_to(manager.project_dir)), "bytes": size} for path, size in items]
+            print(
+                json.dumps({"operation": "top-directories", "directories": result}, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['bytes']} bytes  {item['directory']}" for item in result)
+            )
+        elif args.empty_directories:
+            directories = [path for path in manager.project_dir.rglob("*") if path.is_dir() and not any(path.iterdir())]
+            result = [str(path.relative_to(manager.project_dir)) for path in directories]
+            print(
+                json.dumps({"operation": "empty-directories", "directories": result}, ensure_ascii=False)
+                if args.json
+                else "\n".join(result)
+            )
+        elif args.archive_age:
+            archive = args.archive_age.expanduser().resolve()
+            age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
+            print(
+                json.dumps({"operation": "archive-age", "archive": str(archive), "age_seconds": age})
+                if args.json
+                else f"Age: {int(age)} seconds"
+            )
+        elif args.archive_size:
+            archive = args.archive_size.expanduser().resolve()
+            size = archive.stat().st_size
+            print(
+                json.dumps({"operation": "archive-size", "archive": str(archive), "bytes": size})
+                if args.json
+                else f"Size: {_format_bytes(size)}"
+            )
+        elif args.git_branch or args.git_commit:
+            key = "branch" if args.git_branch else "commit"
+            value = _git_context(manager.project_dir).get(key)
+            print(
+                json.dumps({"operation": f"git-{key}", key: value}, ensure_ascii=False)
+                if args.json
+                else str(value or "")
+            )
+        elif args.excluded_paths:
+            result = {
+                "operation": "excluded-paths",
+                "directories": sorted(manager.excluded_dirs),
+                "extensions": sorted(manager.excluded_extensions),
+                "patterns": sorted(manager.excluded_patterns),
+            }
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(result["directories"]))
+        elif args.backup_dir_check:
+            manager.backup_dir.mkdir(parents=True, exist_ok=True)
+            result = {"operation": "backup-dir-check", "path": str(manager.backup_dir), "writable": True}
+            print(json.dumps(result, ensure_ascii=False) if args.json else f"Writable: yes\nPath: {manager.backup_dir}")
+        elif args.largest_files:
             files = sorted(manager.list_files(), key=lambda path: path.stat().st_size, reverse=True)[
                 : max(args.largest_files, 0)
             ]
