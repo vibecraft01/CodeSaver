@@ -6,6 +6,7 @@ import json
 import hashlib
 import platform
 import subprocess
+from collections import Counter
 from pathlib import Path
 from shutil import disk_usage
 import time
@@ -244,6 +245,14 @@ _DESKTOP_1_1_8_TEXT = {
         "Ctrl+Shift+V verify • Ctrl+F search • Ctrl+L clear search • Ctrl+Shift+T terminal"
     ),
 }
+_DESKTOP_1_1_9_TEXT = {
+    "developer_dashboard": "Developer dashboard",
+    "developer_dashboard_body": (
+        "Files: {files}\nProject size: {size}\nExtensions: {extensions}\n"
+        "Largest file: {largest}\nGit branch: {branch}\nCommit: {commit}\n"
+        "Working tree: {dirty}\nBackups: {backups}"
+    ),
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
@@ -253,6 +262,7 @@ TEXT["en"].update(_DESKTOP_1_1_5_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_6_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_7_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_8_TEXT)
+TEXT["en"].update(_DESKTOP_1_1_9_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -273,6 +283,16 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "developer_dashboard": "Панель разработчика",
+        "developer_dashboard_body": (
+            "Файлов: {files}\nРазмер проекта: {size}\nРасширения: {extensions}\n"
+            "Самый большой файл: {largest}\nGit-ветка: {branch}\nКоммит: {commit}\n"
+            "Рабочее дерево: {dirty}\nБэкапов: {backups}"
+        ),
     }
 )
 TEXT["ru"].update(
@@ -488,6 +508,8 @@ class MainWindow(QMainWindow):
         self.export_compare_button.clicked.connect(self._export_compare_selected)
         self.settings_button = QPushButton(self._text("settings"))
         self.settings_button.clicked.connect(self._open_settings)
+        self.developer_button = QPushButton(self._text("developer_dashboard"))
+        self.developer_button.clicked.connect(self._show_developer_dashboard)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
         self.export_report_button = QPushButton(self._text("export_report"))
@@ -500,6 +522,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.export_compare_button)
         actions.addWidget(self.cleanup_button)
         actions.addWidget(self.export_report_button)
+        actions.addWidget(self.developer_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
@@ -942,6 +965,37 @@ class MainWindow(QMainWindow):
                 subprocess.Popen(["x-terminal-emulator"], cwd=directory)
         except (OSError, ValueError) as exc:
             self._show_error(self._text("terminal_failed", error=exc))
+
+    def _show_developer_dashboard(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        try:
+            files = self.manager.list_files()
+            total_bytes = sum(path.stat().st_size for path in files)
+            extensions = Counter(path.suffix.lower() or "[no extension]" for path in files)
+            extension_summary = ", ".join(f"{key}: {value}" for key, value in extensions.most_common(6)) or "—"
+            largest = max(files, key=lambda path: path.stat().st_size) if files else None
+            context = git_context(self.manager.project_dir)
+            backups = len(list(self.manager.backup_dir.glob("*.zip")))
+            body = self._text(
+                "developer_dashboard_body",
+                files=len(files),
+                size=format_bytes(total_bytes),
+                extensions=extension_summary,
+                largest=(
+                    f"{largest.relative_to(self.manager.project_dir)} ({format_bytes(largest.stat().st_size)})"
+                    if largest
+                    else "—"
+                ),
+                branch=context.get("branch") or "—",
+                commit=context.get("commit") or "—",
+                dirty="yes" if context.get("dirty") else "no",
+                backups=backups,
+            )
+            QMessageBox.information(self, self._text("developer_dashboard"), body)
+        except (OSError, ValueError) as exc:
+            self._show_error(str(exc))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)
