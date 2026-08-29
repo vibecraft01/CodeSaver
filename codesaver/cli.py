@@ -122,6 +122,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-members", type=Path, metavar="ARCHIVE", help="List archive members as JSON")
     parser.add_argument("--prune-preview", action="store_true", help="Preview backups eligible for cleanup")
     parser.add_argument("--git-diff-summary", action="store_true", help="Show changed Git files and line summary")
+    parser.add_argument("--largest-files", type=int, metavar="N", help="Show the N largest project files")
+    parser.add_argument("--changed-files", action="store_true", help="List files changed in the Git working tree")
+    parser.add_argument("--archive-checksums", type=Path, metavar="ARCHIVE", help="Export archive member checksums")
+    parser.add_argument("--config-show", action="store_true", help="Show effective backup configuration")
+    parser.add_argument("--directory-report", action="store_true", help="Summarize project files by directory")
+    parser.add_argument("--project-check", action="store_true", help="Check that the project directory is readable")
+    parser.add_argument("--estimate-size", action="store_true", help="Estimate uncompressed backup size")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -583,7 +590,89 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.disk_check:
+        if args.largest_files:
+            files = sorted(manager.list_files(), key=lambda path: path.stat().st_size, reverse=True)[
+                : max(args.largest_files, 0)
+            ]
+            result = [
+                {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size} for path in files
+            ]
+            print(
+                json.dumps({"operation": "largest-files", "files": result}, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['bytes']} bytes  {item['path']}" for item in result)
+            )
+        elif args.changed_files:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "status", "--short"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(
+                json.dumps({"operation": "changed-files", "status": result.stdout}, ensure_ascii=False)
+                if args.json
+                else result.stdout.rstrip()
+            )
+        elif args.archive_checksums:
+            import zipfile
+
+            with zipfile.ZipFile(args.archive_checksums) as archive:
+                checksums = {
+                    info.filename: hashlib.sha256(archive.read(info)).hexdigest()
+                    for info in archive.infolist()
+                    if not info.is_dir()
+                }
+            print(
+                json.dumps(
+                    {"operation": "archive-checksums", "archive": str(args.archive_checksums), "files": checksums},
+                    ensure_ascii=False,
+                )
+            )
+        elif args.config_show:
+            result = {
+                "operation": "config",
+                "project_dir": str(manager.project_dir),
+                "backup_dir": str(manager.backup_dir),
+                "keep_last": manager.keep_last,
+                "keep_days": manager.keep_days,
+                "use_gitignore": manager.use_gitignore,
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{key}: {value}" for key, value in result.items() if key != "operation")
+            )
+        elif args.directory_report:
+            from collections import defaultdict
+
+            report: dict[str, dict[str, int]] = defaultdict(lambda: {"files": 0, "bytes": 0})
+            for path in manager.list_files():
+                directory = str(path.parent.relative_to(manager.project_dir)) or "."
+                report[directory]["files"] += 1
+                report[directory]["bytes"] += path.stat().st_size
+            print(
+                json.dumps({"operation": "directory-report", "directories": report}, ensure_ascii=False)
+                if args.json
+                else "\n".join(
+                    f"{key}: {value['files']} files, {_format_bytes(value['bytes'])}"
+                    for key, value in sorted(report.items())
+                )
+            )
+        elif args.project_check:
+            files = manager.list_files()
+            result = {
+                "operation": "project-check",
+                "project": str(manager.project_dir),
+                "readable": True,
+                "files": len(files),
+            }
+            print(json.dumps(result, ensure_ascii=False) if args.json else f"Readable: yes\nFiles: {len(files)}")
+        elif args.estimate_size:
+            total = sum(path.stat().st_size for path in manager.list_files())
+            result = {"operation": "estimate-size", "bytes": total}
+            print(json.dumps(result) if args.json else f"Estimated uncompressed size: {_format_bytes(total)}")
+        elif args.disk_check:
             location = manager.backup_dir if manager.backup_dir.exists() else manager.backup_dir.parent
             free = shutil.disk_usage(location).free
             result = {"operation": "disk-check", "path": str(location), "free_bytes": free}

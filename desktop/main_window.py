@@ -238,6 +238,12 @@ _DESKTOP_1_1_7_TEXT = {
     "checksum_copied": "SHA-256 copied",
     "clear_search": "Clear backup search",
 }
+_DESKTOP_1_1_8_TEXT = {
+    "shortcut_help": (
+        "Shortcuts: Ctrl+B backup • Ctrl+R restore • Ctrl+D compare • "
+        "Ctrl+Shift+V verify • Ctrl+F search • Ctrl+L clear search • Ctrl+Shift+T terminal"
+    ),
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
@@ -246,6 +252,7 @@ TEXT["en"].update(_DESKTOP_1_0_9_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_5_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_6_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_7_TEXT)
+TEXT["en"].update(_DESKTOP_1_1_8_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -266,6 +273,14 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "shortcut_help": (
+            "Клавиши: Ctrl+B бэкап • Ctrl+R восстановить • Ctrl+D сравнить • "
+            "Ctrl+Shift+V проверить • Ctrl+F поиск • Ctrl+L очистить • Ctrl+Shift+T терминал"
+        ),
     }
 )
 TEXT["ru"].update(
@@ -518,6 +533,19 @@ class MainWindow(QMainWindow):
         self.search_shortcut.activated.connect(self._focus_archive_search)
         self.clear_search_shortcut = QShortcut(QKeySequence("Ctrl+L"), self)
         self.clear_search_shortcut.activated.connect(self._clear_archive_search)
+        self.terminal_shortcut = QShortcut(QKeySequence("Ctrl+Shift+T"), self)
+        self.terminal_shortcut.activated.connect(self._open_project_terminal)
+        self.copy_project_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
+        self.copy_project_shortcut.activated.connect(self._copy_project_path)
+        self.copy_checksum_shortcut = QShortcut(QKeySequence("Ctrl+Shift+C"), self)
+        self.copy_checksum_shortcut.activated.connect(self._copy_selected_checksum)
+        self.archive_info_shortcut = QShortcut(QKeySequence("Ctrl+Shift+I"), self)
+        self.archive_info_shortcut.activated.connect(self._show_selected_archive_info)
+        self.manifest_shortcut = QShortcut(QKeySequence("Ctrl+Shift+M"), self)
+        self.manifest_shortcut.activated.connect(self._export_selected_manifest)
+        self.open_archive_shortcut = QShortcut(QKeySequence("Ctrl+Shift+O"), self)
+        self.open_archive_shortcut.activated.connect(self._open_selected_archive)
+        self.statusBar().showMessage(self._text("shortcut_help"))
 
         progress_row = QHBoxLayout()
         self.progress = QProgressBar()
@@ -867,6 +895,38 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(self._text("checksum_copied"))
         except OSError as exc:
             self._show_error(str(exc))
+
+    def _selected_archive(self) -> Path | None:
+        row = self.table.currentRow()
+        if row < 0 or not self.table.item(row, 0):
+            self.statusBar().showMessage(self._text("no_archive_selected"))
+            return None
+        return Path(self.table.item(row, 0).data(Qt.UserRole))
+
+    def _copy_project_path(self) -> None:
+        if self.manager:
+            QApplication.clipboard().setText(str(self.manager.project_dir))
+            self.statusBar().showMessage(self._text("project_path_copied"))
+
+    def _copy_selected_checksum(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            self._copy_archive_checksum(archive)
+
+    def _show_selected_archive_info(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            self._show_archive_info(archive)
+
+    def _export_selected_manifest(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            self._export_archive_manifest(archive)
+
+    def _open_selected_archive(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(archive)))
 
     def _open_project_terminal(self) -> None:
         if not self.manager:
