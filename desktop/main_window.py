@@ -253,6 +253,17 @@ _DESKTOP_1_1_9_TEXT = {
         "Working tree: {dirty}\nBackups: {backups}"
     ),
 }
+_DESKTOP_1_2_0_TEXT = {
+    "project_audit": "Project audit",
+    "export_dashboard": "Export dashboard JSON",
+    "dashboard_exported": "Dashboard exported: {path}",
+    "copy_dashboard": "Copy dashboard summary",
+    "dashboard_copied": "Dashboard copied",
+    "open_git_changes": "Open Git changes",
+    "refresh_project": "Refresh project analysis",
+    "autosave_pause": "Pause autosave",
+    "autosave_resume": "Resume autosave",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
@@ -263,6 +274,7 @@ TEXT["en"].update(_DESKTOP_1_1_6_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_7_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_8_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_9_TEXT)
+TEXT["en"].update(_DESKTOP_1_2_0_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -283,6 +295,19 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "project_audit": "Аудит проекта",
+        "export_dashboard": "Экспортировать JSON панели",
+        "dashboard_exported": "Панель экспортирована: {path}",
+        "copy_dashboard": "Копировать сводку панели",
+        "dashboard_copied": "Сводка скопирована",
+        "open_git_changes": "Открыть изменения Git",
+        "refresh_project": "Обновить анализ проекта",
+        "autosave_pause": "Поставить автосохранение на паузу",
+        "autosave_resume": "Возобновить автосохранение",
     }
 )
 TEXT["ru"].update(
@@ -510,6 +535,18 @@ class MainWindow(QMainWindow):
         self.settings_button.clicked.connect(self._open_settings)
         self.developer_button = QPushButton(self._text("developer_dashboard"))
         self.developer_button.clicked.connect(self._show_developer_dashboard)
+        self.audit_button = QPushButton(self._text("project_audit"))
+        self.audit_button.clicked.connect(self._show_developer_dashboard)
+        self.export_dashboard_button = QPushButton(self._text("export_dashboard"))
+        self.export_dashboard_button.clicked.connect(self._export_dashboard)
+        self.copy_dashboard_button = QPushButton(self._text("copy_dashboard"))
+        self.copy_dashboard_button.clicked.connect(self._copy_dashboard)
+        self.git_changes_button = QPushButton(self._text("open_git_changes"))
+        self.git_changes_button.clicked.connect(self._open_git_changes)
+        self.refresh_project_button = QPushButton(self._text("refresh_project"))
+        self.refresh_project_button.clicked.connect(self._refresh_project_info)
+        self.autosave_pause_button = QPushButton(self._text("autosave_pause"))
+        self.autosave_pause_button.clicked.connect(self._toggle_autosave_pause)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
         self.export_report_button = QPushButton(self._text("export_report"))
@@ -523,6 +560,12 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.cleanup_button)
         actions.addWidget(self.export_report_button)
         actions.addWidget(self.developer_button)
+        actions.addWidget(self.audit_button)
+        actions.addWidget(self.export_dashboard_button)
+        actions.addWidget(self.copy_dashboard_button)
+        actions.addWidget(self.git_changes_button)
+        actions.addWidget(self.refresh_project_button)
+        actions.addWidget(self.autosave_pause_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
@@ -971,31 +1014,75 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(self._text("choose_project"))
             return
         try:
-            files = self.manager.list_files()
-            total_bytes = sum(path.stat().st_size for path in files)
-            extensions = Counter(path.suffix.lower() or "[no extension]" for path in files)
-            extension_summary = ", ".join(f"{key}: {value}" for key, value in extensions.most_common(6)) or "—"
-            largest = max(files, key=lambda path: path.stat().st_size) if files else None
-            context = git_context(self.manager.project_dir)
-            backups = len(list(self.manager.backup_dir.glob("*.zip")))
+            data = self._developer_dashboard_data()
             body = self._text(
                 "developer_dashboard_body",
-                files=len(files),
-                size=format_bytes(total_bytes),
-                extensions=extension_summary,
-                largest=(
-                    f"{largest.relative_to(self.manager.project_dir)} ({format_bytes(largest.stat().st_size)})"
-                    if largest
-                    else "—"
-                ),
-                branch=context.get("branch") or "—",
-                commit=context.get("commit") or "—",
-                dirty="yes" if context.get("dirty") else "no",
-                backups=backups,
+                **data,
             )
             QMessageBox.information(self, self._text("developer_dashboard"), body)
         except (OSError, ValueError) as exc:
             self._show_error(str(exc))
+
+    def _developer_dashboard_data(self) -> dict[str, object]:
+        files = self.manager.list_files()
+        total_bytes = sum(path.stat().st_size for path in files)
+        extensions = Counter(path.suffix.lower() or "[no extension]" for path in files)
+        largest = max(files, key=lambda path: path.stat().st_size) if files else None
+        context = git_context(self.manager.project_dir)
+        return {
+            "files": len(files),
+            "size": format_bytes(total_bytes),
+            "extensions": ", ".join(f"{key}: {value}" for key, value in extensions.most_common(6)) or "—",
+            "largest": (
+                f"{largest.relative_to(self.manager.project_dir)} ({format_bytes(largest.stat().st_size)})"
+                if largest
+                else "—"
+            ),
+            "branch": context.get("branch") or "—",
+            "commit": context.get("commit") or "—",
+            "dirty": "yes" if context.get("dirty") else "no",
+            "backups": len(list(self.manager.backup_dir.glob("*.zip"))),
+        }
+
+    def _dashboard_body(self) -> str:
+        return self._text("developer_dashboard_body", **self._developer_dashboard_data())
+
+    def _export_dashboard(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_dashboard"), "codesaver-dashboard.json", "JSON files (*.json)"
+        )
+        if destination:
+            Path(destination).write_text(
+                json.dumps(self._developer_dashboard_data(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            self.statusBar().showMessage(self._text("dashboard_exported", path=destination))
+
+    def _copy_dashboard(self) -> None:
+        if self.manager:
+            QApplication.clipboard().setText(self._dashboard_body())
+            self.statusBar().showMessage(self._text("dashboard_copied"))
+
+    def _open_git_changes(self) -> None:
+        if self.manager:
+            subprocess.Popen(
+                ["git", "-C", str(self.manager.project_dir), "diff"],
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            )
+
+    def _toggle_autosave_pause(self) -> None:
+        if self.settings.interval_minutes <= 0:
+            return
+        paused = bool(getattr(self, "_autosave_paused", False))
+        self._autosave_paused = not paused
+        if self._autosave_paused:
+            self.autosave_timer.stop()
+            self.autosave_pause_button.setText(self._text("autosave_resume"))
+        else:
+            self._configure_autosave()
+            self.autosave_pause_button.setText(self._text("autosave_pause"))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

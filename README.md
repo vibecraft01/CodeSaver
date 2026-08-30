@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.3.2**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.2) | Python 3.9+ | Updated 2026-08-29 |
-| CodeSaver Desktop | [**1.1.9**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.9) | Python 3.10+ with PyQt5 | Updated 2026-08-29 |
+| CodeSaver CLI | [**1.3.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.3) | Python 3.9+ | Updated 2026-08-29 |
+| CodeSaver Desktop | [**1.2.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.0) | Python 3.10+ with PyQt5 | Updated 2026-08-29 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -70,7 +70,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.1.9` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.2.0` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -113,6 +113,8 @@ CodeSaver Desktop `1.1.9` is a graphical alternative for developers who prefer a
 - `Ctrl+L` clears the archive search field for a clean inventory view.
 - Seven keyboard shortcuts cover backup, restore, compare, verify, search, terminal, and archive audit actions.
 - Developer dashboard with eight live project and Git health metrics.
+- Export and copy the live developer dashboard for issue reports and CI notes.
+- Open the current Git diff, refresh analysis, and pause/resume autosave from dedicated actions.
 - No API keys or external services.
 
 ## Desktop interface preview

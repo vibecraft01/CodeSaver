@@ -138,6 +138,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-commit", action="store_true", help="Print the current Git commit")
     parser.add_argument("--excluded-paths", action="store_true", help="List configured exclusion rules")
     parser.add_argument("--backup-dir-check", action="store_true", help="Check backup directory access")
+    parser.add_argument("--duplicates", action="store_true", help="Find duplicate project files by SHA-256")
+    parser.add_argument("--recent-files", type=int, metavar="N", help="Show the N most recently modified files")
+    parser.add_argument("--root-directories", action="store_true", help="Summarize top-level project directories")
+    parser.add_argument("--git-log", type=int, metavar="N", help="Show the latest N Git commits")
+    parser.add_argument("--verify-all", action="store_true", help="Verify every backup archive")
+    parser.add_argument("--diff-latest", action="store_true", help="Compare the project with the newest backup")
+    parser.add_argument("--unreadable-files", action="store_true", help="Find files that cannot be read")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -599,7 +606,103 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.top_directories:
+        if args.duplicates:
+            hashes: dict[str, list[str]] = {}
+            for path in manager.list_files():
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                hashes.setdefault(digest, []).append(str(path.relative_to(manager.project_dir)))
+            result = {digest: paths for digest, paths in hashes.items() if len(paths) > 1}
+            print(
+                json.dumps({"operation": "duplicates", "groups": result}, ensure_ascii=False)
+                if args.json
+                else "\n".join("\n".join(paths) for paths in result.values())
+            )
+        elif args.recent_files:
+            files = sorted(manager.list_files(), key=lambda path: path.stat().st_mtime, reverse=True)[
+                : max(args.recent_files, 0)
+            ]
+            result = [
+                {"path": str(path.relative_to(manager.project_dir)), "modified": path.stat().st_mtime} for path in files
+            ]
+            print(
+                json.dumps({"operation": "recent-files", "files": result}, ensure_ascii=False)
+                if args.json
+                else "\n".join(item["path"] for item in result)
+            )
+        elif args.root_directories:
+            totals: dict[str, int] = {}
+            for path in manager.list_files():
+                parts = path.relative_to(manager.project_dir).parts
+                key = parts[0] if len(parts) > 1 else "."
+                totals[key] = totals.get(key, 0) + path.stat().st_size
+            print(
+                json.dumps({"operation": "root-directories", "directories": totals}, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{key}: {_format_bytes(value)}" for key, value in sorted(totals.items()))
+            )
+        elif args.git_log:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(manager.project_dir),
+                    "log",
+                    f"-{max(args.git_log, 0)}",
+                    "--pretty=format:%h %ad %s",
+                    "--date=short",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(
+                json.dumps({"operation": "git-log", "entries": result.stdout.splitlines()}, ensure_ascii=False)
+                if args.json
+                else result.stdout.rstrip()
+            )
+        elif args.verify_all:
+            archives = sorted(manager.backup_dir.glob("*.zip"))
+            failures = []
+            for archive in archives:
+                try:
+                    manager.verify_backup(archive)
+                except (BackupError, OSError, ValueError):
+                    failures.append(str(archive))
+            result = {
+                "operation": "verify-all",
+                "total": len(archives),
+                "verified": len(archives) - len(failures),
+                "failed": failures,
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else f"Verified: {result['verified']}/{result['total']}"
+            )
+        elif args.diff_latest:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+            if not archives:
+                raise BackupError("errors.archive_missing", archive=manager.backup_dir)
+            diff = manager.compare_backup(archives[0])
+            print(
+                json.dumps({"operation": "diff-latest", "archive": str(archives[0]), **diff}, ensure_ascii=False)
+                if args.json
+                else f"Added: {len(diff['added'])}\nModified: {len(diff['modified'])}\nMissing: {len(diff['missing'])}"
+            )
+        elif args.unreadable_files:
+            unreadable = []
+            for path in manager.list_files():
+                try:
+                    with path.open("rb"):
+                        pass
+                except OSError:
+                    unreadable.append(str(path.relative_to(manager.project_dir)))
+            print(
+                json.dumps({"operation": "unreadable-files", "files": unreadable}, ensure_ascii=False)
+                if args.json
+                else "\n".join(unreadable)
+            )
+        elif args.top_directories:
             totals: dict[Path, int] = {}
             for path in manager.list_files():
                 directory = path.parent
