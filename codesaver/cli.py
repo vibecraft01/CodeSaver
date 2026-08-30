@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import logging
@@ -12,10 +13,12 @@ import shutil
 import sys
 import threading
 import time
+import tempfile
 from datetime import datetime, timezone
 from typing import Optional
 
 from .config import Config, load_config, normalize_extensions, parse_size
+from .cloud import upload_archive
 from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
 from .logging_utils import configure_logging
@@ -72,6 +75,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-context", action="store_true", help=translate("help.git_context", language))
     parser.add_argument("--checksum", type=Path, metavar="ARCHIVE", help=translate("help.checksum", language))
     parser.add_argument("--doctor", action="store_true", help=translate("help.doctor", language))
+    parser.add_argument("--self-check", action="store_true", help="Verify the CodeSaver installation")
     parser.add_argument("--cleanup", action="store_true", help=translate("help.cleanup", language))
     parser.add_argument(
         "--exclude-dir", action="append", default=None, metavar="DIR", help=translate("help.exclude_dir", language)
@@ -130,6 +134,14 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--directory-report", action="store_true", help="Summarize project files by directory")
     parser.add_argument("--project-check", action="store_true", help="Check that the project directory is readable")
     parser.add_argument("--estimate-size", action="store_true", help="Estimate uncompressed backup size")
+    parser.add_argument("--project-summary", action="store_true", help="Show a compact project summary")
+    parser.add_argument("--archive-search", metavar="TEXT", help="Search backup archive names")
+    parser.add_argument("--git-status-json", action="store_true", help="Export Git status as structured JSON")
+    parser.add_argument("--export-inventory", type=Path, metavar="FILE", help="Export project inventory as CSV")
+    parser.add_argument("--restore-preview", type=Path, metavar="ARCHIVE", help="Preview files in an archive")
+    parser.add_argument("--cloud-upload", type=Path, metavar="ARCHIVE", help="Upload an archive to a cloud endpoint")
+    parser.add_argument("--cloud-url", metavar="URL", help="S3-compatible cloud upload endpoint")
+    parser.add_argument("--cloud-token-env", default="CODESAVER_CLOUD_TOKEN", help="Token environment variable")
     parser.add_argument("--top-directories", type=int, metavar="N", help="Show the N largest project directories")
     parser.add_argument("--empty-directories", action="store_true", help="List empty project directories")
     parser.add_argument("--archive-age", type=Path, metavar="ARCHIVE", help="Show archive age in seconds")
@@ -568,6 +580,40 @@ def _doctor(manager: BackupManager) -> dict[str, object]:
     }
 
 
+def _self_check(manager: BackupManager) -> dict[str, object]:
+    """Validate the installation and perform a disposable backup smoke test."""
+    result = _doctor(manager)
+    result["operation"] = "self-check"
+    result["codesaver"] = __import__("codesaver").__version__
+    result["project_readable"] = False
+    try:
+        result["project_readable"] = all(path.is_file() and path.stat().st_size >= 0 for path in manager.list_files())
+    except OSError:
+        result["project_readable"] = False
+    with tempfile.TemporaryDirectory(prefix="codesaver-check-") as temporary:
+        test_project = Path(temporary) / "project"
+        test_project.mkdir()
+        (test_project / "codesaver-check.txt").write_text("CodeSaver installation check\n", encoding="utf-8")
+        probe_manager = BackupManager(
+            test_project,
+            Path(temporary) / "backups",
+        )
+        try:
+            archive = probe_manager.create_backup()
+            result["test_backup"] = archive.is_file() and archive.stat().st_size > 0
+        except (BackupError, OSError, ValueError):
+            result["test_backup"] = False
+    result["ok"] = all(
+        (
+            result["project_exists"],
+            result["backup_directory_writable"],
+            result["project_readable"],
+            result["test_backup"],
+        )
+    )
+    return result
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -606,7 +652,97 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.duplicates:
+        if args.self_check:
+            result = _self_check(manager)
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "Installation check: " + ("OK" if result["ok"] else "FAILED")
+            )
+            health_failed = not bool(result["ok"])
+        elif args.cloud_upload:
+            if not args.cloud_url:
+                raise BackupError("--cloud-url is required with --cloud-upload")
+            archive = args.cloud_upload.expanduser().resolve()
+            status = upload_archive(archive, args.cloud_url, args.cloud_token_env)
+            result = {"operation": "cloud-upload", "archive": str(archive), "status": status}
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else f"Cloud upload completed: {archive.name} (HTTP {status})"
+            )
+        elif args.project_summary:
+            files = manager.list_files()
+            total_bytes = sum(path.stat().st_size for path in files if path.is_file())
+            extensions: dict[str, int] = {}
+            for path in files:
+                extension = path.suffix.lower() or "[no extension]"
+                extensions[extension] = extensions.get(extension, 0) + 1
+            result = {
+                "operation": "project-summary",
+                "files": len(files),
+                "bytes": total_bytes,
+                "extensions": extensions,
+            }
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else (
+                    f"Files: {len(files)}\nSize: {_format_bytes(total_bytes)}\n"
+                    f"Extensions: {', '.join(f'{key} ({value})' for key, value in sorted(extensions.items()))}"
+                )
+            )
+        elif args.archive_search is not None:
+            query = args.archive_search.casefold()
+            matches = [path for path in sorted(manager.backup_dir.glob("*.zip")) if query in path.name.casefold()]
+            result = {
+                "operation": "archive-search",
+                "query": args.archive_search,
+                "archives": [str(path) for path in matches],
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else "\n".join(result["archives"]))
+        elif args.git_status_json:
+            status = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "status", "--short"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            entries = [{"status": line[:2], "path": line[3:]} for line in status.stdout.splitlines() if len(line) >= 4]
+            result = {"operation": "git-status", "clean": not entries, "files": entries}
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.export_inventory:
+            rows = []
+            for path in manager.list_files():
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                rows.append(
+                    (
+                        str(path.relative_to(manager.project_dir)),
+                        stat.st_size,
+                        datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                    )
+                )
+            target = args.export_inventory.expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("path", "bytes", "modified_utc"))
+                writer.writerows(rows)
+            result = {"operation": "export-inventory", "file": str(target), "files": len(rows)}
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else f"Inventory exported: {target} ({len(rows)} files)"
+            )
+        elif args.restore_preview:
+            archive = args.restore_preview.expanduser().resolve()
+            members = manager.list_backup(archive)
+            result = {"operation": "restore-preview", "archive": str(archive), "files": members}
+            print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else "\n".join(members))
+        elif args.duplicates:
             hashes: dict[str, list[str]] = {}
             for path in manager.list_files():
                 digest = hashlib.sha256(path.read_bytes()).hexdigest()

@@ -4,6 +4,21 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+- Added opt-in S3-compatible HTTP upload for existing ZIP archives in CLI and Desktop.
+- Cloud uploads require an explicit endpoint and bearer token; local backups remain independent.
+
+## [CLI 1.3.4] - 2026-08-30 (local)
+
+- Added `--project-summary` with file count, total size, and extension statistics.
+- Added `--archive-search TEXT` to find backup archives by filename.
+- Added `--git-status-json` for structured Git status in automation.
+- Added `--export-inventory FILE` to export a CSV project inventory.
+- Added `--restore-preview ARCHIVE` to inspect archive contents before restoring.
+
+## [Desktop 1.2.1] - 2026-08-30 (local)
+
+- Added developer project tools for CSV inventory export, exclusion inspection, symlink scanning, Git context copying, and configuration access.
+
 ## [CLI 1.2.7] - 2026-08-26 (local)
 
 - Added `--restore-safe` to create a safety snapshot before restoring an archive.

@@ -6,6 +6,7 @@ import json
 import hashlib
 import platform
 import subprocess
+import csv
 from collections import Counter
 from pathlib import Path
 from shutil import disk_usage
@@ -35,6 +36,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QUrl
 
 from codesaver.core import BackupError
+from codesaver.cloud import upload_archive
 
 from .backup_manager import DesktopBackupManager
 from .settings_dialog import SettingsDialog
@@ -264,6 +266,21 @@ _DESKTOP_1_2_0_TEXT = {
     "autosave_pause": "Pause autosave",
     "autosave_resume": "Resume autosave",
 }
+_DESKTOP_1_2_1_TEXT = {
+    "project_tools": "Project tools",
+    "export_inventory": "Export file inventory CSV",
+    "inventory_exported": "File inventory exported: {path}",
+    "show_exclusions": "Show exclusion rules",
+    "exclusions_body": "Directories: {directories}\nExtensions: {extensions}",
+    "symlinks": "Find symbolic links",
+    "symlinks_body": "Symbolic links ({count}):\n{items}",
+    "copy_git_context": "Copy Git context",
+    "git_context_copied": "Git context copied",
+    "open_config": "Open Desktop configuration",
+    "cloud_upload": "Upload archive to cloud",
+    "cloud_url": "Cloud endpoint URL",
+    "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
+}
 TEXT["en"].update(_DESKTOP_1_0_2_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_4_TEXT)
 TEXT["en"].update(_DESKTOP_1_0_5_TEXT)
@@ -275,6 +292,7 @@ TEXT["en"].update(_DESKTOP_1_1_7_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_8_TEXT)
 TEXT["en"].update(_DESKTOP_1_1_9_TEXT)
 TEXT["en"].update(_DESKTOP_1_2_0_TEXT)
+TEXT["en"].update(_DESKTOP_1_2_1_TEXT)
 TEXT["en"].update(
     {
         "backup_stats": "Backups: {count} • Stored: {size}",
@@ -295,6 +313,23 @@ TEXT["ru"].update(
         "file_warning": "Пропущено файлов: {count}",
         "restore_warning": "Файлы могут быть заменены. Восстановить?",
         "operation_failed": "Ошибка операции: {error}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "project_tools": "Инструменты проекта",
+        "export_inventory": "Экспортировать CSV инвентаря",
+        "inventory_exported": "Инвентарь экспортирован: {path}",
+        "show_exclusions": "Показать правила исключений",
+        "exclusions_body": "Папки: {directories}\nРасширения: {extensions}",
+        "symlinks": "Найти симлинки",
+        "symlinks_body": "Симлинки ({count}):\n{items}",
+        "copy_git_context": "Копировать Git-контекст",
+        "git_context_copied": "Git-контекст скопирован",
+        "open_config": "Открыть конфигурацию Desktop",
+        "cloud_upload": "Загрузить архив в облако",
+        "cloud_url": "URL облачного endpoint",
+        "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
     }
 )
 TEXT["ru"].update(
@@ -547,6 +582,15 @@ class MainWindow(QMainWindow):
         self.refresh_project_button.clicked.connect(self._refresh_project_info)
         self.autosave_pause_button = QPushButton(self._text("autosave_pause"))
         self.autosave_pause_button.clicked.connect(self._toggle_autosave_pause)
+        self.project_tools_button = QPushButton(self._text("project_tools"))
+        tools_menu = QMenu(self.project_tools_button)
+        tools_menu.addAction(self._text("export_inventory"), self._export_file_inventory)
+        tools_menu.addAction(self._text("show_exclusions"), self._show_exclusions)
+        tools_menu.addAction(self._text("symlinks"), self._show_symlinks)
+        tools_menu.addAction(self._text("copy_git_context"), self._copy_git_context)
+        tools_menu.addAction(self._text("open_config"), self._open_desktop_config)
+        tools_menu.addAction(self._text("cloud_upload"), self._upload_selected_to_cloud)
+        self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
         self.export_report_button = QPushButton(self._text("export_report"))
@@ -566,6 +610,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.git_changes_button)
         actions.addWidget(self.refresh_project_button)
         actions.addWidget(self.autosave_pause_button)
+        actions.addWidget(self.project_tools_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
@@ -849,6 +894,7 @@ class MainWindow(QMainWindow):
         copy_action = menu.addAction(self._text("copy_archive_path"))
         open_action = menu.addAction(self._text("open_archive_folder"))
         restore_files_action = menu.addAction(self._text("restore_files"))
+        cloud_action = menu.addAction(self._text("cloud_upload"))
         selected = menu.exec_(self.table.viewport().mapToGlobal(position))
         if selected == info_action:
             self._show_archive_info(archive)
@@ -874,6 +920,23 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(archive.parent)))
         elif selected == restore_files_action:
             self._restore_selected_files(archive)
+        elif selected == cloud_action:
+            self._upload_archive_to_cloud(archive)
+
+    def _upload_selected_to_cloud(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            self._upload_archive_to_cloud(archive)
+
+    def _upload_archive_to_cloud(self, archive: Path) -> None:
+        endpoint, accepted = QInputDialog.getText(self, self._text("cloud_upload"), self._text("cloud_url"))
+        if not accepted or not endpoint.strip():
+            return
+        try:
+            status = upload_archive(archive, endpoint.strip())
+            self.statusBar().showMessage(self._text("cloud_uploaded", status=status))
+        except (ValueError, RuntimeError, OSError) as exc:
+            self._show_error(str(exc))
 
     def _show_archive_info(self, archive: Path) -> None:
         try:
@@ -1083,6 +1146,61 @@ class MainWindow(QMainWindow):
         else:
             self._configure_autosave()
             self.autosave_pause_button.setText(self._text("autosave_pause"))
+
+    def _export_file_inventory(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_inventory"), "codesaver-inventory.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        try:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["path", "bytes", "modified"])
+                for path in self.manager.list_files():
+                    stat = path.stat()
+                    writer.writerow([str(path.relative_to(self.manager.project_dir)), stat.st_size, int(stat.st_mtime)])
+            self.statusBar().showMessage(self._text("inventory_exported", path=destination))
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _show_exclusions(self) -> None:
+        if not self.manager:
+            return
+        directories = ", ".join(sorted(self.settings.excluded_dirs)) or "—"
+        extensions = ", ".join(sorted(self.settings.excluded_extensions)) or "—"
+        QMessageBox.information(
+            self,
+            self._text("show_exclusions"),
+            self._text("exclusions_body", directories=directories, extensions=extensions),
+        )
+
+    def _show_symlinks(self) -> None:
+        if not self.manager:
+            return
+        links = [
+            str(path.relative_to(self.manager.project_dir))
+            for path in self.manager.project_dir.rglob("*")
+            if path.is_symlink()
+        ]
+        QMessageBox.information(
+            self, self._text("symlinks"), self._text("symlinks_body", count=len(links), items="\n".join(links) or "—")
+        )
+
+    def _copy_git_context(self) -> None:
+        if self.manager:
+            context = git_context(self.manager.project_dir)
+            QApplication.clipboard().setText(json.dumps(context, ensure_ascii=False, indent=2))
+            self.statusBar().showMessage(self._text("git_context_copied"))
+
+    def _open_desktop_config(self) -> None:
+        config_path = Path.home() / ".codesaver-desktop.json"
+        if not config_path.exists():
+            config_path.write_text(json.dumps(self.settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(config_path)))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

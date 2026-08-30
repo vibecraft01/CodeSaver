@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.3.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.3) | Python 3.9+ | Updated 2026-08-29 |
-| CodeSaver Desktop | [**1.2.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.0) | Python 3.10+ with PyQt5 | Updated 2026-08-29 |
+| CodeSaver CLI | **1.3.4** (local) | Python 3.9+ | Updated 2026-08-30 |
+| CodeSaver Desktop | [**1.2.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.1) | Python 3.10+ with PyQt5 | Updated 2026-08-30 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -62,6 +62,13 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Auditable JSON backup reports with `--report report.json`.
 - Archive health checks with `--health` and CI-friendly `--health --json` output.
 - Backup inventory reports with `--stats` and `--stats --json`.
+- Developer project summary with extension counts via `--project-summary`.
+- Searchable backup archive names via `--archive-search`.
+- Structured Git working-tree status via `--git-status-json`.
+- CSV project inventory export via `--export-inventory`.
+- Safe archive restore preview via `--restore-preview`.
+- Optional cloud upload via `--cloud-upload ARCHIVE --cloud-url URL`.
+- Cloud credentials are read from `CODESAVER_CLOUD_TOKEN` or a custom token variable.
 - Project drift auditing with `--diff ARCHIVE`, showing added, modified, and missing files; use `--json` for CI.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.х
@@ -70,7 +77,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.2.0` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.2.1` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -114,6 +121,7 @@ CodeSaver Desktop `1.2.0` is a graphical alternative for developers who prefer a
 - Seven keyboard shortcuts cover backup, restore, compare, verify, search, terminal, and archive audit actions.
 - Developer dashboard with eight live project and Git health metrics.
 - Export and copy the live developer dashboard for issue reports and CI notes.
+- Project tools for CSV file inventory, exclusion review, symlink scanning, Git context copying, and configuration access.
 - Open the current Git diff, refresh analysis, and pause/resume autosave from dedicated actions.
 - No API keys or external services.
 
@@ -163,6 +171,8 @@ codesaver --language zh --backup-now
 ```
 
 ## Installation
+
+See the complete [installation guide](docs/INSTALLATION.md) for source setup, release binaries, first backup, and troubleshooting.
 
 Python 3.9 or newer is required for the CLI.
 
