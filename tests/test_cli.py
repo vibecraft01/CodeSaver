@@ -19,6 +19,7 @@ from codesaver.cli import (
     _write_backup_report,
     _health_check,
     _backup_stats,
+    _self_check,
 )
 from codesaver.core import BackupManager
 
@@ -76,6 +77,16 @@ class CliFeatureTests(unittest.TestCase):
         self.assertEqual(args.exclude_pattern, ["*.tmp"])
         self.assertEqual(args.exclude_dir, ["generated"])
         self.assertEqual(args.report, Path("report.json"))
+
+    def test_self_check_runs_disposable_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            root.joinpath("hello.py").write_text("print('ok')", encoding="utf-8")
+            result = _self_check(BackupManager(root, Path(tmp) / "backups"))
+            self.assertTrue(result["test_backup"])
+            self.assertTrue(result["project_readable"])
+            self.assertTrue(result["ok"])
 
     def test_health_check_reports_corrupt_archives(self):
         with tempfile.TemporaryDirectory() as tmp:
