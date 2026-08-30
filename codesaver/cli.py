@@ -17,6 +17,7 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Optional
 
+from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
 from .core import BackupError, BackupManager
@@ -584,7 +585,7 @@ def _self_check(manager: BackupManager) -> dict[str, object]:
     """Validate the installation and perform a disposable backup smoke test."""
     result = _doctor(manager)
     result["operation"] = "self-check"
-    result["codesaver"] = __import__("codesaver").__version__
+    result["codesaver"] = __version__
     result["project_readable"] = False
     try:
         result["project_readable"] = all(path.is_file() and path.stat().st_size >= 0 for path in manager.list_files())
