@@ -277,6 +277,14 @@ _DESKTOP_1_2_1_TEXT = {
     "copy_git_context": "Copy Git context",
     "git_context_copied": "Git context copied",
     "open_config": "Open Desktop configuration",
+    "export_tree": "Export project tree JSON",
+    "tree_exported": "Project tree exported: {path}",
+    "copy_backup_command": "Copy backup command",
+    "backup_command_copied": "Backup command copied",
+    "largest_project_files": "Show largest project files",
+    "unreadable_project_files": "Find unreadable project files",
+    "project_check": "Run project health check",
+    "project_check_body": "Files: {files}\nUnreadable: {unreadable}\nTotal size: {size}",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -327,6 +335,14 @@ TEXT["ru"].update(
         "copy_git_context": "Копировать Git-контекст",
         "git_context_copied": "Git-контекст скопирован",
         "open_config": "Открыть конфигурацию Desktop",
+        "export_tree": "Экспортировать дерево проекта JSON",
+        "tree_exported": "Дерево проекта экспортировано: {path}",
+        "copy_backup_command": "Копировать команду backup",
+        "backup_command_copied": "Команда backup скопирована",
+        "largest_project_files": "Показать самые большие файлы",
+        "unreadable_project_files": "Найти нечитаемые файлы",
+        "project_check": "Проверить состояние проекта",
+        "project_check_body": "Файлов: {files}\nНечитаемых: {unreadable}\nОбщий размер: {size}",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -590,6 +606,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("copy_git_context"), self._copy_git_context)
         tools_menu.addAction(self._text("open_config"), self._open_desktop_config)
         tools_menu.addAction(self._text("cloud_upload"), self._upload_selected_to_cloud)
+        tools_menu.addAction(self._text("export_tree"), self._export_project_tree)
+        tools_menu.addAction(self._text("copy_backup_command"), self._copy_backup_command)
+        tools_menu.addAction(self._text("largest_project_files"), self._show_largest_project_files)
+        tools_menu.addAction(self._text("unreadable_project_files"), self._show_unreadable_project_files)
+        tools_menu.addAction(self._text("project_check"), self._show_project_check)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1201,6 +1222,72 @@ class MainWindow(QMainWindow):
         if not config_path.exists():
             config_path.write_text(json.dumps(self.settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(config_path)))
+
+    def _export_project_tree(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(self, self._text("export_tree"), "project-tree.json")
+        if not destination:
+            return
+        try:
+            files = [str(path.relative_to(self.manager.project_dir).as_posix()) for path in self.manager.list_files()]
+            Path(destination).write_text(
+                json.dumps({"project": str(self.manager.project_dir), "files": files}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            self.statusBar().showMessage(self._text("tree_exported", path=destination))
+        except (OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _copy_backup_command(self) -> None:
+        if not self.manager:
+            return
+        command = (
+            f'codesaver --project-dir "{self.manager.project_dir}" '
+            f'--backup-dir "{self.manager.backup_dir}" --backup-now --verify'
+        )
+        QApplication.clipboard().setText(command)
+        self.statusBar().showMessage(self._text("backup_command_copied"))
+
+    def _show_largest_project_files(self) -> None:
+        if not self.manager:
+            return
+        files = sorted(self.manager.list_files(), key=lambda path: path.stat().st_size, reverse=True)[:10]
+        body = "\n".join(
+            f"{format_bytes(path.stat().st_size)}  {path.relative_to(self.manager.project_dir)}" for path in files
+        )
+        QMessageBox.information(self, self._text("largest_project_files"), body or "—")
+
+    def _show_unreadable_project_files(self) -> None:
+        if not self.manager:
+            return
+        unreadable = []
+        for path in self.manager.list_files():
+            try:
+                with path.open("rb"):
+                    pass
+            except OSError:
+                unreadable.append(str(path.relative_to(self.manager.project_dir)))
+        QMessageBox.information(self, self._text("unreadable_project_files"), "\n".join(unreadable) or "None")
+
+    def _show_project_check(self) -> None:
+        if not self.manager:
+            return
+        files = self.manager.list_files()
+        unreadable = 0
+        total_size = 0
+        for path in files:
+            try:
+                total_size += path.stat().st_size
+                with path.open("rb"):
+                    pass
+            except OSError:
+                unreadable += 1
+        QMessageBox.information(
+            self,
+            self._text("project_check"),
+            self._text("project_check_body", files=len(files), unreadable=unreadable, size=format_bytes(total_size)),
+        )
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

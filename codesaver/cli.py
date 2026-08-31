@@ -140,6 +140,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-status-json", action="store_true", help="Export Git status as structured JSON")
     parser.add_argument("--export-inventory", type=Path, metavar="FILE", help="Export project inventory as CSV")
     parser.add_argument("--restore-preview", type=Path, metavar="ARCHIVE", help="Preview files in an archive")
+    parser.add_argument("--gitignored-files", action="store_true", help="List files ignored by Git")
+    parser.add_argument("--project-tree", action="store_true", help="Print a size-aware project tree")
+    parser.add_argument("--search-content", metavar="TEXT", help="Search text in readable project files")
+    parser.add_argument("--extension-report", action="store_true", help="Report file counts and bytes by extension")
+    parser.add_argument("--health-report", action="store_true", help="Verify every archive with per-file results")
     parser.add_argument("--cloud-upload", type=Path, metavar="ARCHIVE", help="Upload an archive to a cloud endpoint")
     parser.add_argument("--cloud-url", metavar="URL", help="S3-compatible cloud upload endpoint")
     parser.add_argument("--cloud-token-env", default="CODESAVER_CLOUD_TOKEN", help="Token environment variable")
@@ -653,7 +658,78 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.self_check:
+        if args.gitignored_files:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "ls-files", "--others", "--ignored", "--exclude-standard"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            files = result.stdout.splitlines()
+            payload = {"operation": "gitignored-files", "files": files}
+            print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else "\n".join(files))
+        elif args.project_tree:
+            tree = []
+            for path in sorted(manager.list_files(), key=lambda item: str(item).lower()):
+                tree.append(
+                    {"path": str(path.relative_to(manager.project_dir).as_posix()), "bytes": path.stat().st_size}
+                )
+            print(
+                json.dumps({"operation": "project-tree", "files": tree}, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{_format_bytes(item['bytes']):>10}  {item['path']}" for item in tree)
+            )
+        elif args.search_content is not None:
+            matches = []
+            needle = args.search_content.casefold()
+            for path in manager.list_files():
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for number, line in enumerate(text.splitlines(), start=1):
+                    if needle in line.casefold():
+                        matches.append(
+                            {"path": str(path.relative_to(manager.project_dir)), "line": number, "text": line.strip()}
+                        )
+            print(
+                json.dumps(
+                    {"operation": "search-content", "query": args.search_content, "matches": matches},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                if args.json
+                else "\n".join(f"{item['path']}:{item['line']}: {item['text']}" for item in matches)
+            )
+        elif args.extension_report:
+            report: dict[str, dict[str, int]] = {}
+            for path in manager.list_files():
+                extension = path.suffix.lower() or "[no extension]"
+                bucket = report.setdefault(extension, {"files": 0, "bytes": 0})
+                bucket["files"] += 1
+                bucket["bytes"] += path.stat().st_size
+            print(
+                json.dumps({"operation": "extension-report", "extensions": report}, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(
+                    f"{key}: {value['files']} files, {_format_bytes(value['bytes'])}"
+                    for key, value in sorted(report.items())
+                )
+            )
+        elif args.health_report:
+            entries = []
+            for archive in sorted(manager.backup_dir.glob("*.zip")):
+                try:
+                    count = manager.verify_backup(archive)
+                    entries.append({"archive": str(archive), "ok": True, "files": count})
+                except (BackupError, OSError, ValueError) as exc:
+                    entries.append({"archive": str(archive), "ok": False, "error": str(exc)})
+            print(
+                json.dumps({"operation": "health-report", "archives": entries}, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{'OK' if item['ok'] else 'FAILED'}  {item['archive']}" for item in entries)
+            )
+        elif args.self_check:
             result = _self_check(manager)
             print(
                 json.dumps(result, ensure_ascii=False, indent=2)

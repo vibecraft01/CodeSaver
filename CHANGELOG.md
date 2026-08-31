@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.3.5] - 2026-08-30 (local)
+
+- Added `--gitignored-files` for auditing files excluded by Git.
+- Added `--project-tree` with file sizes for project reviews.
+- Added `--search-content` for searching readable source files.
+- Added `--extension-report` with file counts and byte totals.
+- Added `--health-report` with per-archive verification results.
+
 - Added opt-in S3-compatible HTTP upload for existing ZIP archives in CLI and Desktop.
 - Cloud uploads require an explicit endpoint and bearer token; local backups remain independent.
 

@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.3.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.4) | Python 3.9+ | Updated 2026-08-30 |
-| CodeSaver Desktop | [**1.2.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.1) | Python 3.10+ with PyQt5 | Updated 2026-08-30 |
+| CodeSaver CLI | **1.3.5** (local) | Python 3.9+ | Updated 2026-08-30 |
+| CodeSaver Desktop | **1.2.2** (local) | Python 3.10+ with PyQt5 | Updated 2026-08-30 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -69,6 +69,11 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Safe archive restore preview via `--restore-preview`.
 - Optional cloud upload via `--cloud-upload ARCHIVE --cloud-url URL`.
 - Cloud credentials are read from `CODESAVER_CLOUD_TOKEN` or a custom token variable.
+- Git-ignored file inspection with `--gitignored-files`.
+- Size-aware project tree output with `--project-tree`.
+- Text search across readable source files with `--search-content`.
+- File extension counts and storage totals with `--extension-report`.
+- Per-archive verification results with `--health-report`.
 - Project drift auditing with `--diff ARCHIVE`, showing added, modified, and missing files; use `--json` for CI.
 - Final verification and operation summary output.
 - Optional operation logs with `--log`.х
@@ -77,7 +82,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.2.1` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.2.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
