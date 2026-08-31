@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.2.4] - 2026-09-01
+
+- Added archive-to-archive comparison with added, removed, and changed file counts.
+- Added CSV export of SHA-256 hashes for archive members.
+- Added unpacked-size inspection for selected archives.
+- Added retention-cleanup preview.
+- Added one-click JSON manifest copying.
+
 ## [Desktop 1.2.3] - 2026-08-31
 
 - Added SHA-256 duplicate-file detection.

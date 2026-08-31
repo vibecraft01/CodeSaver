@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | [**1.3.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.6) | Python 3.9+ | Updated 2026-08-31 |
-| CodeSaver Desktop | [**1.2.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.3) | Python 3.10+ with PyQt5 | Updated 2026-08-31 |
+| CodeSaver Desktop | [**1.2.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.4) | Python 3.10+ with PyQt5 | Updated 2026-09-01 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -24,8 +24,8 @@ GitHub repository snapshot for **30 August 2026**:
 | Repository views | 958 |
 | Unique visitors | 19 |
 | GitHub stars | 8 |
-| Public releases |50|
-| Commits | 105 |
+| Public releases |49|
+| Commits | 102 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 
@@ -74,6 +74,11 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Desktop backup-storage free-space diagnostics.
 - One-click copying of a restore command.
 - File-name search inside a selected ZIP archive.
+- Compare two ZIP archives with added, removed, and changed file counts.
+- Export SHA-256 hashes for every file in an archive as CSV.
+- Inspect the total unpacked size of a selected archive.
+- Preview retention cleanup before deleting old backups.
+- Copy a selected archive manifest as JSON to the clipboard.
 - Git-ignored file inspection with `--gitignored-files`.
 - Size-aware project tree output with `--project-tree`.
 - Text search across readable source files with `--search-content`.

@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 from shutil import disk_usage
 import time
+import zipfile
 
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QKeySequence
@@ -294,6 +295,17 @@ _DESKTOP_1_2_1_TEXT = {
     "restore_command_copied": "Restore command copied",
     "search_archive_files": "Search files in selected archive",
     "search_archive_prompt": "File name or path contains:",
+    "compare_archives": "Compare two archives",
+    "compare_archives_prompt": "Select the second archive",
+    "compare_archives_body": "Added: {added}\nRemoved: {removed}\nChanged: {changed}",
+    "export_archive_hashes": "Export archive file hashes CSV",
+    "archive_hashes_done": "Archive hashes exported: {path}",
+    "unpacked_size": "Show unpacked archive size",
+    "unpacked_size_body": "Archive: {name}\nFiles: {files}\nUnpacked size: {size}",
+    "retention_preview": "Preview retention cleanup",
+    "retention_body": "Archives kept: {kept}\nArchives eligible for cleanup: {remove}",
+    "copy_manifest": "Copy archive manifest JSON",
+    "manifest_copied": "Archive manifest copied",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -361,6 +373,17 @@ TEXT["ru"].update(
         "restore_command_copied": "Команда восстановления скопирована",
         "search_archive_files": "Искать файлы в выбранном архиве",
         "search_archive_prompt": "Часть имени или пути файла:",
+        "compare_archives": "Сравнить два архива",
+        "compare_archives_prompt": "Выберите второй архив",
+        "compare_archives_body": "Добавлено: {added}\nУдалено: {removed}\nИзменено: {changed}",
+        "export_archive_hashes": "Экспортировать хэши файлов архива CSV",
+        "archive_hashes_done": "Хэши архива экспортированы: {path}",
+        "unpacked_size": "Показать распакованный размер",
+        "unpacked_size_body": "Архив: {name}\nФайлов: {files}\nРаспакованный размер: {size}",
+        "retention_preview": "Предпросмотр очистки retention",
+        "retention_body": "Останется: {kept}\nК очистке: {remove}",
+        "copy_manifest": "Копировать JSON-манифест архива",
+        "manifest_copied": "Манифест архива скопирован",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -634,6 +657,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("free_space"), self._show_backup_free_space)
         tools_menu.addAction(self._text("copy_restore_command"), self._copy_restore_command)
         tools_menu.addAction(self._text("search_archive_files"), self._search_selected_archive_files)
+        tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
+        tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
+        tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
+        tools_menu.addAction(self._text("retention_preview"), self._show_retention_preview)
+        tools_menu.addAction(self._text("copy_manifest"), self._copy_archive_manifest)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1380,6 +1408,99 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, self._text("search_archive_files"), "\n".join(members) or "None")
         except (BackupError, OSError, ValueError) as exc:
             self._show_error(str(exc))
+
+    def _compare_two_archives(self) -> None:
+        first = self._selected_archive()
+        if not first:
+            return
+        second, _ = QFileDialog.getOpenFileName(
+            self, self._text("compare_archives_prompt"), str(first.parent), "ZIP archives (*.zip)"
+        )
+        if not second:
+            return
+        try:
+            with zipfile.ZipFile(first) as first_zip, zipfile.ZipFile(second) as second_zip:
+                left = {
+                    item.filename: hashlib.sha256(first_zip.read(item)).hexdigest()
+                    for item in first_zip.infolist()
+                    if not item.is_dir()
+                }
+                right = {
+                    item.filename: hashlib.sha256(second_zip.read(item)).hexdigest()
+                    for item in second_zip.infolist()
+                    if not item.is_dir()
+                }
+            QMessageBox.information(
+                self,
+                self._text("compare_archives"),
+                self._text(
+                    "compare_archives_body",
+                    added=len(right.keys() - left.keys()),
+                    removed=len(left.keys() - right.keys()),
+                    changed=sum(1 for key in left.keys() & right.keys() if left[key] != right[key]),
+                ),
+            )
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _export_archive_hashes(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_archive_hashes"), f"{archive.stem}-hashes.csv"
+        )
+        if not destination:
+            return
+        try:
+            import csv
+
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("path", "sha256"))
+                with zipfile.ZipFile(archive) as opened:
+                    for member in opened.infolist():
+                        if not member.is_dir():
+                            writer.writerow((member.filename, hashlib.sha256(opened.read(member)).hexdigest()))
+            self.statusBar().showMessage(self._text("archive_hashes_done", path=destination))
+        except (BackupError, OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_unpacked_size(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            with zipfile.ZipFile(archive) as opened:
+                members = [item for item in opened.infolist() if not item.is_dir()]
+                size = sum(item.file_size for item in members)
+            QMessageBox.information(
+                self,
+                self._text("unpacked_size"),
+                self._text("unpacked_size_body", name=archive.name, files=len(members), size=format_bytes(size)),
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_retention_preview(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        keep = self.settings.keep_last or len(archives)
+        QMessageBox.information(
+            self,
+            self._text("retention_preview"),
+            self._text("retention_body", kept=min(keep, len(archives)), remove=max(0, len(archives) - keep)),
+        )
+
+    def _copy_archive_manifest(self) -> None:
+        archive = self._selected_archive()
+        if archive and self.manager:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            QApplication.clipboard().setText(
+                json.dumps({"archive": str(archive), "files": members}, ensure_ascii=False, indent=2)
+            )
+            self.statusBar().showMessage(self._text("manifest_copied"))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

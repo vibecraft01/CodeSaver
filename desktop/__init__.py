@@ -1,3 +1,3 @@
 """CodeSaver Desktop, the optional PyQt5 graphical application."""
 
-__version__ = "1.2.3"
+__version__ = "1.2.4"
