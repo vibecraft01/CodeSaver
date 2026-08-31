@@ -76,6 +76,22 @@ codesaver --project-dir ./my-project --backup-dir ./backups --backup-now
 
 The Desktop application provides the same backup engine through its project selector and **Create Backup** action.
 
+## Install the CLI from PyPI
+
+After the package is published, install the CLI without cloning the repository:
+
+```bash
+python -m pip install codesaver
+codesaver --self-check
+```
+
+Install the optional Desktop dependencies with:
+
+```bash
+python -m pip install "codesaver[desktop]"
+codesaver-desktop
+```
+
 ## Optional cloud upload
 
 Cloud upload is disabled by default. Set a token in the environment and provide an S3-compatible endpoint:

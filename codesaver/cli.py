@@ -145,6 +145,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--search-content", metavar="TEXT", help="Search text in readable project files")
     parser.add_argument("--extension-report", action="store_true", help="Report file counts and bytes by extension")
     parser.add_argument("--health-report", action="store_true", help="Verify every archive with per-file results")
+    parser.add_argument("--version", action="store_true", help="Print the CodeSaver version")
+    parser.add_argument("--plan-json", type=Path, metavar="FILE", help="Write the backup plan as JSON")
+    parser.add_argument("--verify-report", type=Path, metavar="FILE", help="Write archive verification results as JSON")
+    parser.add_argument("--git-remote", action="store_true", help="Print configured Git remotes")
+    parser.add_argument("--config-template", type=Path, metavar="FILE", help="Create a starter configuration file")
     parser.add_argument("--cloud-upload", type=Path, metavar="ARCHIVE", help="Upload an archive to a cloud endpoint")
     parser.add_argument("--cloud-url", metavar="URL", help="S3-compatible cloud upload endpoint")
     parser.add_argument("--cloud-token-env", default="CODESAVER_CLOUD_TOKEN", help="Token environment variable")
@@ -658,7 +663,71 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.gitignored_files:
+        if args.version:
+            print(__version__)
+        elif args.plan_json:
+            files = manager.list_files()
+            plan = {
+                "operation": "backup-plan",
+                "project": str(manager.project_dir),
+                "files": [
+                    {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size} for path in files
+                ],
+                "file_count": len(files),
+                "total_bytes": sum(path.stat().st_size for path in files),
+            }
+            target = args.plan_json.expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(
+                json.dumps(
+                    {"operation": "backup-plan", "file": str(target), "file_count": len(files)}, ensure_ascii=False
+                )
+                if args.json
+                else f"Backup plan written: {target}"
+            )
+        elif args.verify_report:
+            entries = []
+            for archive in sorted(manager.backup_dir.glob("*.zip")):
+                try:
+                    entries.append({"archive": str(archive), "ok": True, "files": manager.verify_backup(archive)})
+                except (BackupError, OSError, ValueError) as exc:
+                    entries.append({"archive": str(archive), "ok": False, "error": str(exc)})
+            target = args.verify_report.expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                json.dumps({"operation": "verify-report", "archives": entries}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print(f"Verification report written: {target}")
+        elif args.git_remote:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "remote", "-v"], capture_output=True, text=True, check=False
+            )
+            remotes = result.stdout.splitlines()
+            print(
+                json.dumps({"operation": "git-remote", "remotes": remotes}, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(remotes)
+            )
+        elif args.config_template:
+            target = args.config_template.expanduser()
+            if target.exists():
+                raise BackupError(f"Configuration file already exists: {target}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            template = {
+                "interval": 600,
+                "language": "en",
+                "backup_dir": "../code-saver-backups",
+                "excluded_dirs": [".git", "__pycache__", ".venv", "build", "dist"],
+                "exclude_ext": [".pyc", ".log", ".tmp"],
+                "compress": True,
+                "keep_last": 5,
+                "use_gitignore": True,
+            }
+            target.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(f"Configuration template written: {target}")
+        elif args.gitignored_files:
             result = subprocess.run(
                 ["git", "-C", str(manager.project_dir), "ls-files", "--others", "--ignored", "--exclude-standard"],
                 capture_output=True,

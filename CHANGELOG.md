@@ -12,7 +12,7 @@ All notable CodeSaver changes are documented here.
 - Added one-click restore-command copying.
 - Added file search inside selected ZIP archives.
 
-## [CLI 1.3.6] - 2026-08-31 (local)
+## [CLI 1.3.6] - 2026-08-31
 
 - Added `--version` for support and automation scripts.
 - Added `--plan-json FILE` to export a complete backup plan before execution.
