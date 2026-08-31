@@ -285,6 +285,15 @@ _DESKTOP_1_2_1_TEXT = {
     "unreadable_project_files": "Find unreadable project files",
     "project_check": "Run project health check",
     "project_check_body": "Files: {files}\nUnreadable: {unreadable}\nTotal size: {size}",
+    "duplicates": "Find duplicate files",
+    "integrity_report": "Export archive integrity report",
+    "integrity_done": "Integrity report exported: {path}",
+    "free_space": "Show backup free space",
+    "free_space_body": "Free: {free}\nTotal: {total}\nBackup folder: {path}",
+    "copy_restore_command": "Copy restore command",
+    "restore_command_copied": "Restore command copied",
+    "search_archive_files": "Search files in selected archive",
+    "search_archive_prompt": "File name or path contains:",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -343,6 +352,15 @@ TEXT["ru"].update(
         "unreadable_project_files": "Найти нечитаемые файлы",
         "project_check": "Проверить состояние проекта",
         "project_check_body": "Файлов: {files}\nНечитаемых: {unreadable}\nОбщий размер: {size}",
+        "duplicates": "Найти дубликаты файлов",
+        "integrity_report": "Экспортировать отчёт целостности архивов",
+        "integrity_done": "Отчёт целостности экспортирован: {path}",
+        "free_space": "Показать свободное место backup",
+        "free_space_body": "Свободно: {free}\nВсего: {total}\nПапка backup: {path}",
+        "copy_restore_command": "Копировать команду восстановления",
+        "restore_command_copied": "Команда восстановления скопирована",
+        "search_archive_files": "Искать файлы в выбранном архиве",
+        "search_archive_prompt": "Часть имени или пути файла:",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -611,6 +629,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("largest_project_files"), self._show_largest_project_files)
         tools_menu.addAction(self._text("unreadable_project_files"), self._show_unreadable_project_files)
         tools_menu.addAction(self._text("project_check"), self._show_project_check)
+        tools_menu.addAction(self._text("duplicates"), self._find_duplicate_files)
+        tools_menu.addAction(self._text("integrity_report"), self._export_integrity_report)
+        tools_menu.addAction(self._text("free_space"), self._show_backup_free_space)
+        tools_menu.addAction(self._text("copy_restore_command"), self._copy_restore_command)
+        tools_menu.addAction(self._text("search_archive_files"), self._search_selected_archive_files)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1288,6 +1311,75 @@ class MainWindow(QMainWindow):
             self._text("project_check"),
             self._text("project_check_body", files=len(files), unreadable=unreadable, size=format_bytes(total_size)),
         )
+
+    def _find_duplicate_files(self) -> None:
+        if not self.manager:
+            return
+        groups: dict[str, list[str]] = {}
+        for path in self.manager.list_files():
+            try:
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError:
+                continue
+            groups.setdefault(digest, []).append(str(path.relative_to(self.manager.project_dir)))
+        duplicates = [paths for paths in groups.values() if len(paths) > 1]
+        QMessageBox.information(
+            self, self._text("duplicates"), "\n\n".join("\n".join(paths) for paths in duplicates) or "None"
+        )
+
+    def _export_integrity_report(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(self, self._text("integrity_report"), "archive-integrity.json")
+        if not destination:
+            return
+        entries = []
+        for archive, _date, _size in archive_details(self.manager.backup_dir):
+            try:
+                entries.append({"archive": str(archive), "ok": True, "files": self.manager.verify_backup(archive)})
+            except (BackupError, OSError, ValueError) as exc:
+                entries.append({"archive": str(archive), "ok": False, "error": str(exc)})
+        try:
+            Path(destination).write_text(json.dumps({"archives": entries}, indent=2) + "\n", encoding="utf-8")
+            self.statusBar().showMessage(self._text("integrity_done", path=destination))
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _show_backup_free_space(self) -> None:
+        if self.manager:
+            usage = disk_usage(self.manager.backup_dir)
+            QMessageBox.information(
+                self,
+                self._text("free_space"),
+                self._text(
+                    "free_space_body",
+                    free=format_bytes(usage.free),
+                    total=format_bytes(usage.total),
+                    path=self.manager.backup_dir,
+                ),
+            )
+
+    def _copy_restore_command(self) -> None:
+        archive = self._selected_archive()
+        if archive and self.manager:
+            command = f'codesaver --project-dir "{self.manager.project_dir}" --restore "{archive}"'
+            QApplication.clipboard().setText(command)
+            self.statusBar().showMessage(self._text("restore_command_copied"))
+
+    def _search_selected_archive_files(self) -> None:
+        archive = self._selected_archive()
+        if not archive or not self.manager:
+            return
+        query, accepted = QInputDialog.getText(
+            self, self._text("search_archive_files"), self._text("search_archive_prompt")
+        )
+        if not accepted:
+            return
+        try:
+            members = [item for item in self.manager.core.list_backup(archive) if query.casefold() in item.casefold()]
+            QMessageBox.information(self, self._text("search_archive_files"), "\n".join(members) or "None")
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
 
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)

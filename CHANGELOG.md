@@ -4,6 +4,22 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.2.3] - 2026-08-31
+
+- Added SHA-256 duplicate-file detection.
+- Added archive-integrity report export.
+- Added backup-storage free-space diagnostics.
+- Added one-click restore-command copying.
+- Added file search inside selected ZIP archives.
+
+## [CLI 1.3.6] - 2026-08-31 (local)
+
+- Added `--version` for support and automation scripts.
+- Added `--plan-json FILE` to export a complete backup plan before execution.
+- Added `--verify-report FILE` for persistent archive-health reports.
+- Added `--git-remote` to inspect repository remotes.
+- Added `--config-template FILE` to generate a validated starter configuration.
+
 ## [CLI 1.3.5] - 2026-08-30 (local)
 
 - Added `--gitignored-files` for auditing files excluded by Git.
