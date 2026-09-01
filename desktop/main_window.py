@@ -306,6 +306,11 @@ _DESKTOP_1_2_1_TEXT = {
     "retention_body": "Archives kept: {kept}\nArchives eligible for cleanup: {remove}",
     "copy_manifest": "Copy archive manifest JSON",
     "manifest_copied": "Archive manifest copied",
+    "file_types": "Show files by type",
+    "stale_files": "Find stale files",
+    "archive_total": "Show total archive storage",
+    "git_tags": "Show Git tags",
+    "backup_index": "Copy backup index JSON",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -384,6 +389,11 @@ TEXT["ru"].update(
         "retention_body": "Останется: {kept}\nК очистке: {remove}",
         "copy_manifest": "Копировать JSON-манифест архива",
         "manifest_copied": "Манифест архива скопирован",
+        "file_types": "Показать файлы по типам",
+        "stale_files": "Найти давно изменённые файлы",
+        "archive_total": "Показать общий размер архивов",
+        "git_tags": "Показать Git-теги",
+        "backup_index": "Копировать индекс бэкапов JSON",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -662,6 +672,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
         tools_menu.addAction(self._text("retention_preview"), self._show_retention_preview)
         tools_menu.addAction(self._text("copy_manifest"), self._copy_archive_manifest)
+        tools_menu.addAction(self._text("file_types"), self._show_file_types)
+        tools_menu.addAction(self._text("stale_files"), self._show_stale_files)
+        tools_menu.addAction(self._text("archive_total"), self._show_archive_total)
+        tools_menu.addAction(self._text("git_tags"), self._show_git_tags)
+        tools_menu.addAction(self._text("backup_index"), self._copy_backup_index)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1841,6 +1856,62 @@ class MainWindow(QMainWindow):
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self, self._text("error"), message)
+
+    def _show_file_types(self) -> None:
+        if not self.manager:
+            return
+        groups: dict[str, list[int]] = {}
+        for path in self.manager.list_files():
+            suffix = path.suffix.lower() or "[no extension]"
+            groups.setdefault(suffix, [0, 0])
+            groups[suffix][0] += 1
+            groups[suffix][1] += path.stat().st_size
+        body = "\n".join(f"{key}: {value[0]} files, {format_bytes(value[1])}" for key, value in sorted(groups.items()))
+        QMessageBox.information(self, self._text("file_types"), body or "—")
+
+    def _show_stale_files(self) -> None:
+        if not self.manager:
+            return
+        days, accepted = QInputDialog.getInt(self, self._text("stale_files"), "Older than days:", 30, 0, 36500)
+        if not accepted:
+            return
+        cutoff = time.time() - days * 86400
+        files = [path for path in self.manager.list_files() if path.stat().st_mtime < cutoff]
+        QMessageBox.information(
+            self,
+            self._text("stale_files"),
+            "\n".join(str(path.relative_to(self.manager.project_dir)) for path in files) or "None",
+        )
+
+    def _show_archive_total(self) -> None:
+        if not self.manager:
+            return
+        archives = list(self.manager.backup_dir.glob("*.zip"))
+        total = sum(path.stat().st_size for path in archives)
+        QMessageBox.information(
+            self, self._text("archive_total"), f"Archives: {len(archives)}\nTotal: {format_bytes(total)}"
+        )
+
+    def _show_git_tags(self) -> None:
+        if not self.manager:
+            return
+        result = subprocess.run(
+            ["git", "-C", str(self.manager.project_dir), "tag", "--list"], capture_output=True, text=True, check=False
+        )
+        QMessageBox.information(self, self._text("git_tags"), result.stdout.strip() or "None")
+
+    def _copy_backup_index(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        index = {
+            "project": str(self.manager.project_dir),
+            "backups": [
+                {"path": str(path), "bytes": path.stat().st_size, "modified": path.stat().st_mtime} for path in archives
+            ],
+        }
+        QApplication.clipboard().setText(json.dumps(index, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("backup_index"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

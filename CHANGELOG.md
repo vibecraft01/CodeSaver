@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.2.5] - 2026-09-01
+
+- Added file-type inventory with counts and byte totals.
+- Added stale-file detection by modification age.
+- Added total backup-storage accounting.
+- Added Git tag listing for release workflows.
+- Added a compact JSON backup index copied to the clipboard.
+
 ## [CLI 1.3.7] - 2026-09-01
 
 - Added file-type inventory with counts and byte totals.
