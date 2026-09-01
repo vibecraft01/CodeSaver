@@ -1017,20 +1017,30 @@ def main(argv: Optional[list[str]] = None) -> int:
                 item["files"] += 1
                 item["bytes"] += path.stat().st_size
             result = {"operation": "file-types", "types": dict(sorted(counts.items()))}
-            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(
-                f"{suffix}: {item['files']} files, {_format_bytes(item['bytes'])}"
-                for suffix, item in result["types"].items()
-            ))
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(
+                    f"{suffix}: {item['files']} files, {_format_bytes(item['bytes'])}"
+                    for suffix, item in result["types"].items()
+                )
+            )
         elif args.stale_files is not None:
             cutoff = time.time() - max(args.stale_files, 0) * 86400
             files = [path for path in manager.list_files() if path.stat().st_mtime < cutoff]
-            result = {"operation": "stale-files", "days": args.stale_files, "files": [
-                {"path": str(path.relative_to(manager.project_dir)), "modified": path.stat().st_mtime}
-                for path in files
-            ]}
-            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(
-                item["path"] for item in result["files"]
-            ))
+            result = {
+                "operation": "stale-files",
+                "days": args.stale_files,
+                "files": [
+                    {"path": str(path.relative_to(manager.project_dir)), "modified": path.stat().st_mtime}
+                    for path in files
+                ],
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(item["path"] for item in result["files"])
+            )
         elif args.archive_total:
             archives = sorted(manager.backup_dir.glob("*.zip"))
             total = sum(path.stat().st_size for path in archives)
@@ -1039,20 +1049,27 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.git_tags:
             completed = subprocess.run(
                 ["git", "-C", str(manager.project_dir), "tag", "--list"],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             tags = [line for line in completed.stdout.splitlines() if line]
             result = {"operation": "git-tags", "tags": tags}
             print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(tags))
         elif args.backup_index:
             archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
-            result = {"operation": "backup-index", "backups": [
-                {"path": str(path), "bytes": path.stat().st_size, "modified": path.stat().st_mtime}
-                for path in archives
-            ]}
-            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(
-                f"{item['bytes']} bytes  {item['path']}" for item in result["backups"]
-            ))
+            result = {
+                "operation": "backup-index",
+                "backups": [
+                    {"path": str(path), "bytes": path.stat().st_size, "modified": path.stat().st_mtime}
+                    for path in archives
+                ],
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['bytes']} bytes  {item['path']}" for item in result["backups"])
+            )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
