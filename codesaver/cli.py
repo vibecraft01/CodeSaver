@@ -173,6 +173,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-total", action="store_true", help="Show total bytes stored in backup archives")
     parser.add_argument("--git-tags", action="store_true", help="List Git tags in the project")
     parser.add_argument("--backup-index", action="store_true", help="Export a compact backup index")
+    parser.add_argument("--archive-types", type=Path, metavar="ARCHIVE", help="Group archive members by extension")
+    parser.add_argument("--hash-inventory", type=Path, metavar="FILE", help="Write project SHA-256 inventory JSON")
+    parser.add_argument("--backup-timeline", action="store_true", help="Show backups ordered by creation time")
+    parser.add_argument("--empty-files", action="store_true", help="List empty project files")
+    parser.add_argument("--git-remotes-json", action="store_true", help="Export configured Git remotes as JSON")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1070,6 +1075,76 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.json
                 else "\n".join(f"{item['bytes']} bytes  {item['path']}" for item in result["backups"])
             )
+        elif args.archive_types:
+            import zipfile
+
+            groups: dict[str, dict[str, int]] = {}
+            with zipfile.ZipFile(args.archive_types) as archive:
+                for info in archive.infolist():
+                    if info.is_dir():
+                        continue
+                    suffix = Path(info.filename).suffix.lower() or "[no extension]"
+                    item = groups.setdefault(suffix, {"files": 0, "bytes": 0})
+                    item["files"] += 1
+                    item["bytes"] += info.file_size
+            result = {
+                "operation": "archive-types",
+                "archive": str(args.archive_types),
+                "types": dict(sorted(groups.items())),
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(
+                    f"{key}: {item['files']} files, {_format_bytes(item['bytes'])}"
+                    for key, item in result["types"].items()
+                )
+            )
+        elif args.hash_inventory:
+            entries = []
+            for path in manager.list_files():
+                try:
+                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                    entries.append({"path": str(path.relative_to(manager.project_dir)), "sha256": digest})
+                except OSError:
+                    continue
+            output = {"project": str(manager.project_dir), "files": entries}
+            args.hash_inventory.parent.mkdir(parents=True, exist_ok=True)
+            args.hash_inventory.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(
+                json.dumps({"operation": "hash-inventory", "file": str(args.hash_inventory), "files": len(entries)})
+                if args.json
+                else str(args.hash_inventory)
+            )
+        elif args.backup_timeline:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+            result = {
+                "operation": "backup-timeline",
+                "backups": [
+                    {"path": str(path), "created": path.stat().st_mtime, "bytes": path.stat().st_size}
+                    for path in archives
+                ],
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(
+                    f"{datetime.fromtimestamp(item['created']).isoformat(timespec='seconds')}  {item['path']}"
+                    for item in result["backups"]
+                )
+            )
+        elif args.empty_files:
+            files = [
+                str(path.relative_to(manager.project_dir)) for path in manager.list_files() if path.stat().st_size == 0
+            ]
+            result = {"operation": "empty-files", "files": files}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(files))
+        elif args.git_remotes_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "remote", "-v"], capture_output=True, text=True, check=False
+            )
+            result = {"operation": "git-remotes", "output": completed.stdout}
+            print(json.dumps(result, ensure_ascii=False) if args.json else completed.stdout.rstrip())
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
