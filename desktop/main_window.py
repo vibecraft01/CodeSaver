@@ -311,6 +311,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_total": "Show total archive storage",
     "git_tags": "Show Git tags",
     "backup_index": "Copy backup index JSON",
+    "export_file_types": "Export file types CSV",
+    "archive_timeline": "Show backup timeline",
+    "empty_files": "Find empty files",
+    "copy_hash_inventory": "Copy SHA-256 inventory",
+    "git_remotes": "Show Git remotes",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -394,6 +399,11 @@ TEXT["ru"].update(
         "archive_total": "Показать общий размер архивов",
         "git_tags": "Показать Git-теги",
         "backup_index": "Копировать индекс бэкапов JSON",
+        "export_file_types": "Экспортировать типы файлов CSV",
+        "archive_timeline": "Показать историю бэкапов",
+        "empty_files": "Найти пустые файлы",
+        "copy_hash_inventory": "Копировать SHA-256 инвентаризацию",
+        "git_remotes": "Показать Git remote",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -677,6 +687,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_total"), self._show_archive_total)
         tools_menu.addAction(self._text("git_tags"), self._show_git_tags)
         tools_menu.addAction(self._text("backup_index"), self._copy_backup_index)
+        tools_menu.addAction(self._text("export_file_types"), self._export_file_types)
+        tools_menu.addAction(self._text("archive_timeline"), self._show_archive_timeline)
+        tools_menu.addAction(self._text("empty_files"), self._show_empty_files)
+        tools_menu.addAction(self._text("copy_hash_inventory"), self._copy_hash_inventory)
+        tools_menu.addAction(self._text("git_remotes"), self._show_git_remotes)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1912,6 +1927,73 @@ class MainWindow(QMainWindow):
         }
         QApplication.clipboard().setText(json.dumps(index, ensure_ascii=False, indent=2))
         self.statusBar().showMessage(self._text("backup_index"))
+
+    def _export_file_types(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_file_types"), "file-types.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        groups: dict[str, list[int]] = {}
+        for path in self.manager.list_files():
+            suffix = path.suffix.lower() or "[no extension]"
+            groups.setdefault(suffix, [0, 0])
+            groups[suffix][0] += 1
+            groups[suffix][1] += path.stat().st_size
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["extension", "files", "bytes"])
+            writer.writerows([suffix, values[0], values[1]] for suffix, values in sorted(groups.items()))
+        self.statusBar().showMessage(str(destination))
+
+    def _show_archive_timeline(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+        body = "\n".join(
+            f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='seconds')}  {path.name}"
+            for path in archives
+        )
+        QMessageBox.information(self, self._text("archive_timeline"), body or "None")
+
+    def _show_empty_files(self) -> None:
+        if not self.manager:
+            return
+        files = [
+            str(path.relative_to(self.manager.project_dir))
+            for path in self.manager.list_files()
+            if path.stat().st_size == 0
+        ]
+        QMessageBox.information(self, self._text("empty_files"), "\n".join(files) or "None")
+
+    def _copy_hash_inventory(self) -> None:
+        if not self.manager:
+            return
+        entries = []
+        for path in self.manager.list_files():
+            try:
+                entries.append(
+                    {
+                        "path": str(path.relative_to(self.manager.project_dir)),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                )
+            except OSError:
+                continue
+        QApplication.clipboard().setText(
+            json.dumps({"project": str(self.manager.project_dir), "files": entries}, ensure_ascii=False, indent=2)
+        )
+        self.statusBar().showMessage(self._text("copy_hash_inventory"))
+
+    def _show_git_remotes(self) -> None:
+        if not self.manager:
+            return
+        result = subprocess.run(
+            ["git", "-C", str(self.manager.project_dir), "remote", "-v"], capture_output=True, text=True, check=False
+        )
+        QMessageBox.information(self, self._text("git_remotes"), result.stdout.strip() or "None")
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

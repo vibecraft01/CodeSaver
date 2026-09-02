@@ -1,6 +1,6 @@
 # CodeSaver CLI source
 
-This directory contains the CodeSaver CLI implementation (v1.3.8).
+This directory contains the CodeSaver CLI implementation (v1.3.9, local).
 
 - `cli.py` — command-line argument handling and interactive commands.
 - `core.py` — backup, restore, filtering, retention, and archive logic.

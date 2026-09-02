@@ -4,6 +4,22 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.3.9] - 2026-09-02
+
+## [Desktop 1.2.6] - 2026-09-02
+
+- Added file-type CSV export.
+- Added chronological backup timeline.
+- Added empty-file discovery.
+- Added SHA-256 inventory copying.
+- Added Git remote inspection.
+
+- Added Git diff export to a file.
+- Added archive member timestamp inspection.
+- Added backup counts grouped by calendar day.
+- Added resolved project-root output.
+- Added machine-readable configuration validation.
+
 ## [CLI 1.3.8] - 2026-09-01
 
 - Added archive member type summaries.

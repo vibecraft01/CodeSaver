@@ -178,6 +178,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--backup-timeline", action="store_true", help="Show backups ordered by creation time")
     parser.add_argument("--empty-files", action="store_true", help="List empty project files")
     parser.add_argument("--git-remotes-json", action="store_true", help="Export configured Git remotes as JSON")
+    parser.add_argument("--git-diff-file", type=Path, metavar="FILE", help="Write the current Git diff to a file")
+    parser.add_argument("--archive-dates", type=Path, metavar="ARCHIVE", help="Show archive member timestamps")
+    parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
+    parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
+    parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1145,6 +1150,54 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
             result = {"operation": "git-remotes", "output": completed.stdout}
             print(json.dumps(result, ensure_ascii=False) if args.json else completed.stdout.rstrip())
+        elif args.git_diff_file:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "diff"], capture_output=True, text=True, check=False
+            )
+            args.git_diff_file.parent.mkdir(parents=True, exist_ok=True)
+            args.git_diff_file.write_text(completed.stdout, encoding="utf-8")
+            result = {
+                "operation": "git-diff-file",
+                "file": str(args.git_diff_file),
+                "bytes": len(completed.stdout.encode()),
+            }
+            print(json.dumps(result) if args.json else str(args.git_diff_file))
+        elif args.archive_dates:
+            import zipfile
+
+            with zipfile.ZipFile(args.archive_dates) as archive:
+                entries = [
+                    {"path": info.filename, "modified": datetime(*info.date_time).isoformat()}
+                    for info in archive.infolist()
+                ]
+            result = {"operation": "archive-dates", "archive": str(args.archive_dates), "files": entries}
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['modified']}  {item['path']}" for item in entries)
+            )
+        elif args.backup_count_by_day:
+            counts: dict[str, int] = {}
+            for path in manager.backup_dir.glob("*.zip"):
+                day = datetime.fromtimestamp(path.stat().st_mtime).date().isoformat()
+                counts[day] = counts.get(day, 0) + 1
+            result = {"operation": "backup-count-by-day", "days": dict(sorted(counts.items()))}
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{day}: {count}" for day, count in result["days"].items())
+            )
+        elif args.project_root:
+            result = {"operation": "project-root", "path": str(manager.project_dir)}
+            print(json.dumps(result) if args.json else str(manager.project_dir))
+        elif args.config_check_json:
+            result = {
+                "operation": "config-check",
+                "valid": True,
+                "project_dir": str(manager.project_dir),
+                "backup_dir": str(manager.backup_dir),
+            }
+            print(json.dumps(result, ensure_ascii=False))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
