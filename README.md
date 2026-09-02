@@ -15,17 +15,17 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ## Impact snapshot
 
-GitHub repository snapshot for **31 August 2026**:
+GitHub repository snapshot for **1 September 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 2,197 |
-| Unique cloners | 137 |
-| Repository views | 1,034 |
+| Git clones (last 14 days) | 2,428 |
+| Unique cloners | 150 |
+| Repository views | 1,094 |
 | Unique visitors | 19 |
 | GitHub stars | 8 |
-| Public releases | 54 |
-| Commits | 118 |
+| Public releases | 56 |
+| Commits | 122 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 
