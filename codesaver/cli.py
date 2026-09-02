@@ -183,6 +183,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
     parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
+    parser.add_argument("--project-checksum", type=Path, metavar="FILE", help="Write a deterministic project checksum")
+    parser.add_argument("--newer-than", type=int, metavar="DAYS", help="List files modified within the last N days")
+    parser.add_argument("--git-branches", action="store_true", help="List local Git branches")
+    parser.add_argument("--backup-sizes", action="store_true", help="Show backup sizes sorted largest first")
+    parser.add_argument("--archive-paths", type=Path, metavar="ARCHIVE", help="Export archive paths as JSON")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1198,6 +1203,60 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "backup_dir": str(manager.backup_dir),
             }
             print(json.dumps(result, ensure_ascii=False))
+        elif args.project_checksum:
+            entries = []
+            for path in sorted(manager.list_files(), key=lambda item: str(item.relative_to(manager.project_dir))):
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                entries.append(f"{digest}  {path.relative_to(manager.project_dir).as_posix()}")
+            checksum = hashlib.sha256("\n".join(entries).encode()).hexdigest()
+            args.project_checksum.parent.mkdir(parents=True, exist_ok=True)
+            args.project_checksum.write_text(checksum + "\n", encoding="utf-8")
+            print(
+                json.dumps({"operation": "project-checksum", "checksum": checksum, "file": str(args.project_checksum)})
+                if args.json
+                else checksum
+            )
+        elif args.newer_than is not None:
+            cutoff = time.time() - max(args.newer_than, 0) * 86400
+            files = [
+                str(path.relative_to(manager.project_dir))
+                for path in manager.list_files()
+                if path.stat().st_mtime >= cutoff
+            ]
+            result = {"operation": "newer-than", "days": args.newer_than, "files": files}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(files))
+        elif args.git_branches:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "branch", "--format=%(refname:short)"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            branches = [line for line in completed.stdout.splitlines() if line]
+            result = {"operation": "git-branches", "branches": branches}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(branches))
+        elif args.backup_sizes:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_size, reverse=True)
+            result = {
+                "operation": "backup-sizes",
+                "backups": [{"path": str(path), "bytes": path.stat().st_size} for path in archives],
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['bytes']} bytes  {item['path']}" for item in result["backups"])
+            )
+        elif args.archive_paths:
+            archives = [str(path) for path in sorted(manager.backup_dir.glob("*.zip"))]
+            args.archive_paths.parent.mkdir(parents=True, exist_ok=True)
+            args.archive_paths.write_text(
+                json.dumps({"backups": archives}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            print(
+                json.dumps({"operation": "archive-paths", "file": str(args.archive_paths), "count": len(archives)})
+                if args.json
+                else str(args.archive_paths)
+            )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)

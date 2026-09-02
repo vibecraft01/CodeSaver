@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.0] - 2026-09-02
+
+- Added deterministic project checksum export.
+- Added recent-file listing by age.
+- Added local Git branch listing.
+- Added backup size sorting.
+- Added JSON export of backup paths.
+
 ## [Desktop 1.2.7] - 2026-09-02
 
 - Added compression-ratio inspection for selected archives.
