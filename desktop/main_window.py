@@ -316,6 +316,11 @@ _DESKTOP_1_2_1_TEXT = {
     "empty_files": "Find empty files",
     "copy_hash_inventory": "Copy SHA-256 inventory",
     "git_remotes": "Show Git remotes",
+    "archive_ratio": "Show archive compression ratio",
+    "export_timeline": "Export backup timeline CSV",
+    "copy_file_list": "Copy project file list",
+    "archive_dates": "Show archive file dates",
+    "copy_project_info": "Copy project information",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -404,6 +409,11 @@ TEXT["ru"].update(
         "empty_files": "Найти пустые файлы",
         "copy_hash_inventory": "Копировать SHA-256 инвентаризацию",
         "git_remotes": "Показать Git remote",
+        "archive_ratio": "Показать степень сжатия архива",
+        "export_timeline": "Экспортировать историю бэкапов CSV",
+        "copy_file_list": "Копировать список файлов проекта",
+        "archive_dates": "Показать даты файлов архива",
+        "copy_project_info": "Копировать сведения о проекте",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -692,6 +702,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("empty_files"), self._show_empty_files)
         tools_menu.addAction(self._text("copy_hash_inventory"), self._copy_hash_inventory)
         tools_menu.addAction(self._text("git_remotes"), self._show_git_remotes)
+        tools_menu.addAction(self._text("archive_ratio"), self._show_archive_ratio)
+        tools_menu.addAction(self._text("export_timeline"), self._export_timeline)
+        tools_menu.addAction(self._text("copy_file_list"), self._copy_file_list)
+        tools_menu.addAction(self._text("archive_dates"), self._show_archive_dates)
+        tools_menu.addAction(self._text("copy_project_info"), self._copy_project_info)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1994,6 +2009,68 @@ class MainWindow(QMainWindow):
             ["git", "-C", str(self.manager.project_dir), "remote", "-v"], capture_output=True, text=True, check=False
         )
         QMessageBox.information(self, self._text("git_remotes"), result.stdout.strip() or "None")
+
+    def _show_archive_ratio(self) -> None:
+        archive = self._selected_archive()
+        if not archive or not self.manager:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            unpacked = sum(item.file_size for item in stream.infolist() if not item.is_dir())
+        ratio = 0 if unpacked == 0 else archive.stat().st_size / unpacked * 100
+        QMessageBox.information(
+            self,
+            self._text("archive_ratio"),
+            f"Archive: {format_bytes(archive.stat().st_size)}\nUnpacked: {format_bytes(unpacked)}\nStored ratio: {ratio:.1f}%",
+        )
+
+    def _export_timeline(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_timeline"), "backup-timeline.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "modified", "bytes"])
+            writer.writerows(
+                [path.name, datetime.fromtimestamp(path.stat().st_mtime).isoformat(), path.stat().st_size]
+                for path in archives
+            )
+        self.statusBar().showMessage(str(destination))
+
+    def _copy_file_list(self) -> None:
+        if not self.manager:
+            return
+        files = [str(path.relative_to(self.manager.project_dir).as_posix()) for path in self.manager.list_files()]
+        QApplication.clipboard().setText("\n".join(files))
+        self.statusBar().showMessage(self._text("copy_file_list"))
+
+    def _show_archive_dates(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            entries = [
+                f"{item.date_time[0]:04d}-{item.date_time[1]:02d}-{item.date_time[2]:02d}  {item.filename}"
+                for item in stream.infolist()
+                if not item.is_dir()
+            ]
+        QMessageBox.information(self, self._text("archive_dates"), "\n".join(entries) or "None")
+
+    def _copy_project_info(self) -> None:
+        if not self.manager:
+            return
+        info = {
+            "project": str(self.manager.project_dir),
+            "files": len(self.manager.list_files()),
+            "backup_dir": str(self.manager.backup_dir),
+            "backups": len(list(self.manager.backup_dir.glob("*.zip"))),
+        }
+        QApplication.clipboard().setText(json.dumps(info, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("copy_project_info"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

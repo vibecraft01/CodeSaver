@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.2.7] - 2026-09-02
+
+- Added compression-ratio inspection for selected archives.
+- Added backup timeline CSV export.
+- Added project file-list copying.
+- Added archive member date inspection.
+- Added project information JSON copying.
+
 ## [CLI 1.3.9] - 2026-09-02
 
 ## [Desktop 1.2.6] - 2026-09-02

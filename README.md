@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | [**1.3.9**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.9) | Python 3.9+ | Updated 2026-09-02 |
-| CodeSaver Desktop | [**1.2.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.6) | Python 3.10+ with PyQt5 | Updated 2026-09-02 |
+| CodeSaver Desktop | [**1.2.7**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.7) | Python 3.10+ with PyQt5 | Updated 2026-09-02 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -97,7 +97,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.2.6` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.2.7` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -143,6 +143,7 @@ CodeSaver Desktop `1.2.6` is a graphical alternative for developers who prefer a
 - Export and copy the live developer dashboard for issue reports and CI notes.
 - Project tools for CSV file inventory, exclusion review, symlink scanning, Git context copying, and configuration access.
 - File-type inventory, stale-file detection, total archive storage, Git-tag viewing, and clipboard backup-index export.
+- Archive compression-ratio inspection, timeline CSV export, project file-list copying, archive member dates, and project-info JSON copying.
 - Open the current Git diff, refresh analysis, and pause/resume autosave from dedicated actions.
 - No API keys or external services.
 
