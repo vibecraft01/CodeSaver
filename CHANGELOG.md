@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.2] - 2026-09-03
+
+- Added project tree JSON export.
+- Added archive member counting.
+- Added untracked Git-file listing.
+- Added oldest-backup lookup.
+- Added empty-directory discovery.
+
 ## [Desktop 1.2.9] - 2026-09-03
 
 - Added archive extension summary.

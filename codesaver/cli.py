@@ -195,6 +195,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-staged-files", action="store_true", help="List files staged in Git")
     parser.add_argument("--file-permissions", action="store_true", help="Report project file permission bits")
     parser.add_argument("--backup-latest-size", action="store_true", help="Compare newest backup with project size")
+    parser.add_argument("--project-tree-json", type=Path, metavar="FILE", help="Export the project tree as JSON")
+    parser.add_argument("--archive-member-count", type=Path, metavar="ARCHIVE", help="Count files in an archive")
+    parser.add_argument("--git-untracked-files", action="store_true", help="List untracked Git files")
+    parser.add_argument("--backup-oldest", action="store_true", help="Print the oldest backup archive")
+    parser.add_argument("--project-empty-dirs", action="store_true", help="List empty project directories")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1310,11 +1315,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 json.dumps(result)
                 if args.json
-                else (
-                    f"Original: {_format_bytes(original)}\n"
-                    f"Stored: {_format_bytes(stored)}\n"
-                    f"Saved: {_format_bytes(saved)}"
-                )
+                else f"Original: {_format_bytes(original)}\nStored: {_format_bytes(stored)}\nSaved: {_format_bytes(saved)}"
             )
         elif args.git_staged_files:
             completed = subprocess.run(
@@ -1356,6 +1357,54 @@ def main(argv: Optional[list[str]] = None) -> int:
                     else "No backups"
                 )
             )
+        elif args.project_tree_json:
+            entries = [
+                {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size}
+                for path in manager.list_files()
+            ]
+            args.project_tree_json.parent.mkdir(parents=True, exist_ok=True)
+            args.project_tree_json.write_text(
+                json.dumps({"project": str(manager.project_dir), "files": entries}, ensure_ascii=False, indent=2)
+                + "\n",
+                encoding="utf-8",
+            )
+            print(
+                json.dumps(
+                    {"operation": "project-tree-json", "file": str(args.project_tree_json), "files": len(entries)}
+                )
+                if args.json
+                else str(args.project_tree_json)
+            )
+        elif args.archive_member_count:
+            import zipfile
+
+            with zipfile.ZipFile(args.archive_member_count) as archive:
+                count = sum(1 for item in archive.infolist() if not item.is_dir())
+            result = {"operation": "archive-member-count", "archive": str(args.archive_member_count), "files": count}
+            print(json.dumps(result) if args.json else f"Files: {count}")
+        elif args.git_untracked_files:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "ls-files", "--others", "--exclude-standard"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            files = [line for line in completed.stdout.splitlines() if line]
+            result = {"operation": "git-untracked-files", "files": files}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(files))
+        elif args.backup_oldest:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+            oldest = archives[0] if archives else None
+            result = {"operation": "backup-oldest", "archive": str(oldest) if oldest else None}
+            print(json.dumps(result) if args.json else (str(oldest) if oldest else "No backups"))
+        elif args.project_empty_dirs:
+            directories = [
+                str(path.relative_to(manager.project_dir))
+                for path in manager.project_dir.rglob("*")
+                if path.is_dir() and not any(path.iterdir())
+            ]
+            result = {"operation": "project-empty-dirs", "directories": directories}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(directories))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
