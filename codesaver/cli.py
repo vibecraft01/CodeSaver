@@ -1315,7 +1315,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 json.dumps(result)
                 if args.json
-                else f"Original: {_format_bytes(original)}\nStored: {_format_bytes(stored)}\nSaved: {_format_bytes(saved)}"
+                else (
+                    f"Original: {_format_bytes(original)}\n"
+                    f"Stored: {_format_bytes(stored)}\n"
+                    f"Saved: {_format_bytes(saved)}"
+                )
             )
         elif args.git_staged_files:
             completed = subprocess.run(
