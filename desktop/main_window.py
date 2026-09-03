@@ -321,6 +321,11 @@ _DESKTOP_1_2_1_TEXT = {
     "copy_file_list": "Copy project file list",
     "archive_dates": "Show archive file dates",
     "copy_project_info": "Copy project information",
+    "recent_project_files": "Show recently modified files",
+    "export_archive_files": "Export archive members CSV",
+    "archive_project_size": "Compare archive and project size",
+    "archive_age": "Show selected archive age",
+    "copy_project_files_json": "Copy project file inventory JSON",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -414,6 +419,11 @@ TEXT["ru"].update(
         "copy_file_list": "Копировать список файлов проекта",
         "archive_dates": "Показать даты файлов архива",
         "copy_project_info": "Копировать сведения о проекте",
+        "recent_project_files": "Показать недавно изменённые файлы",
+        "export_archive_files": "Экспортировать файлы архива CSV",
+        "archive_project_size": "Сравнить размер архива и проекта",
+        "archive_age": "Показать возраст выбранного архива",
+        "copy_project_files_json": "Копировать JSON-инвентаризацию проекта",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -707,6 +717,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("copy_file_list"), self._copy_file_list)
         tools_menu.addAction(self._text("archive_dates"), self._show_archive_dates)
         tools_menu.addAction(self._text("copy_project_info"), self._copy_project_info)
+        tools_menu.addAction(self._text("recent_project_files"), self._show_recent_project_files)
+        tools_menu.addAction(self._text("export_archive_files"), self._export_archive_files)
+        tools_menu.addAction(self._text("archive_project_size"), self._compare_archive_project_size)
+        tools_menu.addAction(self._text("archive_age"), self._show_archive_age)
+        tools_menu.addAction(self._text("copy_project_files_json"), self._copy_project_files_json)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2071,6 +2086,67 @@ class MainWindow(QMainWindow):
         }
         QApplication.clipboard().setText(json.dumps(info, ensure_ascii=False, indent=2))
         self.statusBar().showMessage(self._text("copy_project_info"))
+
+    def _show_recent_project_files(self) -> None:
+        if not self.manager:
+            return
+        files = sorted(self.manager.list_files(), key=lambda path: path.stat().st_mtime, reverse=True)[:20]
+        body = "\n".join(
+            f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='minutes')}  {path.relative_to(self.manager.project_dir)}"
+            for path in files
+        )
+        QMessageBox.information(self, self._text("recent_project_files"), body or "None")
+
+    def _export_archive_files(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_archive_files"), "archive-files.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with zipfile.ZipFile(archive) as stream, Path(destination).open("w", newline="", encoding="utf-8") as output:
+            writer = csv.writer(output)
+            writer.writerow(["path", "compressed_bytes", "uncompressed_bytes"])
+            writer.writerows(
+                [item.filename, item.compress_size, item.file_size] for item in stream.infolist() if not item.is_dir()
+            )
+        self.statusBar().showMessage(str(destination))
+
+    def _compare_archive_project_size(self) -> None:
+        archive = self._selected_archive()
+        if not archive or not self.manager:
+            return
+        project_size = sum(path.stat().st_size for path in self.manager.list_files())
+        QMessageBox.information(
+            self,
+            self._text("archive_project_size"),
+            f"Project: {format_bytes(project_size)}\nArchive: {format_bytes(archive.stat().st_size)}",
+        )
+
+    def _show_archive_age(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        age = max(0, time.time() - archive.stat().st_mtime)
+        QMessageBox.information(self, self._text("archive_age"), f"{archive.name}\nAge: {age / 86400:.1f} days")
+
+    def _copy_project_files_json(self) -> None:
+        if not self.manager:
+            return
+        files = [
+            {
+                "path": str(path.relative_to(self.manager.project_dir)),
+                "bytes": path.stat().st_size,
+                "modified": path.stat().st_mtime,
+            }
+            for path in self.manager.list_files()
+        ]
+        QApplication.clipboard().setText(
+            json.dumps({"project": str(self.manager.project_dir), "files": files}, ensure_ascii=False, indent=2)
+        )
+        self.statusBar().showMessage(self._text("copy_project_files_json"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

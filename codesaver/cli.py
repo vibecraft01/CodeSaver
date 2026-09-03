@@ -188,6 +188,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-branches", action="store_true", help="List local Git branches")
     parser.add_argument("--backup-sizes", action="store_true", help="Show backup sizes sorted largest first")
     parser.add_argument("--archive-paths", type=Path, metavar="ARCHIVE", help="Export archive paths as JSON")
+    parser.add_argument("--project-digest-report", type=Path, metavar="FILE", help="Write per-file digest report JSON")
+    parser.add_argument(
+        "--archive-compression", type=Path, metavar="ARCHIVE", help="Report archive compression savings"
+    )
+    parser.add_argument("--git-staged-files", action="store_true", help="List files staged in Git")
+    parser.add_argument("--file-permissions", action="store_true", help="Report project file permission bits")
+    parser.add_argument("--backup-latest-size", action="store_true", help="Compare newest backup with project size")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1256,6 +1263,94 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps({"operation": "archive-paths", "file": str(args.archive_paths), "count": len(archives)})
                 if args.json
                 else str(args.archive_paths)
+            )
+        elif args.project_digest_report:
+            entries = []
+            for path in manager.list_files():
+                try:
+                    entries.append(
+                        {
+                            "path": str(path.relative_to(manager.project_dir)),
+                            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                        }
+                    )
+                except OSError:
+                    continue
+            args.project_digest_report.parent.mkdir(parents=True, exist_ok=True)
+            args.project_digest_report.write_text(
+                json.dumps({"project": str(manager.project_dir), "files": entries}, ensure_ascii=False, indent=2)
+                + "\n",
+                encoding="utf-8",
+            )
+            print(
+                json.dumps(
+                    {
+                        "operation": "project-digest-report",
+                        "file": str(args.project_digest_report),
+                        "files": len(entries),
+                    }
+                )
+                if args.json
+                else str(args.project_digest_report)
+            )
+        elif args.archive_compression:
+            import zipfile
+
+            with zipfile.ZipFile(args.archive_compression) as archive:
+                original = sum(item.file_size for item in archive.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in archive.infolist() if not item.is_dir())
+            saved = max(0, original - stored)
+            result = {
+                "operation": "archive-compression",
+                "archive": str(args.archive_compression),
+                "original_bytes": original,
+                "stored_bytes": stored,
+                "saved_bytes": saved,
+            }
+            print(
+                json.dumps(result)
+                if args.json
+                else f"Original: {_format_bytes(original)}\nStored: {_format_bytes(stored)}\nSaved: {_format_bytes(saved)}"
+            )
+        elif args.git_staged_files:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "diff", "--cached", "--name-only"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            files = [line for line in completed.stdout.splitlines() if line]
+            result = {"operation": "git-staged-files", "files": files}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(files))
+        elif args.file_permissions:
+            files = [
+                {"path": str(path.relative_to(manager.project_dir)), "mode": oct(path.stat().st_mode & 0o777)}
+                for path in manager.list_files()
+            ]
+            result = {"operation": "file-permissions", "files": files}
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{item['mode']}  {item['path']}" for item in files)
+            )
+        elif args.backup_latest_size:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+            latest = archives[-1] if archives else None
+            project_size = sum(path.stat().st_size for path in manager.list_files())
+            result = {
+                "operation": "backup-latest-size",
+                "archive": str(latest) if latest else None,
+                "project_bytes": project_size,
+                "archive_bytes": latest.stat().st_size if latest else 0,
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else (
+                    f"Project: {_format_bytes(project_size)}\nLatest backup: {_format_bytes(result['archive_bytes'])}"
+                    if latest
+                    else "No backups"
+                )
             )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()

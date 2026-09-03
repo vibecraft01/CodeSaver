@@ -4,6 +4,22 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.1] - 2026-09-03
+
+- Added per-file digest report export.
+- Added archive compression-savings report.
+- Added staged Git-file listing.
+- Added project permission report.
+- Added newest-backup size comparison.
+
+## [Desktop 1.2.8] - 2026-09-03
+
+- Added recently modified project-file view.
+- Added archive-member CSV export.
+- Added archive/project size comparison.
+- Added selected archive age display.
+- Added project file-inventory JSON copying.
+
 ## [CLI 1.4.0] - 2026-09-02
 
 - Added deterministic project checksum export.
