@@ -97,7 +97,7 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.2.7` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.2.8` is a graphical alternative for developers who prefer a visual workflow. It includes:
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -144,6 +144,7 @@ CodeSaver Desktop `1.2.7` is a graphical alternative for developers who prefer a
 - Project tools for CSV file inventory, exclusion review, symlink scanning, Git context copying, and configuration access.
 - File-type inventory, stale-file detection, total archive storage, Git-tag viewing, and clipboard backup-index export.
 - Archive compression-ratio inspection, timeline CSV export, project file-list copying, archive member dates, and project-info JSON copying.
+- Recently modified-file view, archive-member CSV export, archive/project size comparison, archive age display, and project inventory JSON copying.
 - Open the current Git diff, refresh analysis, and pause/resume autosave from dedicated actions.
 - No API keys or external services.
 
