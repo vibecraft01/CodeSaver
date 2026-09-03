@@ -9,20 +9,20 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | [**1.4.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.4.1) | Python 3.9+ | Updated 2026-09-03 |
-| CodeSaver Desktop | [**1.2.8**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.8) | Python 3.10+ with PyQt5 | Updated 2026-09-03 |
+| CodeSaver Desktop | [**1.2.9**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.9) | Python 3.10+ with PyQt5 | Updated 2026-09-03 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
 ## Impact snapshot
 
-GitHub repository snapshot for **1 September 2026**:
+GitHub repository snapshot for **2 September 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 2,428 |
+| Git clones (last 14 days) | 2,485 |
 | Unique cloners | 150 |
-| Repository views | 1,094 |
-| Unique visitors | 19 |
+| Repository views | 1,084 |
+| Unique visitors | 20 |
 | GitHub stars | 8 |
 | Public releases | 56 |
 | Commits | 122 |
@@ -97,7 +97,8 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.2.8` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.2.9` is a graphical alternative for developers who prefer a visual workflow. It includes:
+- Archive extension summary, project-size CSV export, backup-summary JSON copying, duplicate archive-member detection, and restore-preview copying.
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.

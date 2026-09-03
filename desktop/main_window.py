@@ -326,6 +326,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_project_size": "Compare archive and project size",
     "archive_age": "Show selected archive age",
     "copy_project_files_json": "Copy project file inventory JSON",
+    "archive_extensions": "Show archive extensions",
+    "export_project_sizes": "Export project sizes CSV",
+    "copy_backup_summary": "Copy backup summary JSON",
+    "archive_duplicates": "Find duplicate archive members",
+    "copy_restore_preview": "Copy restore preview",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -424,6 +429,11 @@ TEXT["ru"].update(
         "archive_project_size": "Сравнить размер архива и проекта",
         "archive_age": "Показать возраст выбранного архива",
         "copy_project_files_json": "Копировать JSON-инвентаризацию проекта",
+        "archive_extensions": "Показать расширения архива",
+        "export_project_sizes": "Экспортировать размеры проекта CSV",
+        "copy_backup_summary": "Копировать сводку бэкапов JSON",
+        "archive_duplicates": "Найти дубликаты файлов в архиве",
+        "copy_restore_preview": "Копировать предпросмотр восстановления",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -722,6 +732,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_project_size"), self._compare_archive_project_size)
         tools_menu.addAction(self._text("archive_age"), self._show_archive_age)
         tools_menu.addAction(self._text("copy_project_files_json"), self._copy_project_files_json)
+        tools_menu.addAction(self._text("archive_extensions"), self._show_archive_extensions)
+        tools_menu.addAction(self._text("export_project_sizes"), self._export_project_sizes)
+        tools_menu.addAction(self._text("copy_backup_summary"), self._copy_backup_summary)
+        tools_menu.addAction(self._text("archive_duplicates"), self._find_archive_duplicates)
+        tools_menu.addAction(self._text("copy_restore_preview"), self._copy_restore_preview)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2147,6 +2162,73 @@ class MainWindow(QMainWindow):
             json.dumps({"project": str(self.manager.project_dir), "files": files}, ensure_ascii=False, indent=2)
         )
         self.statusBar().showMessage(self._text("copy_project_files_json"))
+
+    def _show_archive_extensions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            extensions = sorted(
+                {
+                    Path(item.filename).suffix.lower() or "[no extension]"
+                    for item in stream.infolist()
+                    if not item.is_dir()
+                }
+            )
+        QMessageBox.information(self, self._text("archive_extensions"), "\n".join(extensions) or "None")
+
+    def _export_project_sizes(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_project_sizes"), "project-sizes.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["path", "bytes"])
+            writer.writerows(
+                [str(path.relative_to(self.manager.project_dir)), path.stat().st_size]
+                for path in self.manager.list_files()
+            )
+        self.statusBar().showMessage(str(destination))
+
+    def _copy_backup_summary(self) -> None:
+        if not self.manager:
+            return
+        archives = list(self.manager.backup_dir.glob("*.zip"))
+        summary = {
+            "project": str(self.manager.project_dir),
+            "count": len(archives),
+            "bytes": sum(path.stat().st_size for path in archives),
+        }
+        QApplication.clipboard().setText(json.dumps(summary, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("copy_backup_summary"))
+
+    def _find_archive_duplicates(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            groups: dict[str, list[str]] = {}
+            for item in stream.infolist():
+                if not item.is_dir():
+                    groups.setdefault(hashlib.sha256(stream.read(item)).hexdigest(), []).append(item.filename)
+        duplicates = ["\n".join(paths) for paths in groups.values() if len(paths) > 1]
+        QMessageBox.information(self, self._text("archive_duplicates"), "\n\n".join(duplicates) or "None")
+
+    def _copy_restore_preview(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            preview = {
+                "archive": str(archive),
+                "files": [item.filename for item in stream.infolist() if not item.is_dir()],
+            }
+        QApplication.clipboard().setText(json.dumps(preview, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("copy_restore_preview"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

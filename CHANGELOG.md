@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.2.9] - 2026-09-03
+
+- Added archive extension summary.
+- Added project-size CSV export.
+- Added backup-summary JSON copying.
+- Added duplicate archive-member detection.
+- Added restore-preview copying.
+
 ## [CLI 1.4.1] - 2026-09-03
 
 - Added per-file digest report export.
