@@ -15,6 +15,8 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 ## Impact snapshot
 
+The traffic metrics below use GitHub's rolling **14-day window**. They are not lifetime totals: each day, the oldest day leaves the window and the newest day is added, so values can rise or fall.
+
 GitHub repository snapshot for **3 September 2026**:
 
 | Metric | Value |
