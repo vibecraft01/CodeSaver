@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.3.0] - 2026-09-04 (local)
+
+- Added archive health CSV export.
+- Added project-directory overview.
+- Added one-click Git commit-history copying.
+- Added archive compression report CSV export.
+- Added backup age map.
+
 ## [CLI 1.4.2] - 2026-09-03
 
 - Added project tree JSON export.
