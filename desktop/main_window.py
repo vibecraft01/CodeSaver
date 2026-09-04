@@ -331,6 +331,11 @@ _DESKTOP_1_2_1_TEXT = {
     "copy_backup_summary": "Copy backup summary JSON",
     "archive_duplicates": "Find duplicate archive members",
     "copy_restore_preview": "Copy restore preview",
+    "archive_health_csv": "Export archive health CSV",
+    "project_dirs": "Show project directories",
+    "git_log_copy": "Copy Git commit history",
+    "archive_ratio_csv": "Export compression report CSV",
+    "backup_age_map": "Show backup age map",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -434,6 +439,11 @@ TEXT["ru"].update(
         "copy_backup_summary": "Копировать сводку бэкапов JSON",
         "archive_duplicates": "Найти дубликаты файлов в архиве",
         "copy_restore_preview": "Копировать предпросмотр восстановления",
+        "archive_health_csv": "Экспортировать здоровье архивов CSV",
+        "project_dirs": "Показать папки проекта",
+        "git_log_copy": "Копировать историю коммитов Git",
+        "archive_ratio_csv": "Экспортировать отчёт сжатия CSV",
+        "backup_age_map": "Показать возраст бэкапов",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -737,6 +747,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("copy_backup_summary"), self._copy_backup_summary)
         tools_menu.addAction(self._text("archive_duplicates"), self._find_archive_duplicates)
         tools_menu.addAction(self._text("copy_restore_preview"), self._copy_restore_preview)
+        tools_menu.addAction(self._text("archive_health_csv"), self._export_archive_health_csv)
+        tools_menu.addAction(self._text("project_dirs"), self._show_project_dirs)
+        tools_menu.addAction(self._text("git_log_copy"), self._copy_git_log)
+        tools_menu.addAction(self._text("archive_ratio_csv"), self._export_archive_ratio_csv)
+        tools_menu.addAction(self._text("backup_age_map"), self._show_backup_age_map)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2229,6 +2244,74 @@ class MainWindow(QMainWindow):
             }
         QApplication.clipboard().setText(json.dumps(preview, ensure_ascii=False, indent=2))
         self.statusBar().showMessage(self._text("copy_restore_preview"))
+
+    def _export_archive_health_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_health_csv"), "archive-health.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "ok", "files", "error"])
+            for archive, _date, _size in archive_details(self.manager.backup_dir):
+                try:
+                    writer.writerow([archive.name, True, self.manager.verify_backup(archive), ""])
+                except (BackupError, OSError, ValueError) as exc:
+                    writer.writerow([archive.name, False, 0, str(exc)])
+        self.statusBar().showMessage(str(destination))
+
+    def _show_project_dirs(self) -> None:
+        if not self.manager:
+            return
+        dirs = sorted(
+            {
+                str(path.parent.relative_to(self.manager.project_dir))
+                for path in self.manager.list_files()
+                if path.parent != self.manager.project_dir
+            }
+        )
+        QMessageBox.information(self, self._text("project_dirs"), "\n".join(dirs) or ".")
+
+    def _copy_git_log(self) -> None:
+        if not self.manager:
+            return
+        result = subprocess.run(
+            ["git", "-C", str(self.manager.project_dir), "log", "-10", "--pretty=format:%h %ad %s", "--date=short"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        QApplication.clipboard().setText(result.stdout)
+        self.statusBar().showMessage(self._text("git_log_copy"))
+
+    def _export_archive_ratio_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_ratio_csv"), "archive-compression.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "uncompressed_bytes", "stored_bytes", "saved_bytes"])
+            for archive, _date, _size in archive_details(self.manager.backup_dir):
+                with zipfile.ZipFile(archive) as source:
+                    original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+                    stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+                writer.writerow([archive.name, original, stored, max(0, original - stored)])
+        self.statusBar().showMessage(str(destination))
+
+    def _show_backup_age_map(self) -> None:
+        if not self.manager:
+            return
+        now = time.time()
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        body = "\n".join(f"{path.name}: {(now - path.stat().st_mtime) / 86400:.1f} days" for path in archives)
+        QMessageBox.information(self, self._text("backup_age_map"), body or "None")
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
