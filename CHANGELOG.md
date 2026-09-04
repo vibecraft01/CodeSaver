@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.4] - 2026-09-04
+
+- Added backup-name listing for scripts and audits.
+- Added project/backup storage-path reporting.
+- Added runtime environment JSON diagnostics.
+- Added project-tree CSV export.
+- Added archive-manifest CSV export.
+
 ## [Desktop 1.3.1] - 2026-09-04
 
 - Added TXT export of backup names.

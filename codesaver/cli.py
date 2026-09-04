@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import logging
+import platform
 from pathlib import Path
 import subprocess
 import shutil
@@ -14,6 +15,7 @@ import sys
 import threading
 import time
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -180,6 +182,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-remotes-json", action="store_true", help="Export configured Git remotes as JSON")
     parser.add_argument("--git-diff-file", type=Path, metavar="FILE", help="Write the current Git diff to a file")
     parser.add_argument("--archive-dates", type=Path, metavar="ARCHIVE", help="Show archive member timestamps")
+    parser.add_argument("--backup-names", action="store_true", help="List backup archive names")
+    parser.add_argument("--storage-paths", action="store_true", help="Show project and backup paths")
+    parser.add_argument("--environment-json", action="store_true", help="Show the runtime environment as JSON")
+    parser.add_argument("--project-tree-csv", type=Path, metavar="FILE", help="Export the project tree as CSV")
+    parser.add_argument("--archive-manifest-csv", type=Path, metavar="ARCHIVE", help="Export archive members as CSV")
     parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
     parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
@@ -1193,6 +1200,57 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.json
                 else "\n".join(f"{item['modified']}  {item['path']}" for item in entries)
             )
+        elif args.backup_names:
+            names = sorted(path.name for path in manager.backup_dir.glob("*.zip"))
+            result = {"operation": "backup-names", "backups": names}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(names))
+        elif args.storage_paths:
+            result = {
+                "operation": "storage-paths",
+                "project": str(manager.project_dir),
+                "backup": str(manager.backup_dir),
+            }
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else f"Project: {result['project']}\nBackups: {result['backup']}"
+            )
+        elif args.environment_json:
+            result = {
+                "operation": "environment",
+                "codesaver": __version__,
+                "python": sys.version.split()[0],
+                "platform": platform.platform(),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.project_tree_csv:
+            target = args.project_tree_csv.expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("path", "bytes", "modified_utc"))
+                for path in sorted(manager.list_files()):
+                    stat = path.stat()
+                    writer.writerow(
+                        (
+                            str(path.relative_to(manager.project_dir)),
+                            stat.st_size,
+                            datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                        )
+                    )
+            print(json.dumps({"operation": "project-tree-csv", "file": str(target)}) if args.json else str(target))
+        elif args.archive_manifest_csv:
+            archive_path = args.archive_manifest_csv.expanduser()
+            target = archive_path.with_suffix(".csv")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(archive_path) as archive, target.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("path", "bytes", "compressed_bytes", "modified"))
+                for info in archive.infolist():
+                    writer.writerow(
+                        (info.filename, info.file_size, info.compress_size, datetime(*info.date_time).isoformat())
+                    )
+            print(json.dumps({"operation": "archive-manifest-csv", "file": str(target)}) if args.json else str(target))
         elif args.backup_count_by_day:
             counts: dict[str, int] = {}
             for path in manager.backup_dir.glob("*.zip"):
