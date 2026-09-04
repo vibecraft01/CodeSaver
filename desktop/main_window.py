@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import hashlib
 import platform
+import sys
 import subprocess
 import csv
 from collections import Counter
@@ -336,6 +337,11 @@ _DESKTOP_1_2_1_TEXT = {
     "git_log_copy": "Copy Git commit history",
     "archive_ratio_csv": "Export compression report CSV",
     "backup_age_map": "Show backup age map",
+    "backup_names_txt": "Export backup names TXT",
+    "paths_summary": "Show storage paths",
+    "copy_environment": "Copy environment summary",
+    "project_tree_csv": "Export project tree CSV",
+    "archive_manifest_csv": "Export archive manifest CSV",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -444,6 +450,11 @@ TEXT["ru"].update(
         "git_log_copy": "Копировать историю коммитов Git",
         "archive_ratio_csv": "Экспортировать отчёт сжатия CSV",
         "backup_age_map": "Показать возраст бэкапов",
+        "backup_names_txt": "Экспортировать имена бэкапов TXT",
+        "paths_summary": "Показать пути хранения",
+        "copy_environment": "Копировать сведения о среде",
+        "project_tree_csv": "Экспортировать дерево проекта CSV",
+        "archive_manifest_csv": "Экспортировать манифест архива CSV",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -752,6 +763,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("git_log_copy"), self._copy_git_log)
         tools_menu.addAction(self._text("archive_ratio_csv"), self._export_archive_ratio_csv)
         tools_menu.addAction(self._text("backup_age_map"), self._show_backup_age_map)
+        tools_menu.addAction(self._text("backup_names_txt"), self._export_backup_names_txt)
+        tools_menu.addAction(self._text("paths_summary"), self._show_paths_summary)
+        tools_menu.addAction(self._text("copy_environment"), self._copy_environment_summary)
+        tools_menu.addAction(self._text("project_tree_csv"), self._export_project_tree_csv)
+        tools_menu.addAction(self._text("archive_manifest_csv"), self._export_archive_manifest_csv)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2312,6 +2328,71 @@ class MainWindow(QMainWindow):
         archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
         body = "\n".join(f"{path.name}: {(now - path.stat().st_mtime) / 86400:.1f} days" for path in archives)
         QMessageBox.information(self, self._text("backup_age_map"), body or "None")
+
+    def _export_backup_names_txt(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_names_txt"), "backup-names.txt", "Text files (*.txt)"
+        )
+        if destination:
+            names = sorted(path.name for path in self.manager.backup_dir.glob("*.zip"))
+            Path(destination).write_text("\n".join(names) + ("\n" if names else ""), encoding="utf-8")
+            self.statusBar().showMessage(str(destination))
+
+    def _show_paths_summary(self) -> None:
+        if self.manager:
+            QMessageBox.information(
+                self,
+                self._text("paths_summary"),
+                f"Project: {self.manager.project_dir}\nBackups: {self.manager.backup_dir}",
+            )
+
+    def _copy_environment_summary(self) -> None:
+        if self.manager:
+            body = f"CodeSaver Desktop {__version__}\nPython: {sys.version.split()[0]}\nPlatform: {platform.platform()}\nProject: {self.manager.project_dir}"
+            QApplication.clipboard().setText(body)
+            self.statusBar().showMessage(self._text("copy_environment"))
+
+    def _export_project_tree_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("project_tree_csv"), "project-tree.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["path", "bytes", "modified"])
+                for path in sorted(self.manager.list_files()):
+                    writer.writerow(
+                        [
+                            str(path.relative_to(self.manager.project_dir)),
+                            path.stat().st_size,
+                            datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                        ]
+                    )
+            self.statusBar().showMessage(str(destination))
+
+    def _export_archive_manifest_csv(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_manifest_csv"), "archive-manifest.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with (
+                zipfile.ZipFile(archive) as source,
+                Path(destination).open("w", newline="", encoding="utf-8") as stream,
+            ):
+                writer = csv.writer(stream)
+                writer.writerow(["path", "bytes", "compressed_bytes", "modified"])
+                for item in source.infolist():
+                    writer.writerow(
+                        [item.filename, item.file_size, item.compress_size, datetime(*item.date_time).isoformat()]
+                    )
+            self.statusBar().showMessage(str(destination))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

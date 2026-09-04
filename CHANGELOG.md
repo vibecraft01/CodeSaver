@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.3.1] - 2026-09-04
+
+- Added TXT export of backup names.
+- Added storage-path summary.
+- Added copyable environment summary for support reports.
+- Added CSV project-tree export.
+- Added CSV archive-manifest export.
+
 ## [CLI 1.4.3] - 2026-09-04
 
 - Added the latest tested CLI project and archive inspection tools.
