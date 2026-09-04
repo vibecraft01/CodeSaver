@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.3] - 2026-09-04
+
+- Added the latest tested CLI project and archive inspection tools.
+- Included cross-platform release artifacts and source archives.
+
 ## [Desktop 1.3.0] - 2026-09-04 (local)
 
 - Added archive health CSV export.
