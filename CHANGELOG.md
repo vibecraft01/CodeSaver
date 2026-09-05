@@ -4,6 +4,15 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.3.2] - 2026-09-05
+
+- Added backup counts by calendar day.
+- Added one-click copying of the latest backup path.
+- Added project extension summary CSV export.
+- Added archive dates CSV export.
+- Added backup-storage write-access check.
+- Added project file-count summary.
+
 ## [CLI 1.4.4] - 2026-09-04
 
 - Added backup-name listing for scripts and audits.

@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | [**1.4.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.4.4) | Python 3.9+ | Updated 2026-09-04 |
-| CodeSaver Desktop | [**1.3.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.3.1) | Python 3.10+ with PyQt5 | Updated 2026-09-04 |
+| CodeSaver Desktop | [**1.3.2**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.3.2) | Python 3.10+ with PyQt5 | Updated 2026-09-05 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -17,19 +17,37 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 The traffic metrics below use GitHub's rolling **14-day window**. They are not lifetime totals: each day, the oldest day leaves the window and the newest day is added, so values can rise or fall.
 
-GitHub repository snapshot for **3 September 2026**:
+GitHub repository snapshot for **4 September 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 2,517 |
-| Unique cloners | 154 |
-| Repository views | 997 |
+| Git clones (last 14 days) | 2,581 |
+| Unique cloners | 153 |
+| Repository views | 989 |
 | Unique visitors | 19 |
 | GitHub stars | 8 |
-| Public releases | 66 |
-| Commits | 139 |
+| Public releases | 56 |
+| Commits | 122 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
+
+### Traffic sources
+
+| Site | Views | Unique visitors |
+| --- | ---: | ---: |
+| github.com | 142 | 11 |
+| Google | 2 | 1 |
+
+### Popular content
+
+| Page | Views | Unique visitors |
+| --- | ---: | ---: |
+| [Overview](https://github.com/vibecraft01/CodeSaver) | 395 | 14 |
+| [/releases](https://github.com/vibecraft01/CodeSaver/releases) | 157 | 9 |
+| [/graphs/traffic](https://github.com/vibecraft01/CodeSaver/graphs/traffic) | 94 | 1 |
+| [/pulse](https://github.com/vibecraft01/CodeSaver/pulse) | 68 | 2 |
+| [/edit/main/README.md](https://github.com/vibecraft01/CodeSaver/edit/main/README.md) | 44 | 1 |
+| [/blob/main/README.md](https://github.com/vibecraft01/CodeSaver/blob/main/README.md) | 40 | 1 |
 
 ## Features
 

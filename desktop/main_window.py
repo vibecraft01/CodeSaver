@@ -342,6 +342,12 @@ _DESKTOP_1_2_1_TEXT = {
     "copy_environment": "Copy environment summary",
     "project_tree_csv": "Export project tree CSV",
     "archive_manifest_csv": "Export archive manifest CSV",
+    "backup_day_counts": "Show backups by day",
+    "latest_backup_path": "Copy latest backup path",
+    "project_extensions_csv": "Export extension summary CSV",
+    "archive_dates_csv": "Export archive dates CSV",
+    "storage_write_check": "Check storage write access",
+    "project_file_count": "Show project file count",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -455,6 +461,12 @@ TEXT["ru"].update(
         "copy_environment": "Копировать сведения о среде",
         "project_tree_csv": "Экспортировать дерево проекта CSV",
         "archive_manifest_csv": "Экспортировать манифест архива CSV",
+        "backup_day_counts": "Показать бэкапы по дням",
+        "latest_backup_path": "Копировать путь последнего бэкапа",
+        "project_extensions_csv": "Экспортировать сводку расширений CSV",
+        "archive_dates_csv": "Экспортировать даты архивов CSV",
+        "storage_write_check": "Проверить запись в хранилище",
+        "project_file_count": "Показать количество файлов проекта",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -768,6 +780,12 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("copy_environment"), self._copy_environment_summary)
         tools_menu.addAction(self._text("project_tree_csv"), self._export_project_tree_csv)
         tools_menu.addAction(self._text("archive_manifest_csv"), self._export_archive_manifest_csv)
+        tools_menu.addAction(self._text("backup_day_counts"), self._show_backup_day_counts)
+        tools_menu.addAction(self._text("latest_backup_path"), self._copy_latest_backup_path)
+        tools_menu.addAction(self._text("project_extensions_csv"), self._export_project_extensions_csv)
+        tools_menu.addAction(self._text("archive_dates_csv"), self._export_archive_dates_csv)
+        tools_menu.addAction(self._text("storage_write_check"), self._check_storage_write)
+        tools_menu.addAction(self._text("project_file_count"), self._show_project_file_count)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2393,6 +2411,81 @@ class MainWindow(QMainWindow):
                         [item.filename, item.file_size, item.compress_size, datetime(*item.date_time).isoformat()]
                     )
             self.statusBar().showMessage(str(destination))
+
+    def _show_backup_day_counts(self) -> None:
+        if not self.manager:
+            return
+        counts: dict[str, int] = {}
+        for path in self.manager.backup_dir.glob("*.zip"):
+            day = datetime.fromtimestamp(path.stat().st_mtime).date().isoformat()
+            counts[day] = counts.get(day, 0) + 1
+        QMessageBox.information(
+            self,
+            self._text("backup_day_counts"),
+            "\n".join(f"{day}: {count}" for day, count in sorted(counts.items())) or "None",
+        )
+
+    def _copy_latest_backup_path(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        if archives:
+            QApplication.clipboard().setText(str(archives[0]))
+            self.statusBar().showMessage(str(archives[0]))
+
+    def _export_project_extensions_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("project_extensions_csv"), "project-extensions.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        totals: dict[str, list[int]] = {}
+        for path in self.manager.list_files():
+            key = path.suffix.lower() or "[no extension]"
+            item = totals.setdefault(key, [0, 0])
+            item[0] += 1
+            item[1] += path.stat().st_size
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["extension", "files", "bytes"])
+            writer.writerows([key, values[0], values[1]] for key, values in sorted(totals.items()))
+        self.statusBar().showMessage(str(destination))
+
+    def _export_archive_dates_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_dates_csv"), "archive-dates.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "modified", "bytes"])
+            for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                writer.writerow(
+                    [path.name, datetime.fromtimestamp(path.stat().st_mtime).isoformat(), path.stat().st_size]
+                )
+        self.statusBar().showMessage(str(destination))
+
+    def _check_storage_write(self) -> None:
+        if not self.manager:
+            return
+        try:
+            self.manager.backup_dir.mkdir(parents=True, exist_ok=True)
+            probe = self.manager.backup_dir / ".codesaver-write-check"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            result = "OK"
+        except OSError as exc:
+            result = str(exc)
+        QMessageBox.information(self, self._text("storage_write_check"), result)
+
+    def _show_project_file_count(self) -> None:
+        if self.manager:
+            QMessageBox.information(self, self._text("project_file_count"), str(len(self.manager.list_files())))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
