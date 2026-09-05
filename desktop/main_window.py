@@ -348,6 +348,13 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_dates_csv": "Export archive dates CSV",
     "storage_write_check": "Check storage write access",
     "project_file_count": "Show project file count",
+    "backup_list_csv": "Export backup list CSV",
+    "project_root_copy": "Copy project root",
+    "latest_backup_info": "Show latest backup info",
+    "backup_extensions": "Show backup extensions",
+    "archive_names_copy": "Copy archive names",
+    "project_depth": "Show project depth",
+    "version_copy": "Copy Desktop version",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -467,6 +474,13 @@ TEXT["ru"].update(
         "archive_dates_csv": "Экспортировать даты архивов CSV",
         "storage_write_check": "Проверить запись в хранилище",
         "project_file_count": "Показать количество файлов проекта",
+        "backup_list_csv": "Экспортировать список бэкапов CSV",
+        "project_root_copy": "Копировать корень проекта",
+        "latest_backup_info": "Показать сведения о последнем бэкапе",
+        "backup_extensions": "Показать расширения в бэкапах",
+        "archive_names_copy": "Копировать имена архивов",
+        "project_depth": "Показать глубину проекта",
+        "version_copy": "Копировать версию Desktop",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -786,6 +800,13 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_dates_csv"), self._export_archive_dates_csv)
         tools_menu.addAction(self._text("storage_write_check"), self._check_storage_write)
         tools_menu.addAction(self._text("project_file_count"), self._show_project_file_count)
+        tools_menu.addAction(self._text("backup_list_csv"), self._export_backup_list_csv)
+        tools_menu.addAction(self._text("project_root_copy"), self._copy_project_root)
+        tools_menu.addAction(self._text("latest_backup_info"), self._show_latest_backup_info)
+        tools_menu.addAction(self._text("backup_extensions"), self._show_backup_extensions)
+        tools_menu.addAction(self._text("archive_names_copy"), self._copy_archive_names)
+        tools_menu.addAction(self._text("project_depth"), self._show_project_depth)
+        tools_menu.addAction(self._text("version_copy"), self._copy_desktop_version)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2486,6 +2507,69 @@ class MainWindow(QMainWindow):
     def _show_project_file_count(self) -> None:
         if self.manager:
             QMessageBox.information(self, self._text("project_file_count"), str(len(self.manager.list_files())))
+
+    def _export_backup_list_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_list_csv"), "backups.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["archive", "bytes", "modified"])
+                for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                    writer.writerow(
+                        [path.name, path.stat().st_size, datetime.fromtimestamp(path.stat().st_mtime).isoformat()]
+                    )
+            self.statusBar().showMessage(str(destination))
+
+    def _copy_project_root(self) -> None:
+        if self.manager:
+            QApplication.clipboard().setText(str(self.manager.project_dir))
+            self.statusBar().showMessage(str(self.manager.project_dir))
+
+    def _show_latest_backup_info(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        if archives:
+            path = archives[0]
+            body = f"{path.name}\nSize: {path.stat().st_size} bytes\nModified: {datetime.fromtimestamp(path.stat().st_mtime).isoformat()}"
+        else:
+            body = "None"
+        QMessageBox.information(self, self._text("latest_backup_info"), body)
+
+    def _show_backup_extensions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as source:
+            extensions = sorted(
+                {
+                    Path(item.filename).suffix.lower() or "[no extension]"
+                    for item in source.infolist()
+                    if not item.is_dir()
+                }
+            )
+        QMessageBox.information(self, self._text("backup_extensions"), "\n".join(extensions) or "None")
+
+    def _copy_archive_names(self) -> None:
+        if self.manager:
+            names = sorted(path.name for path in self.manager.backup_dir.glob("*.zip"))
+            QApplication.clipboard().setText("\n".join(names))
+            self.statusBar().showMessage(self._text("archive_names_copy"))
+
+    def _show_project_depth(self) -> None:
+        if self.manager:
+            depth = max(
+                (len(path.relative_to(self.manager.project_dir).parts) for path in self.manager.list_files()), default=0
+            )
+            QMessageBox.information(self, self._text("project_depth"), str(depth))
+
+    def _copy_desktop_version(self) -> None:
+        QApplication.clipboard().setText(__version__)
+        self.statusBar().showMessage(__version__)
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

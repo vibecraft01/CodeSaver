@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.3.3] - 2026-09-05
+
+- Added backup-list CSV export.
+- Added project-root copying and latest-backup details.
+- Added archive-extension inspection and archive-name copying.
+- Added project-depth display and Desktop-version copying.
+
 ## [CLI 1.4.5] - 2026-09-05
 
 - Added backup age-map output.
