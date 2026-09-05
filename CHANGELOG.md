@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.6] - 2026-09-05
+
+- Added backup archive count output.
+- Added project file count output.
+- Added latest-backup size JSON output.
+
 ## [Desktop 1.3.3] - 2026-09-05
 
 - Added backup-list CSV export.

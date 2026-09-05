@@ -192,6 +192,9 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-health-csv", type=Path, metavar="FILE", help="Export archive health as CSV")
     parser.add_argument("--archive-ratio-report", type=Path, metavar="ARCHIVE", help="Report archive compression ratio")
     parser.add_argument("--latest-backup-json", action="store_true", help="Export the latest backup metadata as JSON")
+    parser.add_argument("--backup-count", action="store_true", help="Show the number of backup archives")
+    parser.add_argument("--project-file-count", action="store_true", help="Show the number of project files")
+    parser.add_argument("--latest-backup-size-json", action="store_true", help="Show latest backup size as JSON")
     parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
     parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
@@ -1339,6 +1342,23 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "archive": str(latest) if latest else None,
                 "bytes": latest.stat().st_size if latest else 0,
                 "modified": latest.stat().st_mtime if latest else None,
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.backup_count:
+            count = len(list(manager.backup_dir.glob("*.zip")))
+            result = {"operation": "backup-count", "count": count}
+            print(json.dumps(result) if args.json else str(count))
+        elif args.project_file_count:
+            count = len(manager.list_files())
+            result = {"operation": "project-file-count", "count": count}
+            print(json.dumps(result) if args.json else str(count))
+        elif args.latest_backup_size_json:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+            latest = archives[0] if archives else None
+            result = {
+                "operation": "latest-backup-size",
+                "archive": str(latest) if latest else None,
+                "bytes": latest.stat().st_size if latest else 0,
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.backup_count_by_day:
