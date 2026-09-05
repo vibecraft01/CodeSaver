@@ -15,7 +15,6 @@ import sys
 import threading
 import time
 import tempfile
-import zipfile
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -1326,7 +1325,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 json.dumps(result, ensure_ascii=False, indent=2)
                 if args.json
-                else f"Uncompressed: {_format_bytes(original)}\nCompressed: {_format_bytes(stored)}\nSaved: {_format_bytes(result['saved_bytes'])}"
+                else (
+                    f"Uncompressed: {_format_bytes(original)}\n"
+                    f"Compressed: {_format_bytes(stored)}\n"
+                    f"Saved: {_format_bytes(result['saved_bytes'])}"
+                )
             )
         elif args.latest_backup_json:
             archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -1460,7 +1463,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 json.dumps(result)
                 if args.json
-                else f"Original: {_format_bytes(original)}\nStored: {_format_bytes(stored)}\nSaved: {_format_bytes(saved)}"
+                else (
+                    f"Original: {_format_bytes(original)}\n"
+                    f"Stored: {_format_bytes(stored)}\n"
+                    f"Saved: {_format_bytes(saved)}"
+                )
             )
         elif args.git_staged_files:
             completed = subprocess.run(
