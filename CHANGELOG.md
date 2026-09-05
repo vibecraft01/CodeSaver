@@ -4,6 +4,15 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.5] - 2026-09-05
+
+- Added backup age-map output.
+- Added project-directory listing.
+- Added JSON Git history export.
+- Added archive health CSV export.
+- Added archive compression-ratio reporting.
+- Added latest-backup metadata JSON output.
+
 ## [Desktop 1.3.2] - 2026-09-05
 
 - Added backup counts by calendar day.

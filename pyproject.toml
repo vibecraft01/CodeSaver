@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codesaver"
-version = "1.4.4"
+version = "1.4.5"
 description = "Cross-platform code backup utility with CLI and optional PyQt5 Desktop application"
 readme = "README.md"
 requires-python = ">=3.9"

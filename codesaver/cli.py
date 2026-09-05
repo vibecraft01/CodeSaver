@@ -187,6 +187,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--environment-json", action="store_true", help="Show the runtime environment as JSON")
     parser.add_argument("--project-tree-csv", type=Path, metavar="FILE", help="Export the project tree as CSV")
     parser.add_argument("--archive-manifest-csv", type=Path, metavar="ARCHIVE", help="Export archive members as CSV")
+    parser.add_argument("--backup-age-map", action="store_true", help="Show backup ages in days")
+    parser.add_argument("--project-dirs", action="store_true", help="List project directories")
+    parser.add_argument("--git-log-json", action="store_true", help="Export recent Git history as JSON")
+    parser.add_argument("--archive-health-csv", type=Path, metavar="FILE", help="Export archive health as CSV")
+    parser.add_argument("--archive-ratio-report", type=Path, metavar="ARCHIVE", help="Report archive compression ratio")
+    parser.add_argument("--latest-backup-json", action="store_true", help="Export the latest backup metadata as JSON")
     parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
     parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
@@ -1251,6 +1257,87 @@ def main(argv: Optional[list[str]] = None) -> int:
                         (info.filename, info.file_size, info.compress_size, datetime(*info.date_time).isoformat())
                     )
             print(json.dumps({"operation": "archive-manifest-csv", "file": str(target)}) if args.json else str(target))
+        elif args.backup_age_map:
+            now = time.time()
+            entries = [
+                {"archive": path.name, "age_days": round((now - path.stat().st_mtime) / 86400, 2)}
+                for path in sorted(manager.backup_dir.glob("*.zip"))
+            ]
+            print(
+                json.dumps({"operation": "backup-age-map", "backups": entries}, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['age_days']:.2f} days  {item['archive']}" for item in entries)
+            )
+        elif args.project_dirs:
+            directories = sorted(
+                {
+                    str(path.parent.relative_to(manager.project_dir))
+                    for path in manager.list_files()
+                    if path.parent != manager.project_dir
+                }
+            )
+            print(
+                json.dumps({"operation": "project-dirs", "directories": directories}, ensure_ascii=False)
+                if args.json
+                else "\n".join(directories)
+            )
+        elif args.git_log_json:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(manager.project_dir),
+                    "log",
+                    "-10",
+                    "--pretty=format:%h%x09%ad%x09%s",
+                    "--date=short",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            entries = [
+                dict(zip(("commit", "date", "subject"), line.split("\t", 2))) for line in result.stdout.splitlines()
+            ]
+            print(json.dumps({"operation": "git-log", "entries": entries}, ensure_ascii=False, indent=2))
+        elif args.archive_health_csv:
+            target = args.archive_health_csv.expanduser()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("archive", "ok", "files", "error"))
+                for archive in sorted(manager.backup_dir.glob("*.zip")):
+                    try:
+                        writer.writerow((archive.name, True, manager.verify_backup(archive), ""))
+                    except (BackupError, OSError, ValueError) as exc:
+                        writer.writerow((archive.name, False, 0, str(exc)))
+            print(json.dumps({"operation": "archive-health-csv", "file": str(target)}) if args.json else str(target))
+        elif args.archive_ratio_report:
+            with zipfile.ZipFile(args.archive_ratio_report.expanduser()) as archive:
+                original = sum(item.file_size for item in archive.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in archive.infolist() if not item.is_dir())
+            result = {
+                "operation": "archive-ratio",
+                "archive": str(args.archive_ratio_report),
+                "uncompressed_bytes": original,
+                "compressed_bytes": stored,
+                "saved_bytes": max(0, original - stored),
+            }
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else f"Uncompressed: {_format_bytes(original)}\nCompressed: {_format_bytes(stored)}\nSaved: {_format_bytes(result['saved_bytes'])}"
+            )
+        elif args.latest_backup_json:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+            latest = archives[0] if archives else None
+            result = {
+                "operation": "latest-backup",
+                "archive": str(latest) if latest else None,
+                "bytes": latest.stat().st_size if latest else 0,
+                "modified": latest.stat().st_mtime if latest else None,
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.backup_count_by_day:
             counts: dict[str, int] = {}
             for path in manager.backup_dir.glob("*.zip"):
