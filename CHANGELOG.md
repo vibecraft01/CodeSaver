@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.3.5] - 2026-09-06
+
+- Added selected-archive compression-ratio display.
+- Added backup-path CSV export.
+- Added copyable project summary.
+- Added largest-backup inspection.
+- Added backup-count status display.
+
 ## [CLI 1.4.7] - 2026-09-06
 
 - Added backup date and age reporting.

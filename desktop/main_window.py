@@ -360,6 +360,11 @@ _DESKTOP_1_2_1_TEXT = {
     "selected_file_count": "Show selected archive file count",
     "project_paths_txt": "Export project paths TXT",
     "backup_free_gb": "Show backup free space GB",
+    "selected_ratio": "Show selected archive ratio",
+    "backup_paths_csv": "Export backup paths CSV",
+    "project_summary_copy": "Copy project summary",
+    "largest_backup": "Show largest backup",
+    "backup_count_status": "Show backup count in status",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -489,6 +494,11 @@ TEXT["ru"].update(
         "selected_file_count": "Показать число файлов в архиве",
         "project_paths_txt": "Экспортировать пути проекта TXT",
         "backup_free_gb": "Показать свободное место backup в ГБ",
+        "selected_ratio": "Показать степень сжатия архива",
+        "backup_paths_csv": "Экспортировать пути бэкапов CSV",
+        "project_summary_copy": "Копировать сводку проекта",
+        "largest_backup": "Показать самый большой бэкап",
+        "backup_count_status": "Показать число бэкапов в статусе",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -818,6 +828,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("selected_file_count"), self._show_selected_file_count)
         tools_menu.addAction(self._text("project_paths_txt"), self._export_project_paths_txt)
         tools_menu.addAction(self._text("backup_free_gb"), self._show_backup_free_gb)
+        tools_menu.addAction(self._text("selected_ratio"), self._show_selected_ratio)
+        tools_menu.addAction(self._text("backup_paths_csv"), self._export_backup_paths_csv)
+        tools_menu.addAction(self._text("project_summary_copy"), self._copy_project_summary)
+        tools_menu.addAction(self._text("largest_backup"), self._show_largest_backup)
+        tools_menu.addAction(self._text("backup_count_status"), self._show_backup_count_status)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2616,6 +2631,50 @@ class MainWindow(QMainWindow):
         if self.manager:
             free = disk_usage(self.manager.backup_dir).free / (1024**3)
             QMessageBox.information(self, self._text("backup_free_gb"), f"{free:.2f} GB")
+
+    def _show_selected_ratio(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+            ratio = stored / original * 100 if original else 0
+            QMessageBox.information(self, self._text("selected_ratio"), f"{ratio:.1f}%")
+
+    def _export_backup_paths_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_paths_csv"), "backup-paths.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["archive", "path"])
+                for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                    writer.writerow([path.name, str(path)])
+            self.statusBar().showMessage(str(destination))
+
+    def _copy_project_summary(self) -> None:
+        if self.manager:
+            files = self.manager.list_files()
+            total = sum(path.stat().st_size for path in files)
+            QApplication.clipboard().setText(
+                f"Project: {self.manager.project_dir}\nFiles: {len(files)}\nBytes: {total}"
+            )
+            self.statusBar().showMessage(self._text("project_summary_copy"))
+
+    def _show_largest_backup(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_size, reverse=True)
+        body = f"{archives[0].name}\n{archives[0].stat().st_size} bytes" if archives else "None"
+        QMessageBox.information(self, self._text("largest_backup"), body)
+
+    def _show_backup_count_status(self) -> None:
+        if self.manager:
+            count = len(list(self.manager.backup_dir.glob("*.zip")))
+            self.statusBar().showMessage(f"{count} backups")
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
