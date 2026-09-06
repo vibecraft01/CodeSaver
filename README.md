@@ -26,8 +26,8 @@ GitHub repository snapshot for **5 September 2026**:
 | Repository views | 900 |
 | Unique visitors | 11 |
 | GitHub stars | 8 |
-| Public releases | 56 |
-| Commits | 122 |
+| Public releases | 74 |
+| Commits | 154 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 
