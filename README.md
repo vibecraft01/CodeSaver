@@ -9,7 +9,7 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
 | CodeSaver CLI | [**1.4.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.4.6) | Python 3.9+ | Updated 2026-09-05 |
-| CodeSaver Desktop | [**1.3.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.3.3) | Python 3.10+ with PyQt5 | Updated 2026-09-05 |
+| CodeSaver Desktop | [**1.3.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.3.4) | Python 3.10+ with PyQt5 | Updated 2026-09-06 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -17,17 +17,17 @@ The CLI and Desktop applications share the same tested backup and restore engine
 
 The traffic metrics below use GitHub's rolling **14-day window**. They are not lifetime totals: each day, the oldest day leaves the window and the newest day is added, so values can rise or fall.
 
-GitHub repository snapshot for **4 September 2026**:
+GitHub repository snapshot for **5 September 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 2,581 |
-| Unique cloners | 153 |
-| Repository views | 989 |
-| Unique visitors | 19 |
+| Git clones (last 14 days) | 2,647 |
+| Unique cloners | 167 |
+| Repository views | 900 |
+| Unique visitors | 11 |
 | GitHub stars | 8 |
-| Public releases | 70 |
-| Commits | 147 |
+| Public releases | 56 |
+| Commits | 122 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
 

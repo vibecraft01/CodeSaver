@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [Desktop 1.3.4] - 2026-09-06
+
+- Added selected-archive file-count display.
+- Added project-path TXT export.
+- Added backup-destination free-space display in GB.
+
 ## [CLI 1.4.6] - 2026-09-05
 
 - Added backup archive count output.

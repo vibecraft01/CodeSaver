@@ -13,6 +13,7 @@ from pathlib import Path
 from shutil import disk_usage
 import time
 import zipfile
+from datetime import datetime
 
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QKeySequence
@@ -41,6 +42,7 @@ from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 
 from .backup_manager import DesktopBackupManager
+from . import __version__
 from .settings_dialog import SettingsDialog
 from .tray_icon import TrayIcon
 from .utils import (
@@ -355,6 +357,9 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_names_copy": "Copy archive names",
     "project_depth": "Show project depth",
     "version_copy": "Copy Desktop version",
+    "selected_file_count": "Show selected archive file count",
+    "project_paths_txt": "Export project paths TXT",
+    "backup_free_gb": "Show backup free space GB",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -481,6 +486,9 @@ TEXT["ru"].update(
         "archive_names_copy": "Копировать имена архивов",
         "project_depth": "Показать глубину проекта",
         "version_copy": "Копировать версию Desktop",
+        "selected_file_count": "Показать число файлов в архиве",
+        "project_paths_txt": "Экспортировать пути проекта TXT",
+        "backup_free_gb": "Показать свободное место backup в ГБ",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -807,6 +815,9 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_names_copy"), self._copy_archive_names)
         tools_menu.addAction(self._text("project_depth"), self._show_project_depth)
         tools_menu.addAction(self._text("version_copy"), self._copy_desktop_version)
+        tools_menu.addAction(self._text("selected_file_count"), self._show_selected_file_count)
+        tools_menu.addAction(self._text("project_paths_txt"), self._export_project_paths_txt)
+        tools_menu.addAction(self._text("backup_free_gb"), self._show_backup_free_gb)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2120,7 +2131,10 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             self._text("archive_ratio"),
-            f"Archive: {format_bytes(archive.stat().st_size)}\nUnpacked: {format_bytes(unpacked)}\nStored ratio: {ratio:.1f}%",
+            (
+                f"Archive: {format_bytes(archive.stat().st_size)}\n"
+                f"Unpacked: {format_bytes(unpacked)}\nStored ratio: {ratio:.1f}%"
+            ),
         )
 
     def _export_timeline(self) -> None:
@@ -2177,7 +2191,10 @@ class MainWindow(QMainWindow):
             return
         files = sorted(self.manager.list_files(), key=lambda path: path.stat().st_mtime, reverse=True)[:20]
         body = "\n".join(
-            f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='minutes')}  {path.relative_to(self.manager.project_dir)}"
+            (
+                f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='minutes')}  "
+                f"{path.relative_to(self.manager.project_dir)}"
+            )
             for path in files
         )
         QMessageBox.information(self, self._text("recent_project_files"), body or "None")
@@ -2389,7 +2406,10 @@ class MainWindow(QMainWindow):
 
     def _copy_environment_summary(self) -> None:
         if self.manager:
-            body = f"CodeSaver Desktop {__version__}\nPython: {sys.version.split()[0]}\nPlatform: {platform.platform()}\nProject: {self.manager.project_dir}"
+            body = (
+                f"CodeSaver Desktop {__version__}\nPython: {sys.version.split()[0]}\n"
+                f"Platform: {platform.platform()}\nProject: {self.manager.project_dir}"
+            )
             QApplication.clipboard().setText(body)
             self.statusBar().showMessage(self._text("copy_environment"))
 
@@ -2535,7 +2555,10 @@ class MainWindow(QMainWindow):
         archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
         if archives:
             path = archives[0]
-            body = f"{path.name}\nSize: {path.stat().st_size} bytes\nModified: {datetime.fromtimestamp(path.stat().st_mtime).isoformat()}"
+            body = (
+                f"{path.name}\nSize: {path.stat().st_size} bytes\n"
+                f"Modified: {datetime.fromtimestamp(path.stat().st_mtime).isoformat()}"
+            )
         else:
             body = "None"
         QMessageBox.information(self, self._text("latest_backup_info"), body)
@@ -2570,6 +2593,29 @@ class MainWindow(QMainWindow):
     def _copy_desktop_version(self) -> None:
         QApplication.clipboard().setText(__version__)
         self.statusBar().showMessage(__version__)
+
+    def _show_selected_file_count(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                count = sum(not item.is_dir() for item in source.infolist())
+            QMessageBox.information(self, self._text("selected_file_count"), str(count))
+
+    def _export_project_paths_txt(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("project_paths_txt"), "project-paths.txt", "Text files (*.txt)"
+        )
+        if destination:
+            paths = sorted(str(path.relative_to(self.manager.project_dir)) for path in self.manager.list_files())
+            Path(destination).write_text("\n".join(paths) + ("\n" if paths else ""), encoding="utf-8")
+            self.statusBar().showMessage(str(destination))
+
+    def _show_backup_free_gb(self) -> None:
+        if self.manager:
+            free = disk_usage(self.manager.backup_dir).free / (1024**3)
+            QMessageBox.information(self, self._text("backup_free_gb"), f"{free:.2f} GB")
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
