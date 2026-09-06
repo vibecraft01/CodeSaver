@@ -195,6 +195,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--backup-count", action="store_true", help="Show the number of backup archives")
     parser.add_argument("--project-file-count", action="store_true", help="Show the number of project files")
     parser.add_argument("--latest-backup-size-json", action="store_true", help="Show latest backup size as JSON")
+    parser.add_argument("--backup-days", action="store_true", help="Show backup dates and ages")
+    parser.add_argument("--project-directories-json", action="store_true", help="Export project directories as JSON")
+    parser.add_argument("--config-paths-json", action="store_true", help="Show configured paths as JSON")
+    parser.add_argument(
+        "--archive-stats-json", type=Path, metavar="ARCHIVE", help="Show archive size and member statistics"
+    )
     parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
     parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
@@ -1359,6 +1365,60 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "operation": "latest-backup-size",
                 "archive": str(latest) if latest else None,
                 "bytes": latest.stat().st_size if latest else 0,
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.backup_days:
+            now = time.time()
+            entries = [
+                {
+                    "archive": path.name,
+                    "date": datetime.fromtimestamp(path.stat().st_mtime).date().isoformat(),
+                    "age_days": round((now - path.stat().st_mtime) / 86400, 2),
+                }
+                for path in sorted(
+                    manager.backup_dir.glob("*.zip"), key=lambda item: item.stat().st_mtime, reverse=True
+                )
+            ]
+            print(
+                json.dumps({"operation": "backup-days", "backups": entries}, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['date']} ({item['age_days']:.2f} days)  {item['archive']}" for item in entries)
+            )
+        elif args.project_directories_json:
+            directories = sorted(
+                {
+                    str(path.parent.relative_to(manager.project_dir))
+                    for path in manager.list_files()
+                    if path.parent != manager.project_dir
+                }
+            )
+            print(
+                json.dumps(
+                    {"operation": "project-directories", "directories": directories}, ensure_ascii=False, indent=2
+                )
+            )
+        elif args.archive_member_count:
+            with zipfile.ZipFile(args.archive_member_count.expanduser()) as archive:
+                count = sum(not item.is_dir() for item in archive.infolist())
+            result = {"operation": "archive-member-count", "archive": str(args.archive_member_count), "files": count}
+            print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else str(count))
+        elif args.config_paths_json:
+            result = {
+                "operation": "config-paths",
+                "project": str(manager.project_dir),
+                "backup": str(manager.backup_dir),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.archive_stats_json:
+            archive_path = args.archive_stats_json.expanduser()
+            with zipfile.ZipFile(archive_path) as archive:
+                members = [item for item in archive.infolist() if not item.is_dir()]
+            result = {
+                "operation": "archive-stats",
+                "archive": str(archive_path),
+                "files": len(members),
+                "bytes": sum(item.file_size for item in members),
+                "compressed_bytes": sum(item.compress_size for item in members),
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.backup_count_by_day:

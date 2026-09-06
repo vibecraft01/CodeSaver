@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.7] - 2026-09-06
+
+- Added backup date and age reporting.
+- Added JSON project-directory export.
+- Added archive member counting.
+- Added JSON configuration-path reporting.
+
 ## [Desktop 1.3.4] - 2026-09-06
 
 - Added selected-archive file-count display.
