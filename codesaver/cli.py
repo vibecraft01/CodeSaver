@@ -201,6 +201,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--archive-stats-json", type=Path, metavar="ARCHIVE", help="Show archive size and member statistics"
     )
+    parser.add_argument("--backup-total-size-json", action="store_true", help="Show total backup storage as JSON")
+    parser.add_argument("--project-root-json", action="store_true", help="Show the resolved project root as JSON")
+    parser.add_argument("--git-branch-json", action="store_true", help="Show the current Git branch as JSON")
+    parser.add_argument(
+        "--archive-member-extensions", type=Path, metavar="ARCHIVE", help="Group archive members by extension"
+    )
+    parser.add_argument("--recent-backup-json", type=int, metavar="N", help="Show the N newest backups as JSON")
     parser.add_argument("--backup-count-by-day", action="store_true", help="Count backups by calendar day")
     parser.add_argument("--project-root", action="store_true", help="Print the resolved project root")
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
@@ -1419,6 +1426,56 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "files": len(members),
                 "bytes": sum(item.file_size for item in members),
                 "compressed_bytes": sum(item.compress_size for item in members),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.backup_total_size_json:
+            archives = list(manager.backup_dir.glob("*.zip"))
+            result = {
+                "operation": "backup-total-size",
+                "archives": len(archives),
+                "bytes": sum(path.stat().st_size for path in archives),
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.project_root_json:
+            print(
+                json.dumps(
+                    {"operation": "project-root", "path": str(manager.project_dir)}, ensure_ascii=False, indent=2
+                )
+            )
+        elif args.git_branch_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(
+                json.dumps({"operation": "git-branch", "branch": result.stdout.strip()}, ensure_ascii=False, indent=2)
+            )
+        elif args.archive_member_extensions:
+            groups: dict[str, int] = {}
+            with zipfile.ZipFile(args.archive_member_extensions.expanduser()) as archive:
+                for item in archive.infolist():
+                    if not item.is_dir():
+                        key = Path(item.filename).suffix.lower() or "[no extension]"
+                        groups[key] = groups.get(key, 0) + 1
+            print(
+                json.dumps(
+                    {"operation": "archive-member-extensions", "extensions": dict(sorted(groups.items()))},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.recent_backup_json is not None:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)[
+                : max(args.recent_backup_json, 0)
+            ]
+            result = {
+                "operation": "recent-backups",
+                "backups": [
+                    {"path": str(path), "bytes": path.stat().st_size, "modified": path.stat().st_mtime}
+                    for path in archives
+                ],
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.backup_count_by_day:

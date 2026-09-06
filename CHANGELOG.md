@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.8] - 2026-09-06 (local)
+
+- Added JSON total backup-storage size reporting.
+- Added JSON project-root and current Git-branch reporting.
+- Added archive-member extension grouping.
+- Added JSON listing of the newest backups.
+
 ## [Desktop 1.3.5] - 2026-09-06
 
 - Added selected-archive compression-ratio display.
