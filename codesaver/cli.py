@@ -1827,8 +1827,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             result = {
                 "operation": "project-top-files",
                 "files": [
-                    {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size}
-                    for path in files
+                    {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size} for path in files
                 ],
             }
             print(
