@@ -527,6 +527,16 @@ TEXT["ru"].update(
         "refresh_project": "Обновить анализ проекта",
         "autosave_pause": "Поставить автосохранение на паузу",
         "autosave_resume": "Возобновить автосохранение",
+        "copy_archive_created": "Копировать дату создания архива",
+        "archive_created_copied": "Дата создания архива скопирована",
+        "export_archive_metadata": "Экспортировать метаданные архива JSON",
+        "archive_metadata_exported": "Метаданные архива сохранены: {path}",
+        "show_archive_files": "Показать файлы выбранного архива",
+        "archive_files_title": "Файлы архива",
+        "copy_backup_directory": "Копировать папку бэкапов",
+        "backup_directory_copied": "Путь папки бэкапов скопирован",
+        "show_project_root": "Показать содержимое корня проекта",
+        "project_root_title": "Содержимое корня проекта",
     }
 )
 TEXT["ru"].update(
@@ -851,6 +861,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("selected_name_copy"), self._copy_selected_archive_name)
         tools_menu.addAction(self._text("root_items"), self._show_root_items)
         tools_menu.addAction(self._text("oldest_backup"), self._show_oldest_backup)
+        tools_menu.addAction(self._text("copy_archive_created"), self._copy_selected_archive_created)
+        tools_menu.addAction(self._text("export_archive_metadata"), self._export_selected_archive_metadata)
+        tools_menu.addAction(self._text("show_archive_files"), self._show_selected_archive_files)
+        tools_menu.addAction(self._text("copy_backup_directory"), self._copy_backup_directory)
+        tools_menu.addAction(self._text("show_project_root"), self._show_project_root_contents)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2747,6 +2762,60 @@ class MainWindow(QMainWindow):
             else "None"
         )
         QMessageBox.information(self, self._text("oldest_backup"), body)
+
+    def _copy_selected_archive_created(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            created = datetime.fromtimestamp(archive.stat().st_mtime).isoformat(sep=" ", timespec="seconds")
+            QApplication.clipboard().setText(created)
+            self.statusBar().showMessage(self._text("archive_created_copied"))
+
+    def _export_selected_archive_metadata(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_archive_metadata"), f"{archive.stem}.json"
+        )
+        if not destination:
+            return
+        try:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            payload = {
+                "archive": str(archive),
+                "created": datetime.fromtimestamp(archive.stat().st_mtime).isoformat(),
+                "size": archive.stat().st_size,
+                "file_count": len(members),
+                "files": members,
+            }
+            Path(destination).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self.statusBar().showMessage(self._text("archive_metadata_exported", path=destination))
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _show_selected_archive_files(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            QMessageBox.information(self, self._text("archive_files_title"), "\n".join(members) or "—")
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _copy_backup_directory(self) -> None:
+        if self.manager:
+            QApplication.clipboard().setText(str(self.manager.backup_dir))
+            self.statusBar().showMessage(self._text("backup_directory_copied"))
+
+    def _show_project_root_contents(self) -> None:
+        if not self.manager:
+            return
+        try:
+            items = sorted(item.name for item in self.manager.project_dir.iterdir())
+            QMessageBox.information(self, self._text("project_root_title"), "\n".join(items) or "—")
+        except OSError as exc:
+            self._show_error(str(exc))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

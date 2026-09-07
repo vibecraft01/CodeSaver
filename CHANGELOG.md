@@ -4,7 +4,15 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
-## [CLI 1.4.9] - 2026-09-07 (local)
+## [Desktop 1.3.7] - 2026-09-07
+
+- Added archive creation-date copying.
+- Added selected-archive metadata JSON export.
+- Added selected-archive file listing.
+- Added backup-directory path copying.
+- Added project-root contents inspection.
+
+## [CLI 1.4.9] - 2026-09-07
 
 - Added JSON backup-size statistics.
 - Added project-directory counting.
