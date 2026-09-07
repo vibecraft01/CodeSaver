@@ -4,6 +4,208 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+## [CLI 1.4.9] - 2026-09-07 (local)
+
+- Added JSON backup-size statistics.
+- Added project-directory counting.
+- Added newest archive-member inspection.
+- Added effective config-file JSON output.
+- Added Git tag counting.
+- Added backup date-range JSON output.
+
+## [Desktop 1.3.6] - 2026-09-07 (local)
+
+- Added JSON backup-list export.
+- Added project-size summary.
+- Added backup counts by month.
+- Added selected archive-name copying.
+- Added project-root item listing.
+- Added oldest-backup inspection.
+
+## [CLI 1.4.8] - 2026-09-06 (local)
+
+- Added JSON total backup-storage size reporting.
+- Added JSON project-root and current Git-branch reporting.
+- Added archive-member extension grouping.
+- Added JSON listing of the newest backups.
+
+## [Desktop 1.3.5] - 2026-09-06
+
+- Added selected-archive compression-ratio display.
+- Added backup-path CSV export.
+- Added copyable project summary.
+- Added largest-backup inspection.
+- Added backup-count status display.
+
+## [CLI 1.4.7] - 2026-09-06
+
+- Added backup date and age reporting.
+- Added JSON project-directory export.
+- Added archive member counting.
+- Added JSON configuration-path reporting.
+
+## [Desktop 1.3.4] - 2026-09-06
+
+- Added selected-archive file-count display.
+- Added project-path TXT export.
+- Added backup-destination free-space display in GB.
+
+## [CLI 1.4.6] - 2026-09-05
+
+- Added backup archive count output.
+- Added project file count output.
+- Added latest-backup size JSON output.
+
+## [Desktop 1.3.3] - 2026-09-05
+
+- Added backup-list CSV export.
+- Added project-root copying and latest-backup details.
+- Added archive-extension inspection and archive-name copying.
+- Added project-depth display and Desktop-version copying.
+
+## [CLI 1.4.5] - 2026-09-05
+
+- Added backup age-map output.
+- Added project-directory listing.
+- Added JSON Git history export.
+- Added archive health CSV export.
+- Added archive compression-ratio reporting.
+- Added latest-backup metadata JSON output.
+
+## [Desktop 1.3.2] - 2026-09-05
+
+- Added backup counts by calendar day.
+- Added one-click copying of the latest backup path.
+- Added project extension summary CSV export.
+- Added archive dates CSV export.
+- Added backup-storage write-access check.
+- Added project file-count summary.
+
+## [CLI 1.4.4] - 2026-09-04
+
+- Added backup-name listing for scripts and audits.
+- Added project/backup storage-path reporting.
+- Added runtime environment JSON diagnostics.
+- Added project-tree CSV export.
+- Added archive-manifest CSV export.
+
+## [Desktop 1.3.1] - 2026-09-04
+
+- Added TXT export of backup names.
+- Added storage-path summary.
+- Added copyable environment summary for support reports.
+- Added CSV project-tree export.
+- Added CSV archive-manifest export.
+
+## [CLI 1.4.3] - 2026-09-04
+
+- Added the latest tested CLI project and archive inspection tools.
+- Included cross-platform release artifacts and source archives.
+
+## [Desktop 1.3.0] - 2026-09-04 (local)
+
+- Added archive health CSV export.
+- Added project-directory overview.
+- Added one-click Git commit-history copying.
+- Added archive compression report CSV export.
+- Added backup age map.
+
+## [CLI 1.4.2] - 2026-09-03
+
+- Added project tree JSON export.
+- Added archive member counting.
+- Added untracked Git-file listing.
+- Added oldest-backup lookup.
+- Added empty-directory discovery.
+
+## [Desktop 1.2.9] - 2026-09-03
+
+- Added archive extension summary.
+- Added project-size CSV export.
+- Added backup-summary JSON copying.
+- Added duplicate archive-member detection.
+- Added restore-preview copying.
+
+## [CLI 1.4.1] - 2026-09-03
+
+- Added per-file digest report export.
+- Added archive compression-savings report.
+- Added staged Git-file listing.
+- Added project permission report.
+- Added newest-backup size comparison.
+
+## [Desktop 1.2.8] - 2026-09-03
+
+- Added recently modified project-file view.
+- Added archive-member CSV export.
+- Added archive/project size comparison.
+- Added selected archive age display.
+- Added project file-inventory JSON copying.
+
+## [CLI 1.4.0] - 2026-09-02
+
+- Added deterministic project checksum export.
+- Added recent-file listing by age.
+- Added local Git branch listing.
+- Added backup size sorting.
+- Added JSON export of backup paths.
+
+## [Desktop 1.2.7] - 2026-09-02
+
+- Added compression-ratio inspection for selected archives.
+- Added backup timeline CSV export.
+- Added project file-list copying.
+- Added archive member date inspection.
+- Added project information JSON copying.
+
+## [CLI 1.3.9] - 2026-09-02
+
+## [Desktop 1.2.6] - 2026-09-02
+
+- Added file-type CSV export.
+- Added chronological backup timeline.
+- Added empty-file discovery.
+- Added SHA-256 inventory copying.
+- Added Git remote inspection.
+
+- Added Git diff export to a file.
+- Added archive member timestamp inspection.
+- Added backup counts grouped by calendar day.
+- Added resolved project-root output.
+- Added machine-readable configuration validation.
+
+## [CLI 1.3.8] - 2026-09-01
+
+- Added archive member type summaries.
+- Added project SHA-256 inventory export.
+- Added chronological backup timeline output.
+- Added empty-file discovery for project audits.
+- Added structured Git remote output.
+
+## [Desktop 1.2.5] - 2026-09-01
+
+- Added file-type inventory with counts and byte totals.
+- Added stale-file detection by modification age.
+- Added total backup-storage accounting.
+- Added Git tag listing for release workflows.
+- Added a compact JSON backup index copied to the clipboard.
+
+## [CLI 1.3.7] - 2026-09-01
+
+- Added file-type inventory with counts and byte totals.
+- Added stale-file detection by modification age.
+- Added total backup-storage accounting.
+- Added Git tag listing for release workflows.
+- Added a compact machine-readable backup index.
+
+## [Desktop 1.2.4] - 2026-09-01
+
+- Added archive-to-archive comparison with added, removed, and changed file counts.
+- Added CSV export of SHA-256 hashes for archive members.
+- Added unpacked-size inspection for selected archives.
+- Added retention-cleanup preview.
+- Added one-click JSON manifest copying.
+
 ## [Desktop 1.2.3] - 2026-08-31
 
 - Added SHA-256 duplicate-file detection.

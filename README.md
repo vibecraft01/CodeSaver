@@ -8,26 +8,46 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.3.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.3.6) | Python 3.9+ | Updated 2026-08-31 |
-| CodeSaver Desktop | [**1.2.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.2.3) | Python 3.10+ with PyQt5 | Updated 2026-08-31 |
+| CodeSaver CLI | **1.4.9** | Python 3.9+ | Updated 2026-09-07 |
+| CodeSaver Desktop | **1.3.6** | Python 3.10+ with PyQt5 | Updated 2026-09-07 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
 ## Impact snapshot
 
-GitHub repository snapshot for **30 August 2026**:
+The traffic metrics below use GitHub's rolling **14-day window**. They are not lifetime totals: each day, the oldest day leaves the window and the newest day is added, so values can rise or fall.
+
+GitHub repository snapshot for **5 September 2026**:
 
 | Metric | Value |
 | --- | ---: |
-| Git clones (last 14 days) | 1,969 |
-| Unique cloners | 125 |
-| Repository views | 958 |
-| Unique visitors | 19 |
+| Git clones (last 14 days) | 2,647 |
+| Unique cloners | 167 |
+| Repository views | 900 |
+| Unique visitors | 11 |
 | GitHub stars | 8 |
-| Public releases |49|
-| Commits | 102 |
+| Public releases | 56 |
+| Commits | 122 |
 
 These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
+
+### Traffic sources
+
+| Site | Views | Unique visitors |
+| --- | ---: | ---: |
+| github.com | 142 | 11 |
+| Google | 2 | 1 |
+
+### Popular content
+
+| Page | Views | Unique visitors |
+| --- | ---: | ---: |
+| [Overview](https://github.com/vibecraft01/CodeSaver) | 395 | 14 |
+| [/releases](https://github.com/vibecraft01/CodeSaver/releases) | 157 | 9 |
+| [/graphs/traffic](https://github.com/vibecraft01/CodeSaver/graphs/traffic) | 94 | 1 |
+| [/pulse](https://github.com/vibecraft01/CodeSaver/pulse) | 68 | 2 |
+| [/edit/main/README.md](https://github.com/vibecraft01/CodeSaver/edit/main/README.md) | 44 | 1 |
+| [/blob/main/README.md](https://github.com/vibecraft01/CodeSaver/blob/main/README.md) | 40 | 1 |
 
 ## Features
 
@@ -74,6 +94,11 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 - Desktop backup-storage free-space diagnostics.
 - One-click copying of a restore command.
 - File-name search inside a selected ZIP archive.
+- Compare two ZIP archives with added, removed, and changed file counts.
+- Export SHA-256 hashes for every file in an archive as CSV.
+- Inspect the total unpacked size of a selected archive.
+- Preview retention cleanup before deleting old backups.
+- Copy a selected archive manifest as JSON to the clipboard.
 - Git-ignored file inspection with `--gitignored-files`.
 - Size-aware project tree output with `--project-tree`.
 - Text search across readable source files with `--search-content`.
@@ -92,7 +117,9 @@ These figures are reported as a dated project snapshot; GitHub clones can includ
 
 ### Desktop version
 
-CodeSaver Desktop `1.2.3` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.3.0` is a graphical alternative for developers who prefer a visual workflow. It includes:
+- Archive health CSV export, project-directory overview, Git history copying, compression report CSV export, and backup age map.
+- Archive extension summary, project-size CSV export, backup-summary JSON copying, duplicate archive-member detection, and restore-preview copying.
 
 - Project folder selection with file count and total size.
 - Create and restore backup buttons.
@@ -137,6 +164,9 @@ CodeSaver Desktop `1.2.3` is a graphical alternative for developers who prefer a
 - Developer dashboard with eight live project and Git health metrics.
 - Export and copy the live developer dashboard for issue reports and CI notes.
 - Project tools for CSV file inventory, exclusion review, symlink scanning, Git context copying, and configuration access.
+- File-type inventory, stale-file detection, total archive storage, Git-tag viewing, and clipboard backup-index export.
+- Archive compression-ratio inspection, timeline CSV export, project file-list copying, archive member dates, and project-info JSON copying.
+- Recently modified-file view, archive-member CSV export, archive/project size comparison, archive age display, and project inventory JSON copying.
 - Open the current Git diff, refresh analysis, and pause/resume autosave from dedicated actions.
 - No API keys or external services.
 

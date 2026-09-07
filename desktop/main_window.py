@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 import hashlib
 import platform
+import sys
 import subprocess
 import csv
 from collections import Counter
 from pathlib import Path
 from shutil import disk_usage
 import time
+import zipfile
+from datetime import datetime
 
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QKeySequence
@@ -39,6 +42,7 @@ from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 
 from .backup_manager import DesktopBackupManager
+from . import __version__
 from .settings_dialog import SettingsDialog
 from .tray_icon import TrayIcon
 from .utils import (
@@ -294,6 +298,79 @@ _DESKTOP_1_2_1_TEXT = {
     "restore_command_copied": "Restore command copied",
     "search_archive_files": "Search files in selected archive",
     "search_archive_prompt": "File name or path contains:",
+    "compare_archives": "Compare two archives",
+    "compare_archives_prompt": "Select the second archive",
+    "compare_archives_body": "Added: {added}\nRemoved: {removed}\nChanged: {changed}",
+    "export_archive_hashes": "Export archive file hashes CSV",
+    "archive_hashes_done": "Archive hashes exported: {path}",
+    "unpacked_size": "Show unpacked archive size",
+    "unpacked_size_body": "Archive: {name}\nFiles: {files}\nUnpacked size: {size}",
+    "retention_preview": "Preview retention cleanup",
+    "retention_body": "Archives kept: {kept}\nArchives eligible for cleanup: {remove}",
+    "copy_manifest": "Copy archive manifest JSON",
+    "manifest_copied": "Archive manifest copied",
+    "file_types": "Show files by type",
+    "stale_files": "Find stale files",
+    "archive_total": "Show total archive storage",
+    "git_tags": "Show Git tags",
+    "backup_index": "Copy backup index JSON",
+    "export_file_types": "Export file types CSV",
+    "archive_timeline": "Show backup timeline",
+    "empty_files": "Find empty files",
+    "copy_hash_inventory": "Copy SHA-256 inventory",
+    "git_remotes": "Show Git remotes",
+    "archive_ratio": "Show archive compression ratio",
+    "export_timeline": "Export backup timeline CSV",
+    "copy_file_list": "Copy project file list",
+    "archive_dates": "Show archive file dates",
+    "copy_project_info": "Copy project information",
+    "recent_project_files": "Show recently modified files",
+    "export_archive_files": "Export archive members CSV",
+    "archive_project_size": "Compare archive and project size",
+    "archive_age": "Show selected archive age",
+    "copy_project_files_json": "Copy project file inventory JSON",
+    "archive_extensions": "Show archive extensions",
+    "export_project_sizes": "Export project sizes CSV",
+    "copy_backup_summary": "Copy backup summary JSON",
+    "archive_duplicates": "Find duplicate archive members",
+    "copy_restore_preview": "Copy restore preview",
+    "archive_health_csv": "Export archive health CSV",
+    "project_dirs": "Show project directories",
+    "git_log_copy": "Copy Git commit history",
+    "archive_ratio_csv": "Export compression report CSV",
+    "backup_age_map": "Show backup age map",
+    "backup_names_txt": "Export backup names TXT",
+    "paths_summary": "Show storage paths",
+    "copy_environment": "Copy environment summary",
+    "project_tree_csv": "Export project tree CSV",
+    "archive_manifest_csv": "Export archive manifest CSV",
+    "backup_day_counts": "Show backups by day",
+    "latest_backup_path": "Copy latest backup path",
+    "project_extensions_csv": "Export extension summary CSV",
+    "archive_dates_csv": "Export archive dates CSV",
+    "storage_write_check": "Check storage write access",
+    "project_file_count": "Show project file count",
+    "backup_list_csv": "Export backup list CSV",
+    "project_root_copy": "Copy project root",
+    "latest_backup_info": "Show latest backup info",
+    "backup_extensions": "Show backup extensions",
+    "archive_names_copy": "Copy archive names",
+    "project_depth": "Show project depth",
+    "version_copy": "Copy Desktop version",
+    "selected_file_count": "Show selected archive file count",
+    "project_paths_txt": "Export project paths TXT",
+    "backup_free_gb": "Show backup free space GB",
+    "selected_ratio": "Show selected archive ratio",
+    "backup_paths_csv": "Export backup paths CSV",
+    "project_summary_copy": "Copy project summary",
+    "largest_backup": "Show largest backup",
+    "backup_count_status": "Show backup count in status",
+    "backup_list_json": "Export backup list JSON",
+    "project_size_summary": "Show project size",
+    "backup_months": "Show backups by month",
+    "selected_name_copy": "Copy selected archive name",
+    "root_items": "Show project root items",
+    "oldest_backup": "Show oldest backup",
     "cloud_upload": "Upload archive to cloud",
     "cloud_url": "Cloud endpoint URL",
     "cloud_uploaded": "Archive uploaded to cloud (HTTP {status})",
@@ -361,6 +438,79 @@ TEXT["ru"].update(
         "restore_command_copied": "Команда восстановления скопирована",
         "search_archive_files": "Искать файлы в выбранном архиве",
         "search_archive_prompt": "Часть имени или пути файла:",
+        "compare_archives": "Сравнить два архива",
+        "compare_archives_prompt": "Выберите второй архив",
+        "compare_archives_body": "Добавлено: {added}\nУдалено: {removed}\nИзменено: {changed}",
+        "export_archive_hashes": "Экспортировать хэши файлов архива CSV",
+        "archive_hashes_done": "Хэши архива экспортированы: {path}",
+        "unpacked_size": "Показать распакованный размер",
+        "unpacked_size_body": "Архив: {name}\nФайлов: {files}\nРаспакованный размер: {size}",
+        "retention_preview": "Предпросмотр очистки retention",
+        "retention_body": "Останется: {kept}\nК очистке: {remove}",
+        "copy_manifest": "Копировать JSON-манифест архива",
+        "manifest_copied": "Манифест архива скопирован",
+        "file_types": "Показать файлы по типам",
+        "stale_files": "Найти давно изменённые файлы",
+        "archive_total": "Показать общий размер архивов",
+        "git_tags": "Показать Git-теги",
+        "backup_index": "Копировать индекс бэкапов JSON",
+        "export_file_types": "Экспортировать типы файлов CSV",
+        "archive_timeline": "Показать историю бэкапов",
+        "empty_files": "Найти пустые файлы",
+        "copy_hash_inventory": "Копировать SHA-256 инвентаризацию",
+        "git_remotes": "Показать Git remote",
+        "archive_ratio": "Показать степень сжатия архива",
+        "export_timeline": "Экспортировать историю бэкапов CSV",
+        "copy_file_list": "Копировать список файлов проекта",
+        "archive_dates": "Показать даты файлов архива",
+        "copy_project_info": "Копировать сведения о проекте",
+        "recent_project_files": "Показать недавно изменённые файлы",
+        "export_archive_files": "Экспортировать файлы архива CSV",
+        "archive_project_size": "Сравнить размер архива и проекта",
+        "archive_age": "Показать возраст выбранного архива",
+        "copy_project_files_json": "Копировать JSON-инвентаризацию проекта",
+        "archive_extensions": "Показать расширения архива",
+        "export_project_sizes": "Экспортировать размеры проекта CSV",
+        "copy_backup_summary": "Копировать сводку бэкапов JSON",
+        "archive_duplicates": "Найти дубликаты файлов в архиве",
+        "copy_restore_preview": "Копировать предпросмотр восстановления",
+        "archive_health_csv": "Экспортировать здоровье архивов CSV",
+        "project_dirs": "Показать папки проекта",
+        "git_log_copy": "Копировать историю коммитов Git",
+        "archive_ratio_csv": "Экспортировать отчёт сжатия CSV",
+        "backup_age_map": "Показать возраст бэкапов",
+        "backup_names_txt": "Экспортировать имена бэкапов TXT",
+        "paths_summary": "Показать пути хранения",
+        "copy_environment": "Копировать сведения о среде",
+        "project_tree_csv": "Экспортировать дерево проекта CSV",
+        "archive_manifest_csv": "Экспортировать манифест архива CSV",
+        "backup_day_counts": "Показать бэкапы по дням",
+        "latest_backup_path": "Копировать путь последнего бэкапа",
+        "project_extensions_csv": "Экспортировать сводку расширений CSV",
+        "archive_dates_csv": "Экспортировать даты архивов CSV",
+        "storage_write_check": "Проверить запись в хранилище",
+        "project_file_count": "Показать количество файлов проекта",
+        "backup_list_csv": "Экспортировать список бэкапов CSV",
+        "project_root_copy": "Копировать корень проекта",
+        "latest_backup_info": "Показать сведения о последнем бэкапе",
+        "backup_extensions": "Показать расширения в бэкапах",
+        "archive_names_copy": "Копировать имена архивов",
+        "project_depth": "Показать глубину проекта",
+        "version_copy": "Копировать версию Desktop",
+        "selected_file_count": "Показать число файлов в архиве",
+        "project_paths_txt": "Экспортировать пути проекта TXT",
+        "backup_free_gb": "Показать свободное место backup в ГБ",
+        "selected_ratio": "Показать степень сжатия архива",
+        "backup_paths_csv": "Экспортировать пути бэкапов CSV",
+        "project_summary_copy": "Копировать сводку проекта",
+        "largest_backup": "Показать самый большой бэкап",
+        "backup_count_status": "Показать число бэкапов в статусе",
+        "backup_list_json": "Экспортировать список бэкапов JSON",
+        "project_size_summary": "Показать размер проекта",
+        "backup_months": "Показать бэкапы по месяцам",
+        "selected_name_copy": "Копировать имя выбранного архива",
+        "root_items": "Показать элементы корня проекта",
+        "oldest_backup": "Показать самый старый бэкап",
         "cloud_upload": "Загрузить архив в облако",
         "cloud_url": "URL облачного endpoint",
         "cloud_uploaded": "Архив загружен в облако (HTTP {status})",
@@ -634,6 +784,73 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("free_space"), self._show_backup_free_space)
         tools_menu.addAction(self._text("copy_restore_command"), self._copy_restore_command)
         tools_menu.addAction(self._text("search_archive_files"), self._search_selected_archive_files)
+        tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
+        tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
+        tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
+        tools_menu.addAction(self._text("retention_preview"), self._show_retention_preview)
+        tools_menu.addAction(self._text("copy_manifest"), self._copy_archive_manifest)
+        tools_menu.addAction(self._text("file_types"), self._show_file_types)
+        tools_menu.addAction(self._text("stale_files"), self._show_stale_files)
+        tools_menu.addAction(self._text("archive_total"), self._show_archive_total)
+        tools_menu.addAction(self._text("git_tags"), self._show_git_tags)
+        tools_menu.addAction(self._text("backup_index"), self._copy_backup_index)
+        tools_menu.addAction(self._text("export_file_types"), self._export_file_types)
+        tools_menu.addAction(self._text("archive_timeline"), self._show_archive_timeline)
+        tools_menu.addAction(self._text("empty_files"), self._show_empty_files)
+        tools_menu.addAction(self._text("copy_hash_inventory"), self._copy_hash_inventory)
+        tools_menu.addAction(self._text("git_remotes"), self._show_git_remotes)
+        tools_menu.addAction(self._text("archive_ratio"), self._show_archive_ratio)
+        tools_menu.addAction(self._text("export_timeline"), self._export_timeline)
+        tools_menu.addAction(self._text("copy_file_list"), self._copy_file_list)
+        tools_menu.addAction(self._text("archive_dates"), self._show_archive_dates)
+        tools_menu.addAction(self._text("copy_project_info"), self._copy_project_info)
+        tools_menu.addAction(self._text("recent_project_files"), self._show_recent_project_files)
+        tools_menu.addAction(self._text("export_archive_files"), self._export_archive_files)
+        tools_menu.addAction(self._text("archive_project_size"), self._compare_archive_project_size)
+        tools_menu.addAction(self._text("archive_age"), self._show_archive_age)
+        tools_menu.addAction(self._text("copy_project_files_json"), self._copy_project_files_json)
+        tools_menu.addAction(self._text("archive_extensions"), self._show_archive_extensions)
+        tools_menu.addAction(self._text("export_project_sizes"), self._export_project_sizes)
+        tools_menu.addAction(self._text("copy_backup_summary"), self._copy_backup_summary)
+        tools_menu.addAction(self._text("archive_duplicates"), self._find_archive_duplicates)
+        tools_menu.addAction(self._text("copy_restore_preview"), self._copy_restore_preview)
+        tools_menu.addAction(self._text("archive_health_csv"), self._export_archive_health_csv)
+        tools_menu.addAction(self._text("project_dirs"), self._show_project_dirs)
+        tools_menu.addAction(self._text("git_log_copy"), self._copy_git_log)
+        tools_menu.addAction(self._text("archive_ratio_csv"), self._export_archive_ratio_csv)
+        tools_menu.addAction(self._text("backup_age_map"), self._show_backup_age_map)
+        tools_menu.addAction(self._text("backup_names_txt"), self._export_backup_names_txt)
+        tools_menu.addAction(self._text("paths_summary"), self._show_paths_summary)
+        tools_menu.addAction(self._text("copy_environment"), self._copy_environment_summary)
+        tools_menu.addAction(self._text("project_tree_csv"), self._export_project_tree_csv)
+        tools_menu.addAction(self._text("archive_manifest_csv"), self._export_archive_manifest_csv)
+        tools_menu.addAction(self._text("backup_day_counts"), self._show_backup_day_counts)
+        tools_menu.addAction(self._text("latest_backup_path"), self._copy_latest_backup_path)
+        tools_menu.addAction(self._text("project_extensions_csv"), self._export_project_extensions_csv)
+        tools_menu.addAction(self._text("archive_dates_csv"), self._export_archive_dates_csv)
+        tools_menu.addAction(self._text("storage_write_check"), self._check_storage_write)
+        tools_menu.addAction(self._text("project_file_count"), self._show_project_file_count)
+        tools_menu.addAction(self._text("backup_list_csv"), self._export_backup_list_csv)
+        tools_menu.addAction(self._text("project_root_copy"), self._copy_project_root)
+        tools_menu.addAction(self._text("latest_backup_info"), self._show_latest_backup_info)
+        tools_menu.addAction(self._text("backup_extensions"), self._show_backup_extensions)
+        tools_menu.addAction(self._text("archive_names_copy"), self._copy_archive_names)
+        tools_menu.addAction(self._text("project_depth"), self._show_project_depth)
+        tools_menu.addAction(self._text("version_copy"), self._copy_desktop_version)
+        tools_menu.addAction(self._text("selected_file_count"), self._show_selected_file_count)
+        tools_menu.addAction(self._text("project_paths_txt"), self._export_project_paths_txt)
+        tools_menu.addAction(self._text("backup_free_gb"), self._show_backup_free_gb)
+        tools_menu.addAction(self._text("selected_ratio"), self._show_selected_ratio)
+        tools_menu.addAction(self._text("backup_paths_csv"), self._export_backup_paths_csv)
+        tools_menu.addAction(self._text("project_summary_copy"), self._copy_project_summary)
+        tools_menu.addAction(self._text("largest_backup"), self._show_largest_backup)
+        tools_menu.addAction(self._text("backup_count_status"), self._show_backup_count_status)
+        tools_menu.addAction(self._text("backup_list_json"), self._export_backup_list_json)
+        tools_menu.addAction(self._text("project_size_summary"), self._show_project_size_summary)
+        tools_menu.addAction(self._text("backup_months"), self._show_backup_months)
+        tools_menu.addAction(self._text("selected_name_copy"), self._copy_selected_archive_name)
+        tools_menu.addAction(self._text("root_items"), self._show_root_items)
+        tools_menu.addAction(self._text("oldest_backup"), self._show_oldest_backup)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -1381,6 +1598,99 @@ class MainWindow(QMainWindow):
         except (BackupError, OSError, ValueError) as exc:
             self._show_error(str(exc))
 
+    def _compare_two_archives(self) -> None:
+        first = self._selected_archive()
+        if not first:
+            return
+        second, _ = QFileDialog.getOpenFileName(
+            self, self._text("compare_archives_prompt"), str(first.parent), "ZIP archives (*.zip)"
+        )
+        if not second:
+            return
+        try:
+            with zipfile.ZipFile(first) as first_zip, zipfile.ZipFile(second) as second_zip:
+                left = {
+                    item.filename: hashlib.sha256(first_zip.read(item)).hexdigest()
+                    for item in first_zip.infolist()
+                    if not item.is_dir()
+                }
+                right = {
+                    item.filename: hashlib.sha256(second_zip.read(item)).hexdigest()
+                    for item in second_zip.infolist()
+                    if not item.is_dir()
+                }
+            QMessageBox.information(
+                self,
+                self._text("compare_archives"),
+                self._text(
+                    "compare_archives_body",
+                    added=len(right.keys() - left.keys()),
+                    removed=len(left.keys() - right.keys()),
+                    changed=sum(1 for key in left.keys() & right.keys() if left[key] != right[key]),
+                ),
+            )
+        except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _export_archive_hashes(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_archive_hashes"), f"{archive.stem}-hashes.csv"
+        )
+        if not destination:
+            return
+        try:
+            import csv
+
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("path", "sha256"))
+                with zipfile.ZipFile(archive) as opened:
+                    for member in opened.infolist():
+                        if not member.is_dir():
+                            writer.writerow((member.filename, hashlib.sha256(opened.read(member)).hexdigest()))
+            self.statusBar().showMessage(self._text("archive_hashes_done", path=destination))
+        except (BackupError, OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_unpacked_size(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            with zipfile.ZipFile(archive) as opened:
+                members = [item for item in opened.infolist() if not item.is_dir()]
+                size = sum(item.file_size for item in members)
+            QMessageBox.information(
+                self,
+                self._text("unpacked_size"),
+                self._text("unpacked_size_body", name=archive.name, files=len(members), size=format_bytes(size)),
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_retention_preview(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        keep = self.settings.keep_last or len(archives)
+        QMessageBox.information(
+            self,
+            self._text("retention_preview"),
+            self._text("retention_body", kept=min(keep, len(archives)), remove=max(0, len(archives) - keep)),
+        )
+
+    def _copy_archive_manifest(self) -> None:
+        archive = self._selected_archive()
+        if archive and self.manager:
+            members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
+            QApplication.clipboard().setText(
+                json.dumps({"archive": str(archive), "files": members}, ensure_ascii=False, indent=2)
+            )
+            self.statusBar().showMessage(self._text("manifest_copied"))
+
     def _progress_text(self, current: int, total: int, processed: int, total_bytes: int) -> str:
         percent = 0 if total == 0 else int(current / total * 100)
         return self._text(
@@ -1720,6 +2030,723 @@ class MainWindow(QMainWindow):
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self, self._text("error"), message)
+
+    def _show_file_types(self) -> None:
+        if not self.manager:
+            return
+        groups: dict[str, list[int]] = {}
+        for path in self.manager.list_files():
+            suffix = path.suffix.lower() or "[no extension]"
+            groups.setdefault(suffix, [0, 0])
+            groups[suffix][0] += 1
+            groups[suffix][1] += path.stat().st_size
+        body = "\n".join(f"{key}: {value[0]} files, {format_bytes(value[1])}" for key, value in sorted(groups.items()))
+        QMessageBox.information(self, self._text("file_types"), body or "—")
+
+    def _show_stale_files(self) -> None:
+        if not self.manager:
+            return
+        days, accepted = QInputDialog.getInt(self, self._text("stale_files"), "Older than days:", 30, 0, 36500)
+        if not accepted:
+            return
+        cutoff = time.time() - days * 86400
+        files = [path for path in self.manager.list_files() if path.stat().st_mtime < cutoff]
+        QMessageBox.information(
+            self,
+            self._text("stale_files"),
+            "\n".join(str(path.relative_to(self.manager.project_dir)) for path in files) or "None",
+        )
+
+    def _show_archive_total(self) -> None:
+        if not self.manager:
+            return
+        archives = list(self.manager.backup_dir.glob("*.zip"))
+        total = sum(path.stat().st_size for path in archives)
+        QMessageBox.information(
+            self, self._text("archive_total"), f"Archives: {len(archives)}\nTotal: {format_bytes(total)}"
+        )
+
+    def _show_git_tags(self) -> None:
+        if not self.manager:
+            return
+        result = subprocess.run(
+            ["git", "-C", str(self.manager.project_dir), "tag", "--list"], capture_output=True, text=True, check=False
+        )
+        QMessageBox.information(self, self._text("git_tags"), result.stdout.strip() or "None")
+
+    def _copy_backup_index(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        index = {
+            "project": str(self.manager.project_dir),
+            "backups": [
+                {"path": str(path), "bytes": path.stat().st_size, "modified": path.stat().st_mtime} for path in archives
+            ],
+        }
+        QApplication.clipboard().setText(json.dumps(index, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("backup_index"))
+
+    def _export_file_types(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_file_types"), "file-types.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        groups: dict[str, list[int]] = {}
+        for path in self.manager.list_files():
+            suffix = path.suffix.lower() or "[no extension]"
+            groups.setdefault(suffix, [0, 0])
+            groups[suffix][0] += 1
+            groups[suffix][1] += path.stat().st_size
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["extension", "files", "bytes"])
+            writer.writerows([suffix, values[0], values[1]] for suffix, values in sorted(groups.items()))
+        self.statusBar().showMessage(str(destination))
+
+    def _show_archive_timeline(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+        body = "\n".join(
+            f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='seconds')}  {path.name}"
+            for path in archives
+        )
+        QMessageBox.information(self, self._text("archive_timeline"), body or "None")
+
+    def _show_empty_files(self) -> None:
+        if not self.manager:
+            return
+        files = [
+            str(path.relative_to(self.manager.project_dir))
+            for path in self.manager.list_files()
+            if path.stat().st_size == 0
+        ]
+        QMessageBox.information(self, self._text("empty_files"), "\n".join(files) or "None")
+
+    def _copy_hash_inventory(self) -> None:
+        if not self.manager:
+            return
+        entries = []
+        for path in self.manager.list_files():
+            try:
+                entries.append(
+                    {
+                        "path": str(path.relative_to(self.manager.project_dir)),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                )
+            except OSError:
+                continue
+        QApplication.clipboard().setText(
+            json.dumps({"project": str(self.manager.project_dir), "files": entries}, ensure_ascii=False, indent=2)
+        )
+        self.statusBar().showMessage(self._text("copy_hash_inventory"))
+
+    def _show_git_remotes(self) -> None:
+        if not self.manager:
+            return
+        result = subprocess.run(
+            ["git", "-C", str(self.manager.project_dir), "remote", "-v"], capture_output=True, text=True, check=False
+        )
+        QMessageBox.information(self, self._text("git_remotes"), result.stdout.strip() or "None")
+
+    def _show_archive_ratio(self) -> None:
+        archive = self._selected_archive()
+        if not archive or not self.manager:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            unpacked = sum(item.file_size for item in stream.infolist() if not item.is_dir())
+        ratio = 0 if unpacked == 0 else archive.stat().st_size / unpacked * 100
+        QMessageBox.information(
+            self,
+            self._text("archive_ratio"),
+            (
+                f"Archive: {format_bytes(archive.stat().st_size)}\n"
+                f"Unpacked: {format_bytes(unpacked)}\nStored ratio: {ratio:.1f}%"
+            ),
+        )
+
+    def _export_timeline(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_timeline"), "backup-timeline.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "modified", "bytes"])
+            writer.writerows(
+                [path.name, datetime.fromtimestamp(path.stat().st_mtime).isoformat(), path.stat().st_size]
+                for path in archives
+            )
+        self.statusBar().showMessage(str(destination))
+
+    def _copy_file_list(self) -> None:
+        if not self.manager:
+            return
+        files = [str(path.relative_to(self.manager.project_dir).as_posix()) for path in self.manager.list_files()]
+        QApplication.clipboard().setText("\n".join(files))
+        self.statusBar().showMessage(self._text("copy_file_list"))
+
+    def _show_archive_dates(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            entries = [
+                f"{item.date_time[0]:04d}-{item.date_time[1]:02d}-{item.date_time[2]:02d}  {item.filename}"
+                for item in stream.infolist()
+                if not item.is_dir()
+            ]
+        QMessageBox.information(self, self._text("archive_dates"), "\n".join(entries) or "None")
+
+    def _copy_project_info(self) -> None:
+        if not self.manager:
+            return
+        info = {
+            "project": str(self.manager.project_dir),
+            "files": len(self.manager.list_files()),
+            "backup_dir": str(self.manager.backup_dir),
+            "backups": len(list(self.manager.backup_dir.glob("*.zip"))),
+        }
+        QApplication.clipboard().setText(json.dumps(info, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("copy_project_info"))
+
+    def _show_recent_project_files(self) -> None:
+        if not self.manager:
+            return
+        files = sorted(self.manager.list_files(), key=lambda path: path.stat().st_mtime, reverse=True)[:20]
+        body = "\n".join(
+            (
+                f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec='minutes')}  "
+                f"{path.relative_to(self.manager.project_dir)}"
+            )
+            for path in files
+        )
+        QMessageBox.information(self, self._text("recent_project_files"), body or "None")
+
+    def _export_archive_files(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_archive_files"), "archive-files.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with zipfile.ZipFile(archive) as stream, Path(destination).open("w", newline="", encoding="utf-8") as output:
+            writer = csv.writer(output)
+            writer.writerow(["path", "compressed_bytes", "uncompressed_bytes"])
+            writer.writerows(
+                [item.filename, item.compress_size, item.file_size] for item in stream.infolist() if not item.is_dir()
+            )
+        self.statusBar().showMessage(str(destination))
+
+    def _compare_archive_project_size(self) -> None:
+        archive = self._selected_archive()
+        if not archive or not self.manager:
+            return
+        project_size = sum(path.stat().st_size for path in self.manager.list_files())
+        QMessageBox.information(
+            self,
+            self._text("archive_project_size"),
+            f"Project: {format_bytes(project_size)}\nArchive: {format_bytes(archive.stat().st_size)}",
+        )
+
+    def _show_archive_age(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        age = max(0, time.time() - archive.stat().st_mtime)
+        QMessageBox.information(self, self._text("archive_age"), f"{archive.name}\nAge: {age / 86400:.1f} days")
+
+    def _copy_project_files_json(self) -> None:
+        if not self.manager:
+            return
+        files = [
+            {
+                "path": str(path.relative_to(self.manager.project_dir)),
+                "bytes": path.stat().st_size,
+                "modified": path.stat().st_mtime,
+            }
+            for path in self.manager.list_files()
+        ]
+        QApplication.clipboard().setText(
+            json.dumps({"project": str(self.manager.project_dir), "files": files}, ensure_ascii=False, indent=2)
+        )
+        self.statusBar().showMessage(self._text("copy_project_files_json"))
+
+    def _show_archive_extensions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            extensions = sorted(
+                {
+                    Path(item.filename).suffix.lower() or "[no extension]"
+                    for item in stream.infolist()
+                    if not item.is_dir()
+                }
+            )
+        QMessageBox.information(self, self._text("archive_extensions"), "\n".join(extensions) or "None")
+
+    def _export_project_sizes(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_project_sizes"), "project-sizes.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["path", "bytes"])
+            writer.writerows(
+                [str(path.relative_to(self.manager.project_dir)), path.stat().st_size]
+                for path in self.manager.list_files()
+            )
+        self.statusBar().showMessage(str(destination))
+
+    def _copy_backup_summary(self) -> None:
+        if not self.manager:
+            return
+        archives = list(self.manager.backup_dir.glob("*.zip"))
+        summary = {
+            "project": str(self.manager.project_dir),
+            "count": len(archives),
+            "bytes": sum(path.stat().st_size for path in archives),
+        }
+        QApplication.clipboard().setText(json.dumps(summary, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("copy_backup_summary"))
+
+    def _find_archive_duplicates(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            groups: dict[str, list[str]] = {}
+            for item in stream.infolist():
+                if not item.is_dir():
+                    groups.setdefault(hashlib.sha256(stream.read(item)).hexdigest(), []).append(item.filename)
+        duplicates = ["\n".join(paths) for paths in groups.values() if len(paths) > 1]
+        QMessageBox.information(self, self._text("archive_duplicates"), "\n\n".join(duplicates) or "None")
+
+    def _copy_restore_preview(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as stream:
+            preview = {
+                "archive": str(archive),
+                "files": [item.filename for item in stream.infolist() if not item.is_dir()],
+            }
+        QApplication.clipboard().setText(json.dumps(preview, ensure_ascii=False, indent=2))
+        self.statusBar().showMessage(self._text("copy_restore_preview"))
+
+    def _export_archive_health_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_health_csv"), "archive-health.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "ok", "files", "error"])
+            for archive, _date, _size in archive_details(self.manager.backup_dir):
+                try:
+                    writer.writerow([archive.name, True, self.manager.verify_backup(archive), ""])
+                except (BackupError, OSError, ValueError) as exc:
+                    writer.writerow([archive.name, False, 0, str(exc)])
+        self.statusBar().showMessage(str(destination))
+
+    def _show_project_dirs(self) -> None:
+        if not self.manager:
+            return
+        dirs = sorted(
+            {
+                str(path.parent.relative_to(self.manager.project_dir))
+                for path in self.manager.list_files()
+                if path.parent != self.manager.project_dir
+            }
+        )
+        QMessageBox.information(self, self._text("project_dirs"), "\n".join(dirs) or ".")
+
+    def _copy_git_log(self) -> None:
+        if not self.manager:
+            return
+        result = subprocess.run(
+            ["git", "-C", str(self.manager.project_dir), "log", "-10", "--pretty=format:%h %ad %s", "--date=short"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        QApplication.clipboard().setText(result.stdout)
+        self.statusBar().showMessage(self._text("git_log_copy"))
+
+    def _export_archive_ratio_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_ratio_csv"), "archive-compression.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "uncompressed_bytes", "stored_bytes", "saved_bytes"])
+            for archive, _date, _size in archive_details(self.manager.backup_dir):
+                with zipfile.ZipFile(archive) as source:
+                    original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+                    stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+                writer.writerow([archive.name, original, stored, max(0, original - stored)])
+        self.statusBar().showMessage(str(destination))
+
+    def _show_backup_age_map(self) -> None:
+        if not self.manager:
+            return
+        now = time.time()
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        body = "\n".join(f"{path.name}: {(now - path.stat().st_mtime) / 86400:.1f} days" for path in archives)
+        QMessageBox.information(self, self._text("backup_age_map"), body or "None")
+
+    def _export_backup_names_txt(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_names_txt"), "backup-names.txt", "Text files (*.txt)"
+        )
+        if destination:
+            names = sorted(path.name for path in self.manager.backup_dir.glob("*.zip"))
+            Path(destination).write_text("\n".join(names) + ("\n" if names else ""), encoding="utf-8")
+            self.statusBar().showMessage(str(destination))
+
+    def _show_paths_summary(self) -> None:
+        if self.manager:
+            QMessageBox.information(
+                self,
+                self._text("paths_summary"),
+                f"Project: {self.manager.project_dir}\nBackups: {self.manager.backup_dir}",
+            )
+
+    def _copy_environment_summary(self) -> None:
+        if self.manager:
+            body = (
+                f"CodeSaver Desktop {__version__}\nPython: {sys.version.split()[0]}\n"
+                f"Platform: {platform.platform()}\nProject: {self.manager.project_dir}"
+            )
+            QApplication.clipboard().setText(body)
+            self.statusBar().showMessage(self._text("copy_environment"))
+
+    def _export_project_tree_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("project_tree_csv"), "project-tree.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["path", "bytes", "modified"])
+                for path in sorted(self.manager.list_files()):
+                    writer.writerow(
+                        [
+                            str(path.relative_to(self.manager.project_dir)),
+                            path.stat().st_size,
+                            datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                        ]
+                    )
+            self.statusBar().showMessage(str(destination))
+
+    def _export_archive_manifest_csv(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_manifest_csv"), "archive-manifest.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with (
+                zipfile.ZipFile(archive) as source,
+                Path(destination).open("w", newline="", encoding="utf-8") as stream,
+            ):
+                writer = csv.writer(stream)
+                writer.writerow(["path", "bytes", "compressed_bytes", "modified"])
+                for item in source.infolist():
+                    writer.writerow(
+                        [item.filename, item.file_size, item.compress_size, datetime(*item.date_time).isoformat()]
+                    )
+            self.statusBar().showMessage(str(destination))
+
+    def _show_backup_day_counts(self) -> None:
+        if not self.manager:
+            return
+        counts: dict[str, int] = {}
+        for path in self.manager.backup_dir.glob("*.zip"):
+            day = datetime.fromtimestamp(path.stat().st_mtime).date().isoformat()
+            counts[day] = counts.get(day, 0) + 1
+        QMessageBox.information(
+            self,
+            self._text("backup_day_counts"),
+            "\n".join(f"{day}: {count}" for day, count in sorted(counts.items())) or "None",
+        )
+
+    def _copy_latest_backup_path(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        if archives:
+            QApplication.clipboard().setText(str(archives[0]))
+            self.statusBar().showMessage(str(archives[0]))
+
+    def _export_project_extensions_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("project_extensions_csv"), "project-extensions.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        totals: dict[str, list[int]] = {}
+        for path in self.manager.list_files():
+            key = path.suffix.lower() or "[no extension]"
+            item = totals.setdefault(key, [0, 0])
+            item[0] += 1
+            item[1] += path.stat().st_size
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["extension", "files", "bytes"])
+            writer.writerows([key, values[0], values[1]] for key, values in sorted(totals.items()))
+        self.statusBar().showMessage(str(destination))
+
+    def _export_archive_dates_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_dates_csv"), "archive-dates.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["archive", "modified", "bytes"])
+            for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                writer.writerow(
+                    [path.name, datetime.fromtimestamp(path.stat().st_mtime).isoformat(), path.stat().st_size]
+                )
+        self.statusBar().showMessage(str(destination))
+
+    def _check_storage_write(self) -> None:
+        if not self.manager:
+            return
+        try:
+            self.manager.backup_dir.mkdir(parents=True, exist_ok=True)
+            probe = self.manager.backup_dir / ".codesaver-write-check"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            result = "OK"
+        except OSError as exc:
+            result = str(exc)
+        QMessageBox.information(self, self._text("storage_write_check"), result)
+
+    def _show_project_file_count(self) -> None:
+        if self.manager:
+            QMessageBox.information(self, self._text("project_file_count"), str(len(self.manager.list_files())))
+
+    def _export_backup_list_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_list_csv"), "backups.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["archive", "bytes", "modified"])
+                for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                    writer.writerow(
+                        [path.name, path.stat().st_size, datetime.fromtimestamp(path.stat().st_mtime).isoformat()]
+                    )
+            self.statusBar().showMessage(str(destination))
+
+    def _copy_project_root(self) -> None:
+        if self.manager:
+            QApplication.clipboard().setText(str(self.manager.project_dir))
+            self.statusBar().showMessage(str(self.manager.project_dir))
+
+    def _show_latest_backup_info(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+        if archives:
+            path = archives[0]
+            body = (
+                f"{path.name}\nSize: {path.stat().st_size} bytes\n"
+                f"Modified: {datetime.fromtimestamp(path.stat().st_mtime).isoformat()}"
+            )
+        else:
+            body = "None"
+        QMessageBox.information(self, self._text("latest_backup_info"), body)
+
+    def _show_backup_extensions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as source:
+            extensions = sorted(
+                {
+                    Path(item.filename).suffix.lower() or "[no extension]"
+                    for item in source.infolist()
+                    if not item.is_dir()
+                }
+            )
+        QMessageBox.information(self, self._text("backup_extensions"), "\n".join(extensions) or "None")
+
+    def _copy_archive_names(self) -> None:
+        if self.manager:
+            names = sorted(path.name for path in self.manager.backup_dir.glob("*.zip"))
+            QApplication.clipboard().setText("\n".join(names))
+            self.statusBar().showMessage(self._text("archive_names_copy"))
+
+    def _show_project_depth(self) -> None:
+        if self.manager:
+            depth = max(
+                (len(path.relative_to(self.manager.project_dir).parts) for path in self.manager.list_files()), default=0
+            )
+            QMessageBox.information(self, self._text("project_depth"), str(depth))
+
+    def _copy_desktop_version(self) -> None:
+        QApplication.clipboard().setText(__version__)
+        self.statusBar().showMessage(__version__)
+
+    def _show_selected_file_count(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                count = sum(not item.is_dir() for item in source.infolist())
+            QMessageBox.information(self, self._text("selected_file_count"), str(count))
+
+    def _export_project_paths_txt(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("project_paths_txt"), "project-paths.txt", "Text files (*.txt)"
+        )
+        if destination:
+            paths = sorted(str(path.relative_to(self.manager.project_dir)) for path in self.manager.list_files())
+            Path(destination).write_text("\n".join(paths) + ("\n" if paths else ""), encoding="utf-8")
+            self.statusBar().showMessage(str(destination))
+
+    def _show_backup_free_gb(self) -> None:
+        if self.manager:
+            free = disk_usage(self.manager.backup_dir).free / (1024**3)
+            QMessageBox.information(self, self._text("backup_free_gb"), f"{free:.2f} GB")
+
+    def _show_selected_ratio(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+            ratio = stored / original * 100 if original else 0
+            QMessageBox.information(self, self._text("selected_ratio"), f"{ratio:.1f}%")
+
+    def _export_backup_paths_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_paths_csv"), "backup-paths.csv", "CSV files (*.csv)"
+        )
+        if destination:
+            with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["archive", "path"])
+                for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                    writer.writerow([path.name, str(path)])
+            self.statusBar().showMessage(str(destination))
+
+    def _copy_project_summary(self) -> None:
+        if self.manager:
+            files = self.manager.list_files()
+            total = sum(path.stat().st_size for path in files)
+            QApplication.clipboard().setText(
+                f"Project: {self.manager.project_dir}\nFiles: {len(files)}\nBytes: {total}"
+            )
+            self.statusBar().showMessage(self._text("project_summary_copy"))
+
+    def _show_largest_backup(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_size, reverse=True)
+        body = f"{archives[0].name}\n{archives[0].stat().st_size} bytes" if archives else "None"
+        QMessageBox.information(self, self._text("largest_backup"), body)
+
+    def _show_backup_count_status(self) -> None:
+        if self.manager:
+            count = len(list(self.manager.backup_dir.glob("*.zip")))
+            self.statusBar().showMessage(f"{count} backups")
+
+    def _export_backup_list_json(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("backup_list_json"), "backups.json", "JSON files (*.json)"
+        )
+        if destination:
+            entries = [
+                {"name": path.name, "bytes": path.stat().st_size, "modified": path.stat().st_mtime}
+                for path in sorted(self.manager.backup_dir.glob("*.zip"))
+            ]
+            Path(destination).write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self.statusBar().showMessage(str(destination))
+
+    def _show_project_size_summary(self) -> None:
+        if self.manager:
+            total = sum(path.stat().st_size for path in self.manager.list_files())
+            QMessageBox.information(self, self._text("project_size_summary"), f"{format_bytes(total)}\n{total} bytes")
+
+    def _show_backup_months(self) -> None:
+        if not self.manager:
+            return
+        months: dict[str, int] = {}
+        for path in self.manager.backup_dir.glob("*.zip"):
+            month = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m")
+            months[month] = months.get(month, 0) + 1
+        QMessageBox.information(
+            self,
+            self._text("backup_months"),
+            "\n".join(f"{month}: {count}" for month, count in sorted(months.items())) or "None",
+        )
+
+    def _copy_selected_archive_name(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            QApplication.clipboard().setText(archive.name)
+            self.statusBar().showMessage(archive.name)
+
+    def _show_root_items(self) -> None:
+        if self.manager:
+            items = sorted(path.name for path in self.manager.project_dir.iterdir())
+            QMessageBox.information(self, self._text("root_items"), "\n".join(items) or "None")
+
+    def _show_oldest_backup(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+        body = (
+            f"{archives[0].name}\n{datetime.fromtimestamp(archives[0].stat().st_mtime).isoformat()}"
+            if archives
+            else "None"
+        )
+        QMessageBox.information(self, self._text("oldest_backup"), body)
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
