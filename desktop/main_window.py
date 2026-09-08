@@ -545,6 +545,13 @@ TEXT["ru"].update(
         "backup_disk_usage": "Показать занятое место бэкапов",
         "backup_count_summary": "Скопировать сводку количества бэкапов",
         "backup_count_copied": "Сводка бэкапов скопирована",
+        "modified_today": "Показать файлы, изменённые сегодня",
+        "backup_sizes_csv": "Экспортировать размеры бэкапов CSV",
+        "latest_backup_delta": "Показать разницу последнего бэкапа",
+        "copy_project_file_count": "Копировать количество файлов проекта",
+        "project_file_count_copied": "Количество файлов скопировано",
+        "archive_timestamp": "Копировать временную метку архива",
+        "archive_timestamp_copied": "Временная метка скопирована",
     }
 )
 TEXT["ru"].update(
@@ -879,6 +886,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("project_extensions_summary"), self._show_project_extensions_summary)
         tools_menu.addAction(self._text("backup_disk_usage"), self._show_backup_disk_usage)
         tools_menu.addAction(self._text("backup_count_summary"), self._copy_backup_count_summary)
+        tools_menu.addAction(self._text("modified_today"), self._show_modified_today)
+        tools_menu.addAction(self._text("backup_sizes_csv"), self._export_backup_sizes_csv)
+        tools_menu.addAction(self._text("latest_backup_delta"), self._show_latest_backup_delta)
+        tools_menu.addAction(self._text("copy_project_file_count"), self._copy_project_file_count)
+        tools_menu.addAction(self._text("archive_timestamp"), self._copy_archive_timestamp)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2885,6 +2897,59 @@ class MainWindow(QMainWindow):
             value = f"{count} backups • {format_bytes(total)}"
             QApplication.clipboard().setText(value)
             self.statusBar().showMessage(self._text("backup_count_copied"))
+
+    def _show_modified_today(self) -> None:
+        if self.manager:
+            cutoff = time.time() - 86400
+            files = [path for path in self.manager.list_files() if path.stat().st_mtime >= cutoff]
+            QMessageBox.information(
+                self,
+                self._text("modified_today"),
+                "\n".join(str(path.relative_to(self.manager.project_dir)) for path in files) or "—",
+            )
+
+    def _export_backup_sizes_csv(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(self, self._text("backup_sizes_csv"), "backup-sizes.csv")
+        if not destination:
+            return
+        try:
+            with Path(destination).open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["archive", "created", "bytes"])
+                for path in sorted(self.manager.backup_dir.glob("*.zip")):
+                    writer.writerow(
+                        [path.name, datetime.fromtimestamp(path.stat().st_mtime).isoformat(), path.stat().st_size]
+                    )
+            self.statusBar().showMessage(destination)
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _show_latest_backup_delta(self) -> None:
+        if not self.manager:
+            return
+        archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+        project_size = sum(path.stat().st_size for path in self.manager.list_files())
+        backup_size = archives[-1].stat().st_size if archives else 0
+        QMessageBox.information(
+            self,
+            self._text("latest_backup_delta"),
+            "Project: {}\nBackup: {}\nDifference: {}".format(
+                format_bytes(project_size), format_bytes(backup_size), format_bytes(abs(project_size - backup_size))
+            ),
+        )
+
+    def _copy_project_file_count(self) -> None:
+        if self.manager:
+            QApplication.clipboard().setText(str(len(self.manager.list_files())))
+            self.statusBar().showMessage(self._text("project_file_count_copied"))
+
+    def _copy_archive_timestamp(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            QApplication.clipboard().setText(str(int(archive.stat().st_mtime)))
+            self.statusBar().showMessage(self._text("archive_timestamp_copied"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
