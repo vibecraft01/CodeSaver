@@ -248,6 +248,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-branches-json", action="store_true", help="Export local Git branches as JSON")
     parser.add_argument("--project-top-files", type=int, metavar="N", help="Show the N largest project files")
+    parser.add_argument("--backup-size-by-day-json", action="store_true", help="Summarize backup sizes by day")
+    parser.add_argument("--project-hashes-json", type=Path, metavar="FILE", help="Write project file hashes as JSON")
+    parser.add_argument("--archive-empty-members", type=Path, metavar="ARCHIVE", help="List empty archive members")
+    parser.add_argument(
+        "--project-depth-summary", action="store_true", help="Summarize project files by directory depth"
+    )
+    parser.add_argument("--backup-name-pattern", metavar="TEXT", help="Find backups whose names contain text")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1835,6 +1842,43 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.json
                 else "\n".join(f"{item['bytes']}  {item['path']}" for item in result["files"])
             )
+        elif args.backup_size_by_day_json:
+            totals: dict[str, int] = {}
+            for path in manager.backup_dir.glob("*.zip"):
+                day = datetime.fromtimestamp(path.stat().st_mtime).date().isoformat()
+                totals[day] = totals.get(day, 0) + path.stat().st_size
+            print(json.dumps({"operation": "backup-size-by-day", "days": totals}, ensure_ascii=False, indent=2))
+        elif args.project_hashes_json:
+            files = []
+            for path in manager.list_files():
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                files.append({"path": str(path.relative_to(manager.project_dir)), "sha256": digest})
+            payload = {"operation": "project-hashes", "project": str(manager.project_dir), "files": files}
+            args.project_hashes_json.parent.mkdir(parents=True, exist_ok=True)
+            args.project_hashes_json.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            print(str(args.project_hashes_json))
+        elif args.archive_empty_members:
+            with zipfile.ZipFile(args.archive_empty_members) as archive:
+                empty = [item.filename for item in archive.infolist() if not item.is_dir() and item.file_size == 0]
+            result = {"operation": "archive-empty-members", "archive": str(args.archive_empty_members), "files": empty}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(empty))
+        elif args.project_depth_summary:
+            depths: Counter[int] = Counter(
+                len(path.relative_to(manager.project_dir).parts) - 1 for path in manager.list_files()
+            )
+            result = {"operation": "project-depth-summary", "depths": dict(sorted(depths.items()))}
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else "\n".join(f"{key}: {value}" for key, value in sorted(depths.items()))
+            )
+        elif args.backup_name_pattern:
+            query = args.backup_name_pattern.casefold()
+            matches = [str(path) for path in sorted(manager.backup_dir.glob("*.zip")) if query in path.name.casefold()]
+            result = {"operation": "backup-name-pattern", "query": args.backup_name_pattern, "backups": matches}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(matches))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)

@@ -537,6 +537,14 @@ TEXT["ru"].update(
         "backup_directory_copied": "Путь папки бэкапов скопирован",
         "show_project_root": "Показать содержимое корня проекта",
         "project_root_title": "Содержимое корня проекта",
+        "copy_archive_size": "Копировать размер выбранного архива",
+        "archive_size_copied": "Размер архива скопирован",
+        "export_project_inventory": "Экспортировать инвентарь проекта JSON",
+        "project_inventory_exported": "Инвентарь проекта сохранён: {path}",
+        "project_extensions_summary": "Показать расширения проекта",
+        "backup_disk_usage": "Показать занятое место бэкапов",
+        "backup_count_summary": "Скопировать сводку количества бэкапов",
+        "backup_count_copied": "Сводка бэкапов скопирована",
     }
 )
 TEXT["ru"].update(
@@ -866,6 +874,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("show_archive_files"), self._show_selected_archive_files)
         tools_menu.addAction(self._text("copy_backup_directory"), self._copy_backup_directory)
         tools_menu.addAction(self._text("show_project_root"), self._show_project_root_contents)
+        tools_menu.addAction(self._text("copy_archive_size"), self._copy_selected_archive_size)
+        tools_menu.addAction(self._text("export_project_inventory"), self._export_project_inventory)
+        tools_menu.addAction(self._text("project_extensions_summary"), self._show_project_extensions_summary)
+        tools_menu.addAction(self._text("backup_disk_usage"), self._show_backup_disk_usage)
+        tools_menu.addAction(self._text("backup_count_summary"), self._copy_backup_count_summary)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2816,6 +2829,62 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, self._text("project_root_title"), "\n".join(items) or "—")
         except OSError as exc:
             self._show_error(str(exc))
+
+    def _copy_selected_archive_size(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            value = format_bytes(archive.stat().st_size)
+            QApplication.clipboard().setText(value)
+            self.statusBar().showMessage(self._text("archive_size_copied"))
+
+    def _export_project_inventory(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_project_inventory"), "project-inventory.json"
+        )
+        if not destination:
+            return
+        try:
+            files = [
+                {"path": str(path.relative_to(self.manager.project_dir)), "bytes": path.stat().st_size}
+                for path in self.manager.list_files()
+            ]
+            Path(destination).write_text(
+                json.dumps({"project": str(self.manager.project_dir), "files": files}, ensure_ascii=False, indent=2)
+                + "\n",
+                encoding="utf-8",
+            )
+            self.statusBar().showMessage(self._text("project_inventory_exported", path=destination))
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _show_project_extensions_summary(self) -> None:
+        if not self.manager:
+            return
+        counts = Counter(path.suffix.lower() or "[no extension]" for path in self.manager.list_files())
+        QMessageBox.information(
+            self,
+            self._text("project_extensions_summary"),
+            "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "—",
+        )
+
+    def _show_backup_disk_usage(self) -> None:
+        if not self.manager:
+            return
+        total = sum(path.stat().st_size for path in self.manager.backup_dir.glob("*.zip"))
+        free = disk_usage(self.manager.backup_dir).free if self.manager.backup_dir.exists() else 0
+        QMessageBox.information(
+            self, self._text("backup_disk_usage"), f"Backups: {format_bytes(total)}\nFree: {format_bytes(free)}"
+        )
+
+    def _copy_backup_count_summary(self) -> None:
+        if self.manager:
+            count = len(list(self.manager.backup_dir.glob("*.zip")))
+            total = sum(path.stat().st_size for path in self.manager.backup_dir.glob("*.zip"))
+            value = f"{count} backups • {format_bytes(total)}"
+            QApplication.clipboard().setText(value)
+            self.statusBar().showMessage(self._text("backup_count_copied"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
