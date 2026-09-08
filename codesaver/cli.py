@@ -256,6 +256,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--backup-name-pattern", metavar="TEXT", help="Find backups whose names contain text")
     parser.add_argument(
+        "--backup-total-growth", action="store_true", help="Compare total backup storage with project size"
+    )
+    parser.add_argument("--project-empty-files", action="store_true", help="List empty project files")
+    parser.add_argument(
+        "--archive-largest-member", type=Path, metavar="ARCHIVE", help="Show the largest archive member"
+    )
+    parser.add_argument("--git-commit-count-json", action="store_true", help="Export the Git commit count as JSON")
+    parser.add_argument("--project-symlink-count", action="store_true", help="Count symbolic links in the project")
+    parser.add_argument(
         "--restore-files",
         nargs="+",
         metavar="ARCHIVE FILE",
@@ -1879,6 +1888,60 @@ def main(argv: Optional[list[str]] = None) -> int:
             matches = [str(path) for path in sorted(manager.backup_dir.glob("*.zip")) if query in path.name.casefold()]
             result = {"operation": "backup-name-pattern", "query": args.backup_name_pattern, "backups": matches}
             print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(matches))
+        elif args.backup_total_growth:
+            backup_bytes = sum(path.stat().st_size for path in manager.backup_dir.glob("*.zip"))
+            project_bytes = sum(path.stat().st_size for path in manager.list_files())
+            result = {
+                "operation": "backup-total-growth",
+                "backup_bytes": backup_bytes,
+                "project_bytes": project_bytes,
+                "difference_bytes": backup_bytes - project_bytes,
+            }
+            print(
+                json.dumps(result)
+                if args.json
+                else f"Backups: {_format_bytes(backup_bytes)}\nProject: {_format_bytes(project_bytes)}"
+            )
+        elif args.project_empty_files:
+            files = [
+                str(path.relative_to(manager.project_dir)) for path in manager.list_files() if path.stat().st_size == 0
+            ]
+            print(json.dumps({"operation": "project-empty-files", "files": files}) if args.json else "\n".join(files))
+        elif args.archive_largest_member:
+            with zipfile.ZipFile(args.archive_largest_member) as archive:
+                members = [item for item in archive.infolist() if not item.is_dir()]
+            largest = max(members, key=lambda item: item.file_size, default=None)
+            result = {
+                "operation": "archive-largest-member",
+                "archive": str(args.archive_largest_member),
+                "member": largest.filename if largest else None,
+                "bytes": largest.file_size if largest else 0,
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else (f"{result['bytes']}  {result['member']}" if largest else "No files")
+            )
+        elif args.git_commit_count_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "rev-list", "--count", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            count = int(completed.stdout.strip() or 0) if completed.returncode == 0 else 0
+            print(json.dumps({"operation": "git-commit-count", "count": count}))
+        elif args.project_symlink_count:
+            links = [
+                str(path.relative_to(manager.project_dir))
+                for path in manager.project_dir.rglob("*")
+                if path.is_symlink()
+            ]
+            print(
+                json.dumps({"operation": "project-symlink-count", "count": len(links), "links": links})
+                if args.json
+                else str(len(links))
+            )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
