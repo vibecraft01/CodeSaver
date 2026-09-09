@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import logging
+import os
 import platform
 from collections import Counter
 from pathlib import Path
@@ -264,6 +265,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-commit-count-json", action="store_true", help="Export the Git commit count as JSON")
     parser.add_argument("--project-symlink-count", action="store_true", help="Count symbolic links in the project")
+    parser.add_argument("--backup-average-size", action="store_true", help="Show average backup size")
+    parser.add_argument("--project-largest-extension", action="store_true", help="Show the largest extension group")
+    parser.add_argument("--archive-directory-count", type=Path, metavar="ARCHIVE", help="Count archive directories")
+    parser.add_argument("--git-author-summary-json", action="store_true", help="Export Git author counts as JSON")
+    parser.add_argument("--project-readonly-files", action="store_true", help="List read-only project files")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1941,6 +1947,57 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps({"operation": "project-symlink-count", "count": len(links), "links": links})
                 if args.json
                 else str(len(links))
+            )
+        elif args.backup_average_size:
+            archives = list(manager.backup_dir.glob("*.zip"))
+            total = sum(path.stat().st_size for path in archives)
+            result = {
+                "operation": "backup-average-size",
+                "count": len(archives),
+                "bytes": total / len(archives) if archives else 0,
+            }
+            print(json.dumps(result) if args.json else f"Average: {_format_bytes(int(result['bytes']))}")
+        elif args.project_largest_extension:
+            totals: dict[str, int] = {}
+            for path in manager.list_files():
+                key = path.suffix.lower() or "[no extension]"
+                totals[key] = totals.get(key, 0) + path.stat().st_size
+            largest = max(totals.items(), key=lambda item: item[1], default=(None, 0))
+            print(
+                json.dumps({"operation": "project-largest-extension", "extension": largest[0], "bytes": largest[1]})
+                if args.json
+                else f"{largest[0]}: {_format_bytes(largest[1])}"
+            )
+        elif args.archive_directory_count:
+            with zipfile.ZipFile(args.archive_directory_count) as archive:
+                directories = {str(Path(item.filename).parent) for item in archive.infolist() if "/" in item.filename}
+            result = {
+                "operation": "archive-directory-count",
+                "archive": str(args.archive_directory_count),
+                "count": len(directories),
+            }
+            print(json.dumps(result) if args.json else str(len(directories)))
+        elif args.git_author_summary_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "shortlog", "-s", "-n", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            authors = [
+                {"commits": int(line.strip().split(maxsplit=1)[0]), "author": line.strip().split(maxsplit=1)[1]}
+                for line in completed.stdout.splitlines()
+                if line.strip() and len(line.strip().split(maxsplit=1)) == 2
+            ]
+            print(json.dumps({"operation": "git-author-summary", "authors": authors}, ensure_ascii=False, indent=2))
+        elif args.project_readonly_files:
+            files = [
+                str(path.relative_to(manager.project_dir))
+                for path in manager.list_files()
+                if not os.access(path, os.W_OK)
+            ]
+            print(
+                json.dumps({"operation": "project-readonly-files", "files": files}) if args.json else "\n".join(files)
             )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()

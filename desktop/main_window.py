@@ -552,6 +552,11 @@ TEXT["ru"].update(
         "project_file_count_copied": "Количество файлов скопировано",
         "archive_timestamp": "Копировать временную метку архива",
         "archive_timestamp_copied": "Временная метка скопирована",
+        "project_directory_count_new": "Показать количество папок проекта",
+        "latest_backup_date_new": "Копировать дату последнего бэкапа",
+        "project_extensions_csv_new": "Экспортировать расширения проекта CSV",
+        "selected_member_count_new": "Показать количество файлов архива",
+        "project_size_bytes_new": "Копировать размер проекта в байтах",
     }
 )
 TEXT["ru"].update(
@@ -891,6 +896,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("latest_backup_delta"), self._show_latest_backup_delta)
         tools_menu.addAction(self._text("copy_project_file_count"), self._copy_project_file_count)
         tools_menu.addAction(self._text("archive_timestamp"), self._copy_archive_timestamp)
+        tools_menu.addAction(self._text("project_directory_count_new"), self._show_project_directory_count_new)
+        tools_menu.addAction(self._text("latest_backup_date_new"), self._copy_latest_backup_date_new)
+        tools_menu.addAction(self._text("project_extensions_csv_new"), self._export_project_extensions_csv_new)
+        tools_menu.addAction(self._text("selected_member_count_new"), self._show_selected_member_count_new)
+        tools_menu.addAction(self._text("project_size_bytes_new"), self._copy_project_size_bytes_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -2950,6 +2960,46 @@ class MainWindow(QMainWindow):
         if archive:
             QApplication.clipboard().setText(str(int(archive.stat().st_mtime)))
             self.statusBar().showMessage(self._text("archive_timestamp_copied"))
+
+    def _show_project_directory_count_new(self) -> None:
+        if self.manager:
+            count = sum(1 for path in self.manager.project_dir.rglob("*") if path.is_dir())
+            QMessageBox.information(self, self._text("project_directory_count_new"), str(count))
+
+    def _copy_latest_backup_date_new(self) -> None:
+        if self.manager:
+            archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+            if archives:
+                QApplication.clipboard().setText(datetime.fromtimestamp(archives[-1].stat().st_mtime).isoformat())
+                self.statusBar().showMessage(self._text("latest_backup_date_new"))
+
+    def _export_project_extensions_csv_new(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(self, self._text("project_extensions_csv_new"), "extensions.csv")
+        if not destination:
+            return
+        counts = Counter(path.suffix.lower() or "[no extension]" for path in self.manager.list_files())
+        try:
+            with Path(destination).open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["extension", "files"])
+                writer.writerows(sorted(counts.items()))
+            self.statusBar().showMessage(destination)
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _show_selected_member_count_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            count = len([item for item in self.manager.core.list_backup(archive) if not item.endswith("/")])
+            QMessageBox.information(self, self._text("selected_member_count_new"), str(count))
+
+    def _copy_project_size_bytes_new(self) -> None:
+        if self.manager:
+            total = sum(path.stat().st_size for path in self.manager.list_files())
+            QApplication.clipboard().setText(str(total))
+            self.statusBar().showMessage(self._text("project_size_bytes_new"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
