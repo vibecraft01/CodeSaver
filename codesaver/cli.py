@@ -270,6 +270,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-directory-count", type=Path, metavar="ARCHIVE", help="Count archive directories")
     parser.add_argument("--git-author-summary-json", action="store_true", help="Export Git author counts as JSON")
     parser.add_argument("--project-readonly-files", action="store_true", help="List read-only project files")
+    parser.add_argument("--backup-newest-json", action="store_true", help="Export newest backup metadata as JSON")
+    parser.add_argument("--project-average-file-size", action="store_true", help="Show average project file size")
+    parser.add_argument(
+        "--archive-total-uncompressed", type=Path, metavar="ARCHIVE", help="Show archive uncompressed size"
+    )
+    parser.add_argument("--git-tag-summary-json", action="store_true", help="Export Git tag names as JSON")
+    parser.add_argument("--project-hidden-files", action="store_true", help="List hidden project files")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1999,6 +2006,54 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 json.dumps({"operation": "project-readonly-files", "files": files}) if args.json else "\n".join(files)
             )
+        elif args.backup_newest_json:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+            newest = archives[0] if archives else None
+            result = {
+                "operation": "backup-newest",
+                "archive": str(newest) if newest else None,
+                "bytes": newest.stat().st_size if newest else 0,
+                "created": datetime.fromtimestamp(newest.stat().st_mtime).isoformat() if newest else None,
+            }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.project_average_file_size:
+            files = manager.list_files()
+            total = sum(path.stat().st_size for path in files)
+            average = total / len(files) if files else 0
+            print(
+                json.dumps({"operation": "project-average-file-size", "files": len(files), "bytes": average})
+                if args.json
+                else _format_bytes(int(average))
+            )
+        elif args.archive_total_uncompressed:
+            with zipfile.ZipFile(args.archive_total_uncompressed) as archive:
+                total = sum(item.file_size for item in archive.infolist() if not item.is_dir())
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-total-uncompressed",
+                        "archive": str(args.archive_total_uncompressed),
+                        "bytes": total,
+                    }
+                )
+                if args.json
+                else _format_bytes(total)
+            )
+        elif args.git_tag_summary_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "tag", "--list"], capture_output=True, text=True, check=False
+            )
+            tags = [line for line in completed.stdout.splitlines() if line]
+            print(
+                json.dumps(
+                    {"operation": "git-tag-summary", "count": len(tags), "tags": tags}, ensure_ascii=False, indent=2
+                )
+            )
+        elif args.project_hidden_files:
+            files = [
+                str(path.relative_to(manager.project_dir)) for path in manager.list_files() if path.name.startswith(".")
+            ]
+            print(json.dumps({"operation": "project-hidden-files", "files": files}) if args.json else "\n".join(files))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
