@@ -557,6 +557,11 @@ TEXT["ru"].update(
         "project_extensions_csv_new": "Экспортировать расширения проекта CSV",
         "selected_member_count_new": "Показать количество файлов архива",
         "project_size_bytes_new": "Копировать размер проекта в байтах",
+        "recent_week_files_new": "Показать файлы за последние 7 дней",
+        "backup_names_txt_new": "Экспортировать имена бэкапов TXT",
+        "backup_total_bytes_new": "Копировать общий размер бэкапов",
+        "compression_ratio_new": "Показать сжатие выбранного архива",
+        "project_type_count_new": "Показать количество типов файлов",
     }
 )
 TEXT["ru"].update(
@@ -901,6 +906,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("project_extensions_csv_new"), self._export_project_extensions_csv_new)
         tools_menu.addAction(self._text("selected_member_count_new"), self._show_selected_member_count_new)
         tools_menu.addAction(self._text("project_size_bytes_new"), self._copy_project_size_bytes_new)
+        tools_menu.addAction(self._text("recent_week_files_new"), self._show_recent_week_files_new)
+        tools_menu.addAction(self._text("backup_names_txt_new"), self._export_backup_names_txt_new)
+        tools_menu.addAction(self._text("backup_total_bytes_new"), self._copy_backup_total_bytes_new)
+        tools_menu.addAction(self._text("compression_ratio_new"), self._show_compression_ratio_new)
+        tools_menu.addAction(self._text("project_type_count_new"), self._show_project_type_count_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3000,6 +3010,54 @@ class MainWindow(QMainWindow):
             total = sum(path.stat().st_size for path in self.manager.list_files())
             QApplication.clipboard().setText(str(total))
             self.statusBar().showMessage(self._text("project_size_bytes_new"))
+
+    def _show_recent_week_files_new(self) -> None:
+        if self.manager:
+            cutoff = time.time() - 7 * 86400
+            files = [path for path in self.manager.list_files() if path.stat().st_mtime >= cutoff]
+            QMessageBox.information(
+                self,
+                self._text("recent_week_files_new"),
+                "\n".join(str(path.relative_to(self.manager.project_dir)) for path in files) or "—",
+            )
+
+    def _export_backup_names_txt_new(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(self, self._text("backup_names_txt_new"), "backup-names.txt")
+        if not destination:
+            return
+        try:
+            names = sorted(path.name for path in self.manager.backup_dir.glob("*.zip"))
+            Path(destination).write_text("\n".join(names) + ("\n" if names else ""), encoding="utf-8")
+            self.statusBar().showMessage(destination)
+        except OSError as exc:
+            self._show_error(str(exc))
+
+    def _copy_backup_total_bytes_new(self) -> None:
+        if self.manager:
+            total = sum(path.stat().st_size for path in self.manager.backup_dir.glob("*.zip"))
+            QApplication.clipboard().setText(str(total))
+            self.statusBar().showMessage(self._text("backup_total_bytes_new"))
+
+    def _show_compression_ratio_new(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as source:
+            original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+            stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+        ratio = stored / original * 100 if original else 0
+        QMessageBox.information(self, self._text("compression_ratio_new"), f"Stored: {ratio:.1f}% of original")
+
+    def _show_project_type_count_new(self) -> None:
+        if self.manager:
+            counts = Counter(path.suffix.lower() or "[no extension]" for path in self.manager.list_files())
+            QMessageBox.information(
+                self,
+                self._text("project_type_count_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "—",
+            )
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
