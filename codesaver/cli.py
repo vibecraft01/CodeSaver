@@ -277,6 +277,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-tag-summary-json", action="store_true", help="Export Git tag names as JSON")
     parser.add_argument("--project-hidden-files", action="store_true", help="List hidden project files")
+    parser.add_argument("--backup-latest-age", action="store_true", help="Show the age of the newest backup")
+    parser.add_argument("--project-name-summary", action="store_true", help="Summarize project file names")
+    parser.add_argument(
+        "--archive-member-depth", type=Path, metavar="ARCHIVE", help="Summarize archive members by depth"
+    )
+    parser.add_argument("--git-remote-count-json", action="store_true", help="Export the Git remote count as JSON")
+    parser.add_argument(
+        "--project-largest-files-json", type=Path, metavar="FILE", help="Write largest project files as JSON"
+    )
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2054,6 +2063,68 @@ def main(argv: Optional[list[str]] = None) -> int:
                 str(path.relative_to(manager.project_dir)) for path in manager.list_files() if path.name.startswith(".")
             ]
             print(json.dumps({"operation": "project-hidden-files", "files": files}) if args.json else "\n".join(files))
+        elif args.backup_latest_age:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+            age = max(0.0, datetime.now(timezone.utc).timestamp() - archives[0].stat().st_mtime) if archives else None
+            result = {
+                "operation": "backup-latest-age",
+                "archive": str(archives[0]) if archives else None,
+                "age_seconds": age,
+            }
+            print(
+                json.dumps(result) if args.json else (f"Age: {int(age)} seconds" if age is not None else "No backups")
+            )
+        elif args.project_name_summary:
+            names = [path.name for path in manager.list_files()]
+            result = {
+                "operation": "project-name-summary",
+                "files": len(names),
+                "unique_names": len(set(names)),
+                "longest": max(names, key=len, default=""),
+            }
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else f"Files: {result['files']}\nUnique names: {result['unique_names']}\nLongest: {result['longest']}"
+            )
+        elif args.archive_member_depth:
+            with zipfile.ZipFile(args.archive_member_depth) as archive:
+                depths = Counter(len(Path(item.filename).parts) - 1 for item in archive.infolist() if not item.is_dir())
+            result = {
+                "operation": "archive-member-depth",
+                "archive": str(args.archive_member_depth),
+                "depths": dict(sorted(depths.items())),
+            }
+            print(
+                json.dumps(result)
+                if args.json
+                else "\n".join(f"{key}: {value}" for key, value in sorted(depths.items()))
+            )
+        elif args.git_remote_count_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "remote"], capture_output=True, text=True, check=False
+            )
+            remotes = [line for line in completed.stdout.splitlines() if line]
+            print(
+                json.dumps(
+                    {"operation": "git-remote-count", "count": len(remotes), "remotes": remotes},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.project_largest_files_json:
+            files = sorted(manager.list_files(), key=lambda path: path.stat().st_size, reverse=True)[:10]
+            payload = {
+                "operation": "project-largest-files",
+                "files": [
+                    {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size} for path in files
+                ],
+            }
+            args.project_largest_files_json.parent.mkdir(parents=True, exist_ok=True)
+            args.project_largest_files_json.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            print(str(args.project_largest_files_json))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)

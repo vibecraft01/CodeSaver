@@ -562,6 +562,11 @@ TEXT["ru"].update(
         "backup_total_bytes_new": "Копировать общий размер бэкапов",
         "compression_ratio_new": "Показать сжатие выбранного архива",
         "project_type_count_new": "Показать количество типов файлов",
+        "project_total_lines_new": "Показать примерное число строк",
+        "backup_oldest_date_new": "Копировать дату старого бэкапа",
+        "archive_member_extensions_new": "Показать расширения архива",
+        "project_recent_count_new": "Показать число новых файлов",
+        "backup_names_count_new": "Копировать число бэкапов",
     }
 )
 TEXT["ru"].update(
@@ -911,6 +916,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("backup_total_bytes_new"), self._copy_backup_total_bytes_new)
         tools_menu.addAction(self._text("compression_ratio_new"), self._show_compression_ratio_new)
         tools_menu.addAction(self._text("project_type_count_new"), self._show_project_type_count_new)
+        tools_menu.addAction(self._text("project_total_lines_new"), self._show_project_total_lines_new)
+        tools_menu.addAction(self._text("backup_oldest_date_new"), self._copy_backup_oldest_date_new)
+        tools_menu.addAction(self._text("archive_member_extensions_new"), self._show_archive_member_extensions_new)
+        tools_menu.addAction(self._text("project_recent_count_new"), self._show_project_recent_count_new)
+        tools_menu.addAction(self._text("backup_names_count_new"), self._copy_backup_names_count_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3058,6 +3068,52 @@ class MainWindow(QMainWindow):
                 self._text("project_type_count_new"),
                 "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "—",
             )
+
+    def _show_project_total_lines_new(self) -> None:
+        if not self.manager:
+            return
+        total = 0
+        for path in self.manager.list_files():
+            try:
+                total += path.read_text(encoding="utf-8").count("\n")
+            except (OSError, UnicodeError):
+                continue
+        QMessageBox.information(self, self._text("project_total_lines_new"), str(total))
+
+    def _copy_backup_oldest_date_new(self) -> None:
+        if self.manager:
+            archives = sorted(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
+            if archives:
+                QApplication.clipboard().setText(datetime.fromtimestamp(archives[0].stat().st_mtime).isoformat())
+                self.statusBar().showMessage(self._text("backup_oldest_date_new"))
+
+    def _show_archive_member_extensions_new(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as source:
+            counts = Counter(
+                Path(item.filename).suffix.lower() or "[no extension]"
+                for item in source.infolist()
+                if not item.is_dir()
+            )
+        QMessageBox.information(
+            self,
+            self._text("archive_member_extensions_new"),
+            "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "—",
+        )
+
+    def _show_project_recent_count_new(self) -> None:
+        if self.manager:
+            cutoff = time.time() - 86400
+            count = sum(1 for path in self.manager.list_files() if path.stat().st_mtime >= cutoff)
+            QMessageBox.information(self, self._text("project_recent_count_new"), str(count))
+
+    def _copy_backup_names_count_new(self) -> None:
+        if self.manager:
+            count = len(list(self.manager.backup_dir.glob("*.zip")))
+            QApplication.clipboard().setText(str(count))
+            self.statusBar().showMessage(self._text("backup_names_count_new"))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
