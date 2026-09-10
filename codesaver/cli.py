@@ -286,6 +286,14 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--project-largest-files-json", type=Path, metavar="FILE", help="Write largest project files as JSON"
     )
+    parser.add_argument("--project-dir-counts-json", action="store_true", help="Count files in each project directory")
+    parser.add_argument(
+        "--backup-size-percentiles-json", action="store_true", help="Show backup size percentiles as JSON"
+    )
+    parser.add_argument(
+        "--archive-member-types-json", type=Path, metavar="ARCHIVE", help="Group archive members by type"
+    )
+    parser.add_argument("--git-file-count-json", action="store_true", help="Show Git tracked and untracked file counts")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2125,6 +2133,68 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
             print(str(args.project_largest_files_json))
+        elif args.project_dir_counts_json:
+            counts: Counter[str] = Counter()
+            for path in manager.list_files():
+                relative = path.relative_to(manager.project_dir)
+                directory = str(relative.parent) if str(relative.parent) != "." else "."
+                counts[directory] += 1
+            print(
+                json.dumps(
+                    {"operation": "project-directory-counts", "directories": dict(sorted(counts.items()))},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.backup_size_percentiles_json:
+            sizes = sorted(path.stat().st_size for path in manager.backup_dir.glob("*.zip"))
+
+            def percentile(value: float) -> int:
+                if not sizes:
+                    return 0
+                index = min(len(sizes) - 1, int(round((len(sizes) - 1) * value)))
+                return sizes[index]
+
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-size-percentiles",
+                        "count": len(sizes),
+                        "p50": percentile(0.5),
+                        "p90": percentile(0.9),
+                        "p99": percentile(0.99),
+                    },
+                    indent=2,
+                )
+            )
+        elif args.archive_member_types_json:
+            with zipfile.ZipFile(args.archive_member_types_json) as archive:
+                types = Counter(
+                    Path(item.filename).suffix.lower() or "[no extension]"
+                    for item in archive.infolist()
+                    if not item.is_dir()
+                )
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-types",
+                        "archive": str(args.archive_member_types_json),
+                        "types": dict(sorted(types.items())),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.git_file_count_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "status", "--short"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            tracked = sum(1 for line in completed.stdout.splitlines() if line and not line.startswith("??"))
+            untracked = sum(1 for line in completed.stdout.splitlines() if line.startswith("??"))
+            print(json.dumps({"operation": "git-file-count", "changed": tracked, "untracked": untracked}, indent=2))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
