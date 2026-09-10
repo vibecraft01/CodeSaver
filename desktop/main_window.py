@@ -133,6 +133,23 @@ TEXT["ru"].update(
 
 TEXT["ru"].update(
     {
+        "project_age_summary_new": "Показать возраст файлов проекта",
+        "backup_type_count_new": "Показать типы бэкапов",
+        "selected_largest_member_new": "Показать самый большой файл архива",
+        "export_project_dirs_new": "Экспортировать папки проекта CSV",
+    }
+)
+TEXT["en"].update(
+    {
+        "project_age_summary_new": "Show project file ages",
+        "backup_type_count_new": "Show backup types",
+        "selected_largest_member_new": "Show largest archive file",
+        "export_project_dirs_new": "Export project directories CSV",
+    }
+)
+
+TEXT["ru"].update(
+    {
         "verify_all": "Проверить все бэкапы",
         "verify_all_started": "Проверка всех бэкапов…",
         "verify_all_done": "Состояние бэкапов: {verified}/{total} проверено",
@@ -921,6 +938,10 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_member_extensions_new"), self._show_archive_member_extensions_new)
         tools_menu.addAction(self._text("project_recent_count_new"), self._show_project_recent_count_new)
         tools_menu.addAction(self._text("backup_names_count_new"), self._copy_backup_names_count_new)
+        tools_menu.addAction(self._text("project_age_summary_new"), self._show_project_age_summary_new)
+        tools_menu.addAction(self._text("backup_type_count_new"), self._show_backup_type_count_new)
+        tools_menu.addAction(self._text("selected_largest_member_new"), self._show_selected_largest_member_new)
+        tools_menu.addAction(self._text("export_project_dirs_new"), self._export_project_dirs_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3114,6 +3135,55 @@ class MainWindow(QMainWindow):
             count = len(list(self.manager.backup_dir.glob("*.zip")))
             QApplication.clipboard().setText(str(count))
             self.statusBar().showMessage(self._text("backup_names_count_new"))
+
+    def _show_project_age_summary_new(self) -> None:
+        if not self.manager:
+            return
+        now = time.time()
+        ages = [now - path.stat().st_mtime for path in self.manager.list_files()]
+        newest = min(ages, default=0) / 86400
+        oldest = max(ages, default=0) / 86400
+        QMessageBox.information(
+            self, self._text("project_age_summary_new"), f"Newest: {newest:.1f} days\nOldest: {oldest:.1f} days"
+        )
+
+    def _show_backup_type_count_new(self) -> None:
+        if not self.manager:
+            return
+        counts = Counter(path.suffix.lower() or "[no extension]" for path in self.manager.backup_dir.iterdir())
+        QMessageBox.information(
+            self,
+            self._text("backup_type_count_new"),
+            "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "None",
+        )
+
+    def _show_selected_largest_member_new(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as source:
+            largest = max(
+                (item for item in source.infolist() if not item.is_dir()), key=lambda item: item.file_size, default=None
+            )
+        body = f"{largest.filename}: {format_bytes(largest.file_size)}" if largest else "None"
+        QMessageBox.information(self, self._text("selected_largest_member_new"), body)
+
+    def _export_project_dirs_new(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("export_project_dirs_new"), "project-directories.csv", "CSV files (*.csv)"
+        )
+        if not destination:
+            return
+        directories = sorted(
+            {str(path.parent.relative_to(self.manager.project_dir)) for path in self.manager.list_files()}
+        )
+        with Path(destination).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["directory"])
+            writer.writerows([[directory] for directory in directories])
+        self.statusBar().showMessage(str(destination))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
