@@ -150,6 +150,25 @@ TEXT["en"].update(
 
 TEXT["ru"].update(
     {
+        "project_modified_range_new": "Показать диапазон изменений проекта",
+        "largest_project_directory_new": "Показать самую большую папку проекта",
+        "backup_name_lengths_new": "Показать длину имён бэкапов",
+        "latest_git_change_new": "Показать последний Git-коммит",
+        "archive_depth_stats_new": "Показать глубину выбранного архива",
+    }
+)
+TEXT["en"].update(
+    {
+        "project_modified_range_new": "Show project modification range",
+        "largest_project_directory_new": "Show largest project directory",
+        "backup_name_lengths_new": "Show backup name lengths",
+        "latest_git_change_new": "Show latest Git change",
+        "archive_depth_stats_new": "Show selected archive depth",
+    }
+)
+
+TEXT["ru"].update(
+    {
         "verify_all": "Проверить все бэкапы",
         "verify_all_started": "Проверка всех бэкапов…",
         "verify_all_done": "Состояние бэкапов: {verified}/{total} проверено",
@@ -942,6 +961,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("backup_type_count_new"), self._show_backup_type_count_new)
         tools_menu.addAction(self._text("selected_largest_member_new"), self._show_selected_largest_member_new)
         tools_menu.addAction(self._text("export_project_dirs_new"), self._export_project_dirs_new)
+        tools_menu.addAction(self._text("project_modified_range_new"), self._show_project_modified_range_new)
+        tools_menu.addAction(self._text("largest_project_directory_new"), self._show_largest_project_directory_new)
+        tools_menu.addAction(self._text("backup_name_lengths_new"), self._show_backup_name_lengths_new)
+        tools_menu.addAction(self._text("latest_git_change_new"), self._show_latest_git_change_new)
+        tools_menu.addAction(self._text("archive_depth_stats_new"), self._show_archive_depth_stats_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3135,6 +3159,58 @@ class MainWindow(QMainWindow):
             count = len(list(self.manager.backup_dir.glob("*.zip")))
             QApplication.clipboard().setText(str(count))
             self.statusBar().showMessage(self._text("backup_names_count_new"))
+
+    def _show_project_modified_range_new(self) -> None:
+        if self.manager:
+            files = self.manager.list_files()
+            times = [path.stat().st_mtime for path in files]
+            oldest = datetime.fromtimestamp(min(times)).isoformat() if times else "None"
+            newest = datetime.fromtimestamp(max(times)).isoformat() if times else "None"
+            body = f"Files: {len(files)}\nOldest: {oldest}\nNewest: {newest}"
+            QMessageBox.information(self, self._text("project_modified_range_new"), body)
+
+    def _show_largest_project_directory_new(self) -> None:
+        if self.manager:
+            counts = Counter(
+                str(path.relative_to(self.manager.project_dir).parent) for path in self.manager.list_files()
+            )
+            directory, count = max(counts.items(), key=lambda item: item[1], default=(".", 0))
+            QMessageBox.information(self, self._text("largest_project_directory_new"), f"{directory}: {count}")
+
+    def _show_backup_name_lengths_new(self) -> None:
+        if self.manager:
+            lengths = [len(path.name) for path in self.manager.backup_dir.glob("*.zip")]
+            average = sum(lengths) / len(lengths) if lengths else 0
+            QMessageBox.information(
+                self,
+                self._text("backup_name_lengths_new"),
+                f"Count: {len(lengths)}\nAverage: {average:.1f}\nMax: {max(lengths, default=0)}",
+            )
+
+    def _show_latest_git_change_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            result = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "log", "-1", "--format=%h %ad%n%s", "--date=short"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            result = "Not a Git repository"
+        QMessageBox.information(self, self._text("latest_git_change_new"), result or "No commits")
+
+    def _show_archive_depth_stats_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                depths = [len(Path(item.filename).parts) - 1 for item in source.infolist() if not item.is_dir()]
+            average = sum(depths) / len(depths) if depths else 0
+            QMessageBox.information(
+                self,
+                self._text("archive_depth_stats_new"),
+                f"Files: {len(depths)}\nAverage: {average:.1f}\nMax: {max(depths, default=0)}",
+            )
 
     def _show_project_age_summary_new(self) -> None:
         if not self.manager:

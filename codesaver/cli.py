@@ -295,6 +295,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-file-count-json", action="store_true", help="Show Git tracked and untracked file counts")
     parser.add_argument(
+        "--project-largest-directory-json", action="store_true", help="Show the largest project directory"
+    )
+    parser.add_argument("--backup-name-lengths-json", action="store_true", help="Show backup name length statistics")
+    parser.add_argument(
+        "--archive-member-depths-json", type=Path, metavar="ARCHIVE", help="Summarize archive depth statistics"
+    )
+    parser.add_argument("--git-last-change-json", action="store_true", help="Show the latest Git change as JSON")
+    parser.add_argument("--project-modified-range-json", action="store_true", help="Show project modification range")
+    parser.add_argument(
         "--restore-files",
         nargs="+",
         metavar="ARCHIVE FILE",
@@ -2195,6 +2204,70 @@ def main(argv: Optional[list[str]] = None) -> int:
             tracked = sum(1 for line in completed.stdout.splitlines() if line and not line.startswith("??"))
             untracked = sum(1 for line in completed.stdout.splitlines() if line.startswith("??"))
             print(json.dumps({"operation": "git-file-count", "changed": tracked, "untracked": untracked}, indent=2))
+        elif args.project_largest_directory_json:
+            counts: Counter[str] = Counter(
+                str(path.relative_to(manager.project_dir).parent) for path in manager.list_files()
+            )
+            directory, count = max(counts.items(), key=lambda item: item[1], default=(None, 0))
+            print(json.dumps({"operation": "project-largest-directory", "directory": directory, "files": count}))
+        elif args.backup_name_lengths_json:
+            lengths = [len(path.name) for path in manager.backup_dir.glob("*.zip")]
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-name-lengths",
+                        "count": len(lengths),
+                        "min": min(lengths, default=0),
+                        "max": max(lengths, default=0),
+                        "average": sum(lengths) / len(lengths) if lengths else 0,
+                    }
+                )
+            )
+        elif args.archive_member_depths_json:
+            with zipfile.ZipFile(args.archive_member_depths_json) as archive:
+                depths = [len(Path(item.filename).parts) - 1 for item in archive.infolist() if not item.is_dir()]
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-depths",
+                        "archive": str(args.archive_member_depths_json),
+                        "min": min(depths, default=0),
+                        "max": max(depths, default=0),
+                        "average": sum(depths) / len(depths) if depths else 0,
+                    }
+                )
+            )
+        elif args.git_last_change_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "log", "-1", "--format=%H%x09%ad%x09%s", "--date=iso"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            fields = completed.stdout.strip().split("\t", 2)
+            print(
+                json.dumps(
+                    {
+                        "operation": "git-last-change",
+                        "commit": fields[0] if fields else None,
+                        "date": fields[1] if len(fields) > 1 else None,
+                        "subject": fields[2] if len(fields) > 2 else None,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.project_modified_range_json:
+            times = [path.stat().st_mtime for path in manager.list_files()]
+            print(
+                json.dumps(
+                    {
+                        "operation": "project-modified-range",
+                        "files": len(times),
+                        "oldest": min(times, default=None),
+                        "newest": max(times, default=None),
+                    }
+                )
+            )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
