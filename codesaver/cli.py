@@ -304,6 +304,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-last-change-json", action="store_true", help="Show the latest Git change as JSON")
     parser.add_argument("--project-modified-range-json", action="store_true", help="Show project modification range")
     parser.add_argument(
+        "--project-extension-bytes-json", action="store_true", help="Summarize project bytes by extension"
+    )
+    parser.add_argument("--backup-age-summary-json", action="store_true", help="Summarize backup age statistics")
+    parser.add_argument(
+        "--archive-member-bytes-json", type=Path, metavar="ARCHIVE", help="Summarize archive bytes by extension"
+    )
+    parser.add_argument("--git-branch-count-json", action="store_true", help="Count local Git branches")
+    parser.add_argument("--project-root-items-json", action="store_true", help="List project root items as JSON")
+    parser.add_argument(
         "--restore-files",
         nargs="+",
         metavar="ARCHIVE FILE",
@@ -2266,6 +2275,72 @@ def main(argv: Optional[list[str]] = None) -> int:
                         "oldest": min(times, default=None),
                         "newest": max(times, default=None),
                     }
+                )
+            )
+        elif args.project_extension_bytes_json:
+            totals: Counter[str] = Counter()
+            for path in manager.list_files():
+                totals[path.suffix.lower() or "[no extension]"] += path.stat().st_size
+            print(
+                json.dumps(
+                    {"operation": "project-extension-bytes", "bytes": dict(sorted(totals.items()))},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.backup_age_summary_json:
+            now = datetime.now(timezone.utc).timestamp()
+            ages = sorted(max(0.0, now - path.stat().st_mtime) for path in manager.backup_dir.glob("*.zip"))
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-age-summary",
+                        "count": len(ages),
+                        "youngest_seconds": min(ages, default=None),
+                        "oldest_seconds": max(ages, default=None),
+                        "average_seconds": sum(ages) / len(ages) if ages else 0,
+                    }
+                )
+            )
+        elif args.archive_member_bytes_json:
+            with zipfile.ZipFile(args.archive_member_bytes_json) as archive:
+                totals: Counter[str] = Counter()
+                for item in archive.infolist():
+                    if not item.is_dir():
+                        totals[Path(item.filename).suffix.lower() or "[no extension]"] += item.file_size
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-bytes",
+                        "archive": str(args.archive_member_bytes_json),
+                        "bytes": dict(sorted(totals.items())),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.git_branch_count_json:
+            completed = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "branch", "--format=%(refname:short)"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            branches = [line for line in completed.stdout.splitlines() if line]
+            print(
+                json.dumps(
+                    {"operation": "git-branch-count", "count": len(branches), "branches": branches},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.project_root_items_json:
+            items = sorted(path.name for path in manager.project_dir.iterdir())
+            print(
+                json.dumps(
+                    {"operation": "project-root-items", "count": len(items), "items": items},
+                    ensure_ascii=False,
+                    indent=2,
                 )
             )
         elif args.archive_age:

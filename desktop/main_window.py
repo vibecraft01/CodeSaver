@@ -155,6 +155,11 @@ TEXT["ru"].update(
         "backup_name_lengths_new": "Показать длину имён бэкапов",
         "latest_git_change_new": "Показать последний Git-коммит",
         "archive_depth_stats_new": "Показать глубину выбранного архива",
+        "project_extension_bytes_new": "Показать размер по расширениям",
+        "backup_age_summary_new": "Показать возраст бэкапов",
+        "archive_member_bytes_new": "Показать размер файлов архива",
+        "git_branch_count_new": "Показать количество Git-веток",
+        "project_root_items_new": "Показать элементы корня проекта",
     }
 )
 TEXT["en"].update(
@@ -164,6 +169,11 @@ TEXT["en"].update(
         "backup_name_lengths_new": "Show backup name lengths",
         "latest_git_change_new": "Show latest Git change",
         "archive_depth_stats_new": "Show selected archive depth",
+        "project_extension_bytes_new": "Show bytes by extension",
+        "backup_age_summary_new": "Show backup ages",
+        "archive_member_bytes_new": "Show archive file sizes",
+        "git_branch_count_new": "Show Git branch count",
+        "project_root_items_new": "Show project root items",
     }
 )
 
@@ -966,6 +976,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("backup_name_lengths_new"), self._show_backup_name_lengths_new)
         tools_menu.addAction(self._text("latest_git_change_new"), self._show_latest_git_change_new)
         tools_menu.addAction(self._text("archive_depth_stats_new"), self._show_archive_depth_stats_new)
+        tools_menu.addAction(self._text("project_extension_bytes_new"), self._show_project_extension_bytes_new)
+        tools_menu.addAction(self._text("backup_age_summary_new"), self._show_backup_age_summary_new)
+        tools_menu.addAction(self._text("archive_member_bytes_new"), self._show_archive_member_bytes_new)
+        tools_menu.addAction(self._text("git_branch_count_new"), self._show_git_branch_count_new)
+        tools_menu.addAction(self._text("project_root_items_new"), self._show_project_root_items_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3260,6 +3275,63 @@ class MainWindow(QMainWindow):
             writer.writerow(["directory"])
             writer.writerows([[directory] for directory in directories])
         self.statusBar().showMessage(str(destination))
+
+    def _show_project_extension_bytes_new(self) -> None:
+        if self.manager:
+            totals = Counter()
+            for path in self.manager.list_files():
+                totals[path.suffix.lower() or "[no extension]"] += path.stat().st_size
+            QMessageBox.information(
+                self,
+                self._text("project_extension_bytes_new"),
+                "\n".join(f"{key}: {format_bytes(value)}" for key, value in sorted(totals.items())) or "None",
+            )
+
+    def _show_backup_age_summary_new(self) -> None:
+        if self.manager:
+            now = time.time()
+            ages = [max(0.0, now - path.stat().st_mtime) / 86400 for path in self.manager.backup_dir.glob("*.zip")]
+            body = (
+                f"Count: {len(ages)}\n"
+                f"Youngest: {min(ages, default=0):.1f} days\n"
+                f"Oldest: {max(ages, default=0):.1f} days"
+            )
+            QMessageBox.information(self, self._text("backup_age_summary_new"), body)
+
+    def _show_archive_member_bytes_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            totals = Counter()
+            with zipfile.ZipFile(archive) as source:
+                for item in source.infolist():
+                    if not item.is_dir():
+                        totals[Path(item.filename).suffix.lower() or "[no extension]"] += item.file_size
+            QMessageBox.information(
+                self,
+                self._text("archive_member_bytes_new"),
+                "\n".join(f"{key}: {format_bytes(value)}" for key, value in sorted(totals.items())) or "None",
+            )
+
+    def _show_git_branch_count_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "branch", "--format=%(refname:short)"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+            branches = [line for line in output.splitlines() if line]
+        except (OSError, subprocess.CalledProcessError):
+            branches = []
+        QMessageBox.information(
+            self, self._text("git_branch_count_new"), f"Count: {len(branches)}\n" + "\n".join(branches)
+        )
+
+    def _show_project_root_items_new(self) -> None:
+        if self.manager:
+            items = sorted(path.name for path in self.manager.project_dir.iterdir())
+            QMessageBox.information(self, self._text("project_root_items_new"), "\n".join(items) or "None")
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
