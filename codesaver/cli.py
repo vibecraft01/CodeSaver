@@ -313,6 +313,19 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-branch-count-json", action="store_true", help="Count local Git branches")
     parser.add_argument("--project-root-items-json", action="store_true", help="List project root items as JSON")
     parser.add_argument(
+        "--project-file-name-histogram-json", action="store_true", help="Count project files by name length"
+    )
+    parser.add_argument("--backup-directory-count-json", action="store_true", help="Count backup directory entries")
+    parser.add_argument(
+        "--archive-compression-json", type=Path, metavar="ARCHIVE", help="Report archive compression totals"
+    )
+    parser.add_argument("--git-remote-status-json", action="store_true", help="Report Git remote status")
+    parser.add_argument(
+        "--project-largest-files-json-lines", action="store_true", help="Report largest project files as JSON"
+    )
+    parser.add_argument("--backup-created-hours-json", action="store_true", help="Count backups by creation hour")
+    parser.add_argument("--project-depth-histogram-json", action="store_true", help="Count project files by depth")
+    parser.add_argument(
         "--restore-files",
         nargs="+",
         metavar="ARCHIVE FILE",
@@ -2342,6 +2355,83 @@ def main(argv: Optional[list[str]] = None) -> int:
                     ensure_ascii=False,
                     indent=2,
                 )
+            )
+        elif args.project_file_name_histogram_json:
+            histogram = Counter(len(path.name) for path in manager.list_files())
+            print(
+                json.dumps(
+                    {"operation": "project-file-name-histogram", "lengths": dict(sorted(histogram.items()))}, indent=2
+                )
+            )
+        elif args.backup_directory_count_json:
+            entries = list(manager.backup_dir.iterdir()) if manager.backup_dir.exists() else []
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-directory-count",
+                        "entries": len(entries),
+                        "files": sum(path.is_file() for path in entries),
+                        "directories": sum(path.is_dir() for path in entries),
+                    }
+                )
+            )
+        elif args.archive_compression_json:
+            with zipfile.ZipFile(args.archive_compression_json) as archive:
+                original = sum(item.file_size for item in archive.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in archive.infolist() if not item.is_dir())
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-compression",
+                        "archive": str(args.archive_compression_json),
+                        "original_bytes": original,
+                        "stored_bytes": stored,
+                        "saved_bytes": original - stored,
+                    }
+                )
+            )
+        elif args.git_remote_status_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "status", "--short", "--branch"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            lines = result.stdout.splitlines()
+            print(
+                json.dumps(
+                    {
+                        "operation": "git-remote-status",
+                        "branch": lines[0] if lines else None,
+                        "changes": len(lines[1:]),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.project_largest_files_json_lines:
+            files = sorted(manager.list_files(), key=lambda path: path.stat().st_size, reverse=True)[:10]
+            print(
+                json.dumps(
+                    {
+                        "operation": "project-largest-files-lines",
+                        "files": [
+                            {"path": str(path.relative_to(manager.project_dir)), "bytes": path.stat().st_size}
+                            for path in files
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.backup_created_hours_json:
+            hours = Counter(
+                datetime.fromtimestamp(path.stat().st_mtime).hour for path in manager.backup_dir.glob("*.zip")
+            )
+            print(json.dumps({"operation": "backup-created-hours", "hours": dict(sorted(hours.items()))}, indent=2))
+        elif args.project_depth_histogram_json:
+            depths = Counter(len(path.relative_to(manager.project_dir).parts) - 1 for path in manager.list_files())
+            print(
+                json.dumps({"operation": "project-depth-histogram", "depths": dict(sorted(depths.items()))}, indent=2)
             )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()

@@ -160,6 +160,13 @@ TEXT["ru"].update(
         "archive_member_bytes_new": "Показать размер файлов архива",
         "git_branch_count_new": "Показать количество Git-веток",
         "project_root_items_new": "Показать элементы корня проекта",
+        "project_name_histogram_new": "Показать длины имён файлов",
+        "backup_directory_count_new": "Показать содержимое папки бэкапов",
+        "archive_compression_new": "Показать сжатие архива",
+        "git_remote_status_new": "Показать статус Git",
+        "largest_files_lines_new": "Показать самые большие файлы",
+        "backup_created_hours_new": "Показать часы создания бэкапов",
+        "project_depth_histogram_new": "Показать глубину файлов проекта",
     }
 )
 TEXT["en"].update(
@@ -174,6 +181,13 @@ TEXT["en"].update(
         "archive_member_bytes_new": "Show archive file sizes",
         "git_branch_count_new": "Show Git branch count",
         "project_root_items_new": "Show project root items",
+        "project_name_histogram_new": "Show file name lengths",
+        "backup_directory_count_new": "Show backup directory contents",
+        "archive_compression_new": "Show archive compression",
+        "git_remote_status_new": "Show Git status",
+        "largest_files_lines_new": "Show largest files",
+        "backup_created_hours_new": "Show backup creation hours",
+        "project_depth_histogram_new": "Show project file depth",
     }
 )
 
@@ -981,6 +995,13 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_member_bytes_new"), self._show_archive_member_bytes_new)
         tools_menu.addAction(self._text("git_branch_count_new"), self._show_git_branch_count_new)
         tools_menu.addAction(self._text("project_root_items_new"), self._show_project_root_items_new)
+        tools_menu.addAction(self._text("project_name_histogram_new"), self._show_project_name_histogram_new)
+        tools_menu.addAction(self._text("backup_directory_count_new"), self._show_backup_directory_count_new)
+        tools_menu.addAction(self._text("archive_compression_new"), self._show_archive_compression_new)
+        tools_menu.addAction(self._text("git_remote_status_new"), self._show_git_remote_status_new)
+        tools_menu.addAction(self._text("largest_files_lines_new"), self._show_largest_files_lines_new)
+        tools_menu.addAction(self._text("backup_created_hours_new"), self._show_backup_created_hours_new)
+        tools_menu.addAction(self._text("project_depth_histogram_new"), self._show_project_depth_histogram_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3332,6 +3353,86 @@ class MainWindow(QMainWindow):
         if self.manager:
             items = sorted(path.name for path in self.manager.project_dir.iterdir())
             QMessageBox.information(self, self._text("project_root_items_new"), "\n".join(items) or "None")
+
+    def _show_project_name_histogram_new(self) -> None:
+        if self.manager:
+            values = Counter(len(path.name) for path in self.manager.list_files())
+            QMessageBox.information(
+                self,
+                self._text("project_name_histogram_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(values.items())) or "None",
+            )
+
+    def _show_backup_directory_count_new(self) -> None:
+        if self.manager:
+            entries = list(self.manager.backup_dir.iterdir()) if self.manager.backup_dir.exists() else []
+            body = (
+                f"Entries: {len(entries)}\n"
+                f"Files: {sum(path.is_file() for path in entries)}\n"
+                f"Directories: {sum(path.is_dir() for path in entries)}"
+            )
+            QMessageBox.information(self, self._text("backup_directory_count_new"), body)
+
+    def _show_archive_compression_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+            QMessageBox.information(
+                self,
+                self._text("archive_compression_new"),
+                f"Original: {format_bytes(original)}\n"
+                f"Stored: {format_bytes(stored)}\n"
+                f"Saved: {format_bytes(original - stored)}",
+            )
+
+    def _show_git_remote_status_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            result = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "status", "--short", "--branch"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            result = "Not a Git repository"
+        QMessageBox.information(self, self._text("git_remote_status_new"), result or "Clean")
+
+    def _show_largest_files_lines_new(self) -> None:
+        if self.manager:
+            files = sorted(self.manager.list_files(), key=lambda path: path.stat().st_size, reverse=True)[:10]
+            body = (
+                "\n".join(
+                    f"{path.relative_to(self.manager.project_dir)}: {format_bytes(path.stat().st_size)}"
+                    for path in files
+                )
+                or "None"
+            )
+            QMessageBox.information(self, self._text("largest_files_lines_new"), body)
+
+    def _show_backup_created_hours_new(self) -> None:
+        if self.manager:
+            hours = Counter(
+                datetime.fromtimestamp(path.stat().st_mtime).hour for path in self.manager.backup_dir.glob("*.zip")
+            )
+            QMessageBox.information(
+                self,
+                self._text("backup_created_hours_new"),
+                "\n".join(f"{key:02d}:00: {value}" for key, value in sorted(hours.items())) or "None",
+            )
+
+    def _show_project_depth_histogram_new(self) -> None:
+        if self.manager:
+            depths = Counter(
+                len(path.relative_to(self.manager.project_dir).parts) - 1 for path in self.manager.list_files()
+            )
+            QMessageBox.information(
+                self,
+                self._text("project_depth_histogram_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(depths.items())) or "None",
+            )
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
