@@ -27,27 +27,7 @@ GitHub repository snapshot for **12 September 2026**:
 | Unique visitors | 9 |
 | GitHub stars | 8 |
 | Public releases | 100 |
-| Commits | 185 |
-
-These figures are reported as a dated project snapshot; GitHub clones can include automation and are not presented as unique users.
-
-### Traffic sources
-
-| Site | Views | Unique visitors |
-| --- | ---: | ---: |
-| github.com | 142 | 11 |
-| Google | 2 | 1 |
-
-### Popular content
-
-| Page | Views | Unique visitors |
-| --- | ---: | ---: |
-| [Overview](https://github.com/vibecraft01/CodeSaver) | 395 | 14 |
-| [/releases](https://github.com/vibecraft01/CodeSaver/releases) | 157 | 9 |
-| [/graphs/traffic](https://github.com/vibecraft01/CodeSaver/graphs/traffic) | 94 | 1 |
-| [/pulse](https://github.com/vibecraft01/CodeSaver/pulse) | 68 | 2 |
-| [/edit/main/README.md](https://github.com/vibecraft01/CodeSaver/edit/main/README.md) | 44 | 1 |
-| [/blob/main/README.md](https://github.com/vibecraft01/CodeSaver/blob/main/README.md) | 40 | 1 |
+| Commits | 186 |
 
 ## Features
 
