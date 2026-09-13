@@ -332,6 +332,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-contributor-count-json", action="store_true", help="Count Git contributors")
     parser.add_argument("--project-file-age-buckets-json", action="store_true", help="Group project files by age")
+    parser.add_argument("--project-largest-file-json", action="store_true", help="Show the single largest project file")
+    parser.add_argument("--backup-month-count-json", action="store_true", help="Count backups by month")
+    parser.add_argument(
+        "--archive-member-average-json", type=Path, metavar="ARCHIVE", help="Report average archive member size"
+    )
+    parser.add_argument("--git-stash-count-json", action="store_true", help="Count Git stashes")
+    parser.add_argument("--project-readable-count-json", action="store_true", help="Count readable project files")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2504,6 +2511,56 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 json.dumps(
                     {"operation": "project-file-age-buckets", "buckets": dict(sorted(buckets.items()))}, indent=2
+                )
+            )
+        elif args.project_largest_file_json:
+            largest = max(manager.list_files(), key=lambda path: path.stat().st_size, default=None)
+            print(
+                json.dumps(
+                    {
+                        "operation": "project-largest-file",
+                        "path": str(largest.relative_to(manager.project_dir)) if largest else None,
+                        "bytes": largest.stat().st_size if largest else 0,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.backup_month_count_json:
+            months = Counter(
+                datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m")
+                for path in manager.backup_dir.glob("*.zip")
+            )
+            print(json.dumps({"operation": "backup-month-count", "months": dict(sorted(months.items()))}, indent=2))
+        elif args.archive_member_average_json:
+            with zipfile.ZipFile(args.archive_member_average_json) as archive:
+                sizes = [item.file_size for item in archive.infolist() if not item.is_dir()]
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-average",
+                        "archive": str(args.archive_member_average_json),
+                        "count": len(sizes),
+                        "average_bytes": sum(sizes) / len(sizes) if sizes else 0,
+                    }
+                )
+            )
+        elif args.git_stash_count_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "stash", "list"], capture_output=True, text=True, check=False
+            )
+            stashes = [line for line in result.stdout.splitlines() if line]
+            print(
+                json.dumps(
+                    {"operation": "git-stash-count", "count": len(stashes), "stashes": stashes},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.project_readable_count_json:
+            readable = sum(path.is_file() and os.access(path, os.R_OK) for path in manager.list_files())
+            print(
+                json.dumps(
+                    {"operation": "project-readable-count", "readable": readable, "total": len(manager.list_files())}
                 )
             )
         elif args.archive_age:

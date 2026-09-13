@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import platform
 import sys
 import subprocess
@@ -172,6 +173,11 @@ TEXT["ru"].update(
         "archive_member_counts_new": "Показать файлы архива по глубине",
         "git_contributor_count_new": "Показать количество авторов Git",
         "project_file_age_buckets_new": "Показать возраст файлов проекта",
+        "largest_project_file_new": "Показать самый большой файл проекта",
+        "backup_month_count_new": "Показать бэкапы по месяцам",
+        "archive_member_average_new": "Показать средний размер файлов архива",
+        "git_stash_count_new": "Показать количество Git stash",
+        "project_readable_count_new": "Показать читаемые файлы проекта",
     }
 )
 TEXT["en"].update(
@@ -198,6 +204,11 @@ TEXT["en"].update(
         "archive_member_counts_new": "Show archive files by depth",
         "git_contributor_count_new": "Show Git contributor count",
         "project_file_age_buckets_new": "Show project file ages",
+        "largest_project_file_new": "Show largest project file",
+        "backup_month_count_new": "Show backups by month",
+        "archive_member_average_new": "Show average archive file size",
+        "git_stash_count_new": "Show Git stash count",
+        "project_readable_count_new": "Show readable project files",
     }
 )
 
@@ -1017,6 +1028,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_member_counts_new"), self._show_archive_member_counts_new)
         tools_menu.addAction(self._text("git_contributor_count_new"), self._show_git_contributor_count_new)
         tools_menu.addAction(self._text("project_file_age_buckets_new"), self._show_project_file_age_buckets_new)
+        tools_menu.addAction(self._text("largest_project_file_new"), self._show_largest_project_file_new)
+        tools_menu.addAction(self._text("backup_month_count_new"), self._show_backup_month_count_new)
+        tools_menu.addAction(self._text("archive_member_average_new"), self._show_archive_member_average_new)
+        tools_menu.addAction(self._text("git_stash_count_new"), self._show_git_stash_count_new)
+        tools_menu.addAction(self._text("project_readable_count_new"), self._show_project_readable_count_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3514,6 +3530,60 @@ class MainWindow(QMainWindow):
                 self,
                 self._text("project_file_age_buckets_new"),
                 "\n".join(f"{key}: {value}" for key, value in sorted(buckets.items())) or "None",
+            )
+
+    def _show_largest_project_file_new(self) -> None:
+        if self.manager:
+            largest = max(self.manager.list_files(), key=lambda path: path.stat().st_size, default=None)
+            body = (
+                f"{largest.relative_to(self.manager.project_dir)}: {format_bytes(largest.stat().st_size)}"
+                if largest
+                else "None"
+            )
+            QMessageBox.information(self, self._text("largest_project_file_new"), body)
+
+    def _show_backup_month_count_new(self) -> None:
+        if self.manager:
+            months = Counter(
+                datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m")
+                for path in self.manager.backup_dir.glob("*.zip")
+            )
+            QMessageBox.information(
+                self,
+                self._text("backup_month_count_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(months.items())) or "None",
+            )
+
+    def _show_archive_member_average_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                sizes = [item.file_size for item in source.infolist() if not item.is_dir()]
+            average = int(sum(sizes) / len(sizes)) if sizes else 0
+            QMessageBox.information(
+                self, self._text("archive_member_average_new"), f"Files: {len(sizes)}\nAverage: {format_bytes(average)}"
+            )
+
+    def _show_git_stash_count_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "stash", "list"], text=True, stderr=subprocess.STDOUT
+            )
+            stashes = [line for line in output.splitlines() if line]
+        except (OSError, subprocess.CalledProcessError):
+            stashes = []
+        QMessageBox.information(
+            self, self._text("git_stash_count_new"), f"Count: {len(stashes)}\n" + "\n".join(stashes)
+        )
+
+    def _show_project_readable_count_new(self) -> None:
+        if self.manager:
+            files = self.manager.list_files()
+            readable = sum(path.is_file() and os.access(path, os.R_OK) for path in files)
+            QMessageBox.information(
+                self, self._text("project_readable_count_new"), f"Readable: {readable}\nTotal: {len(files)}"
             )
 
     def closeEvent(self, event) -> None:
