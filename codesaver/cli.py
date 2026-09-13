@@ -325,6 +325,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--backup-created-hours-json", action="store_true", help="Count backups by creation hour")
     parser.add_argument("--project-depth-histogram-json", action="store_true", help="Count project files by depth")
+    parser.add_argument("--project-empty-directories-json", action="store_true", help="List empty project directories")
+    parser.add_argument("--backup-weekday-count-json", action="store_true", help="Count backups by weekday")
+    parser.add_argument(
+        "--archive-member-counts-json", type=Path, metavar="ARCHIVE", help="Count archive members by depth"
+    )
+    parser.add_argument("--git-contributor-count-json", action="store_true", help="Count Git contributors")
+    parser.add_argument("--project-file-age-buckets-json", action="store_true", help="Group project files by age")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2432,6 +2439,72 @@ def main(argv: Optional[list[str]] = None) -> int:
             depths = Counter(len(path.relative_to(manager.project_dir).parts) - 1 for path in manager.list_files())
             print(
                 json.dumps({"operation": "project-depth-histogram", "depths": dict(sorted(depths.items()))}, indent=2)
+            )
+        elif args.project_empty_directories_json:
+            directories = []
+            for directory in manager.project_dir.rglob("*"):
+                if directory.is_dir() and not any(directory.iterdir()):
+                    directories.append(str(directory.relative_to(manager.project_dir)))
+            print(
+                json.dumps(
+                    {"operation": "project-empty-directories", "directories": sorted(directories)},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.backup_weekday_count_json:
+            weekdays = Counter(
+                datetime.fromtimestamp(path.stat().st_mtime).strftime("%A") for path in manager.backup_dir.glob("*.zip")
+            )
+            print(
+                json.dumps(
+                    {"operation": "backup-weekday-count", "days": dict(sorted(weekdays.items()))},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.archive_member_counts_json:
+            with zipfile.ZipFile(args.archive_member_counts_json) as archive:
+                depths = Counter(len(Path(item.filename).parts) - 1 for item in archive.infolist() if not item.is_dir())
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-counts",
+                        "archive": str(args.archive_member_counts_json),
+                        "depths": dict(sorted(depths.items())),
+                    },
+                    indent=2,
+                )
+            )
+        elif args.git_contributor_count_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "shortlog", "-s", "-n", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            contributors = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            print(
+                json.dumps(
+                    {"operation": "git-contributor-count", "count": len(contributors), "contributors": contributors},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.project_file_age_buckets_json:
+            now = time.time()
+            buckets = Counter(
+                (
+                    "0-1d"
+                    if now - path.stat().st_mtime < 86400
+                    else "1-7d" if now - path.stat().st_mtime < 604800 else "7d+"
+                )
+                for path in manager.list_files()
+            )
+            print(
+                json.dumps(
+                    {"operation": "project-file-age-buckets", "buckets": dict(sorted(buckets.items()))}, indent=2
+                )
             )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()

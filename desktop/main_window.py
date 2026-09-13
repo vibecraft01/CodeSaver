@@ -167,6 +167,11 @@ TEXT["ru"].update(
         "largest_files_lines_new": "Показать самые большие файлы",
         "backup_created_hours_new": "Показать часы создания бэкапов",
         "project_depth_histogram_new": "Показать глубину файлов проекта",
+        "empty_project_directories_new": "Показать пустые папки проекта",
+        "backup_weekday_count_new": "Показать бэкапы по дням недели",
+        "archive_member_counts_new": "Показать файлы архива по глубине",
+        "git_contributor_count_new": "Показать количество авторов Git",
+        "project_file_age_buckets_new": "Показать возраст файлов проекта",
     }
 )
 TEXT["en"].update(
@@ -188,6 +193,11 @@ TEXT["en"].update(
         "largest_files_lines_new": "Show largest files",
         "backup_created_hours_new": "Show backup creation hours",
         "project_depth_histogram_new": "Show project file depth",
+        "empty_project_directories_new": "Show empty project directories",
+        "backup_weekday_count_new": "Show backups by weekday",
+        "archive_member_counts_new": "Show archive files by depth",
+        "git_contributor_count_new": "Show Git contributor count",
+        "project_file_age_buckets_new": "Show project file ages",
     }
 )
 
@@ -1002,6 +1012,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("largest_files_lines_new"), self._show_largest_files_lines_new)
         tools_menu.addAction(self._text("backup_created_hours_new"), self._show_backup_created_hours_new)
         tools_menu.addAction(self._text("project_depth_histogram_new"), self._show_project_depth_histogram_new)
+        tools_menu.addAction(self._text("empty_project_directories_new"), self._show_empty_project_directories_new)
+        tools_menu.addAction(self._text("backup_weekday_count_new"), self._show_backup_weekday_count_new)
+        tools_menu.addAction(self._text("archive_member_counts_new"), self._show_archive_member_counts_new)
+        tools_menu.addAction(self._text("git_contributor_count_new"), self._show_git_contributor_count_new)
+        tools_menu.addAction(self._text("project_file_age_buckets_new"), self._show_project_file_age_buckets_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3432,6 +3447,73 @@ class MainWindow(QMainWindow):
                 self,
                 self._text("project_depth_histogram_new"),
                 "\n".join(f"{key}: {value}" for key, value in sorted(depths.items())) or "None",
+            )
+
+    def _show_empty_project_directories_new(self) -> None:
+        if self.manager:
+            empty = [
+                str(path.relative_to(self.manager.project_dir))
+                for path in self.manager.project_dir.rglob("*")
+                if path.is_dir() and not any(path.iterdir())
+            ]
+            QMessageBox.information(
+                self, self._text("empty_project_directories_new"), "\n".join(sorted(empty)) or "None"
+            )
+
+    def _show_backup_weekday_count_new(self) -> None:
+        if self.manager:
+            days = Counter(
+                datetime.fromtimestamp(path.stat().st_mtime).strftime("%A")
+                for path in self.manager.backup_dir.glob("*.zip")
+            )
+            QMessageBox.information(
+                self,
+                self._text("backup_weekday_count_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(days.items())) or "None",
+            )
+
+    def _show_archive_member_counts_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                depths = Counter(len(Path(item.filename).parts) - 1 for item in source.infolist() if not item.is_dir())
+            QMessageBox.information(
+                self,
+                self._text("archive_member_counts_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(depths.items())) or "None",
+            )
+
+    def _show_git_contributor_count_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "shortlog", "-s", "-n", "HEAD"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+            contributors = [line for line in output.splitlines() if line.strip()]
+        except (OSError, subprocess.CalledProcessError):
+            contributors = []
+        QMessageBox.information(
+            self, self._text("git_contributor_count_new"), f"Count: {len(contributors)}\n" + "\n".join(contributors)
+        )
+
+    def _show_project_file_age_buckets_new(self) -> None:
+        if self.manager:
+            now = time.time()
+            buckets = Counter(
+                (
+                    "0-1d"
+                    if now - path.stat().st_mtime < 86400
+                    else "1-7d" if now - path.stat().st_mtime < 604800 else "7d+"
+                )
+                for path in self.manager.list_files()
+            )
+            QMessageBox.information(
+                self,
+                self._text("project_file_age_buckets_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(buckets.items())) or "None",
             )
 
     def closeEvent(self, event) -> None:
