@@ -344,6 +344,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-empty-count-json", type=Path, metavar="ARCHIVE", help="Count empty archive members")
     parser.add_argument("--git-commit-days-json", action="store_true", help="Count commits by weekday")
     parser.add_argument("--project-total-lines-json", action="store_true", help="Count readable project lines")
+    parser.add_argument("--project-extension-count-json", action="store_true", help="Count project files by extension")
+    parser.add_argument("--backup-largest-json", action="store_true", help="Show the largest backup as JSON")
+    parser.add_argument(
+        "--archive-directory-bytes-json", type=Path, metavar="ARCHIVE", help="Summarize archive bytes by directory"
+    )
+    parser.add_argument("--git-tag-total-json", action="store_true", help="Count Git tags")
+    parser.add_argument("--project-recent-files-json", action="store_true", help="List recently modified project files")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1628,7 +1635,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "path": str(manager.config_path) if hasattr(manager, "config_path") else None,
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
-        elif args.git_tag_count_json:
+        elif args.git_tag_total_json:
             result = subprocess.run(
                 ["git", "-C", str(manager.project_dir), "tag", "--list"], capture_output=True, text=True, check=False
             )
@@ -2631,6 +2638,74 @@ def main(argv: Optional[list[str]] = None) -> int:
                 except OSError:
                     continue
             print(json.dumps({"operation": "project-total-lines", "lines": total}))
+        elif args.project_extension_count_json:
+            counts = Counter(path.suffix.lower() or "[no extension]" for path in manager.list_files())
+            print(
+                json.dumps(
+                    {"operation": "project-extension-count", "extensions": dict(sorted(counts.items()))},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.backup_largest_json:
+            largest = max(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_size, default=None)
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-largest",
+                        "archive": str(largest) if largest else None,
+                        "bytes": largest.stat().st_size if largest else 0,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.archive_directory_bytes_json:
+            with zipfile.ZipFile(args.archive_directory_bytes_json) as archive:
+                sizes = Counter(str(Path(item.filename).parent) for item in archive.infolist() if not item.is_dir())
+                directory_bytes = {
+                    key: sum(
+                        item.file_size
+                        for item in archive.infolist()
+                        if not item.is_dir() and str(Path(item.filename).parent) == key
+                    )
+                    for key in sizes
+                }
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-directory-bytes",
+                        "archive": str(args.archive_directory_bytes_json),
+                        "bytes": dict(sorted(directory_bytes.items())),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.git_tag_count_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "tag", "--list"], capture_output=True, text=True, check=False
+            )
+            tags = [line for line in result.stdout.splitlines() if line]
+            print(
+                json.dumps(
+                    {"operation": "git-tag-count", "count": len(tags), "tags": tags}, ensure_ascii=False, indent=2
+                )
+            )
+        elif args.project_recent_files_json:
+            files = sorted(manager.list_files(), key=lambda path: path.stat().st_mtime, reverse=True)[:10]
+            print(
+                json.dumps(
+                    {
+                        "operation": "project-recent-files",
+                        "files": [
+                            {"path": str(path.relative_to(manager.project_dir)), "modified": path.stat().st_mtime}
+                            for path in files
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)

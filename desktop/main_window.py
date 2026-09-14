@@ -183,6 +183,11 @@ TEXT["ru"].update(
         "archive_empty_count_new": "Показать пустые файлы архива",
         "git_commit_days_new": "Показать коммиты по дням недели",
         "project_total_lines_new": "Показать количество строк проекта",
+        "project_extension_count_new": "Показать количество файлов по расширениям",
+        "backup_largest_new": "Показать самый большой бэкап",
+        "archive_directory_bytes_new": "Показать размер папок архива",
+        "git_tag_count_new": "Показать количество Git-тегов",
+        "project_recent_files_new": "Показать последние изменённые файлы",
     }
 )
 TEXT["en"].update(
@@ -219,6 +224,11 @@ TEXT["en"].update(
         "archive_empty_count_new": "Show empty archive files",
         "git_commit_days_new": "Show commits by weekday",
         "project_total_lines_new": "Show project line count",
+        "project_extension_count_new": "Show files by extension",
+        "backup_largest_new": "Show largest backup",
+        "archive_directory_bytes_new": "Show archive directory sizes",
+        "git_tag_count_new": "Show Git tag count",
+        "project_recent_files_new": "Show recently modified files",
     }
 )
 
@@ -1008,6 +1018,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("compression_ratio_new"), self._show_compression_ratio_new)
         tools_menu.addAction(self._text("project_type_count_new"), self._show_project_type_count_new)
         tools_menu.addAction(self._text("project_total_lines_new"), self._show_project_total_lines_latest_new)
+        tools_menu.addAction(self._text("project_extension_count_new"), self._show_project_extension_count_new)
+        tools_menu.addAction(self._text("backup_largest_new"), self._show_backup_largest_new)
+        tools_menu.addAction(self._text("archive_directory_bytes_new"), self._show_archive_directory_bytes_new)
+        tools_menu.addAction(self._text("git_tag_count_new"), self._show_git_tag_count_new)
+        tools_menu.addAction(self._text("project_recent_files_new"), self._show_project_recent_files_new)
         tools_menu.addAction(self._text("backup_oldest_date_new"), self._copy_backup_oldest_date_new)
         tools_menu.addAction(self._text("archive_member_extensions_new"), self._show_archive_member_extensions_new)
         tools_menu.addAction(self._text("project_recent_count_new"), self._show_project_recent_count_new)
@@ -3660,6 +3675,60 @@ class MainWindow(QMainWindow):
                 except OSError:
                     continue
             QMessageBox.information(self, self._text("project_total_lines_new"), str(total))
+
+    def _show_project_extension_count_new(self) -> None:
+        if self.manager:
+            counts = Counter(path.suffix.lower() or "[no extension]" for path in self.manager.list_files())
+            QMessageBox.information(
+                self,
+                self._text("project_extension_count_new"),
+                "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "None",
+            )
+
+    def _show_backup_largest_new(self) -> None:
+        if self.manager:
+            largest = max(self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_size, default=None)
+            body = f"{largest.name}: {format_bytes(largest.stat().st_size)}" if largest else "None"
+            QMessageBox.information(self, self._text("backup_largest_new"), body)
+
+    def _show_archive_directory_bytes_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                sizes = Counter()
+                for item in source.infolist():
+                    if not item.is_dir():
+                        sizes[str(Path(item.filename).parent)] += item.file_size
+            QMessageBox.information(
+                self,
+                self._text("archive_directory_bytes_new"),
+                "\n".join(f"{key}: {format_bytes(value)}" for key, value in sorted(sizes.items())) or "None",
+            )
+
+    def _show_git_tag_count_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "tag", "--list"], text=True, stderr=subprocess.STDOUT
+            )
+            tags = [line for line in output.splitlines() if line]
+        except (OSError, subprocess.CalledProcessError):
+            tags = []
+        QMessageBox.information(self, self._text("git_tag_count_new"), f"Count: {len(tags)}\n" + "\n".join(tags))
+
+    def _show_project_recent_files_new(self) -> None:
+        if self.manager:
+            files = sorted(self.manager.list_files(), key=lambda path: path.stat().st_mtime, reverse=True)[:10]
+            body = (
+                "\n".join(
+                    f"{path.relative_to(self.manager.project_dir)}: "
+                    f"{datetime.fromtimestamp(path.stat().st_mtime).isoformat()}"
+                    for path in files
+                )
+                or "None"
+            )
+            QMessageBox.information(self, self._text("project_recent_files_new"), body)
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
