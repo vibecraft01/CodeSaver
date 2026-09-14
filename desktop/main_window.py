@@ -178,6 +178,11 @@ TEXT["ru"].update(
         "archive_member_average_new": "Показать средний размер файлов архива",
         "git_stash_count_new": "Показать количество Git stash",
         "project_readable_count_new": "Показать читаемые файлы проекта",
+        "project_symlink_count_new": "Показать символические ссылки",
+        "backup_latest_json_new": "Показать последний бэкап JSON",
+        "archive_empty_count_new": "Показать пустые файлы архива",
+        "git_commit_days_new": "Показать коммиты по дням недели",
+        "project_total_lines_new": "Показать количество строк проекта",
     }
 )
 TEXT["en"].update(
@@ -209,6 +214,11 @@ TEXT["en"].update(
         "archive_member_average_new": "Show average archive file size",
         "git_stash_count_new": "Show Git stash count",
         "project_readable_count_new": "Show readable project files",
+        "project_symlink_count_new": "Show symbolic links",
+        "backup_latest_json_new": "Show latest backup JSON",
+        "archive_empty_count_new": "Show empty archive files",
+        "git_commit_days_new": "Show commits by weekday",
+        "project_total_lines_new": "Show project line count",
     }
 )
 
@@ -997,7 +1007,7 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("backup_total_bytes_new"), self._copy_backup_total_bytes_new)
         tools_menu.addAction(self._text("compression_ratio_new"), self._show_compression_ratio_new)
         tools_menu.addAction(self._text("project_type_count_new"), self._show_project_type_count_new)
-        tools_menu.addAction(self._text("project_total_lines_new"), self._show_project_total_lines_new)
+        tools_menu.addAction(self._text("project_total_lines_new"), self._show_project_total_lines_latest_new)
         tools_menu.addAction(self._text("backup_oldest_date_new"), self._copy_backup_oldest_date_new)
         tools_menu.addAction(self._text("archive_member_extensions_new"), self._show_archive_member_extensions_new)
         tools_menu.addAction(self._text("project_recent_count_new"), self._show_project_recent_count_new)
@@ -1033,6 +1043,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_member_average_new"), self._show_archive_member_average_new)
         tools_menu.addAction(self._text("git_stash_count_new"), self._show_git_stash_count_new)
         tools_menu.addAction(self._text("project_readable_count_new"), self._show_project_readable_count_new)
+        tools_menu.addAction(self._text("project_symlink_count_new"), self._show_project_symlink_count_new)
+        tools_menu.addAction(self._text("backup_latest_json_new"), self._show_backup_latest_json_new)
+        tools_menu.addAction(self._text("archive_empty_count_new"), self._show_archive_empty_count_new)
+        tools_menu.addAction(self._text("git_commit_days_new"), self._show_git_commit_days_new)
+        tools_menu.addAction(self._text("project_total_lines_new"), self._show_project_total_lines_new)
         self.project_tools_button.setMenu(tools_menu)
         self.cleanup_button = QPushButton(self._text("cleanup"))
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
@@ -3181,7 +3196,7 @@ class MainWindow(QMainWindow):
                 "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "—",
             )
 
-    def _show_project_total_lines_new(self) -> None:
+    def _show_project_total_lines_latest_new(self) -> None:
         if not self.manager:
             return
         total = 0
@@ -3585,6 +3600,66 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, self._text("project_readable_count_new"), f"Readable: {readable}\nTotal: {len(files)}"
             )
+
+    def _show_project_symlink_count_new(self) -> None:
+        if self.manager:
+            links = [path for path in self.manager.project_dir.rglob("*") if path.is_symlink()]
+            QMessageBox.information(
+                self,
+                self._text("project_symlink_count_new"),
+                "\n".join(str(path.relative_to(self.manager.project_dir)) for path in links) or "None",
+            )
+
+    def _show_backup_latest_json_new(self) -> None:
+        if self.manager:
+            archives = sorted(
+                self.manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True
+            )
+            latest = archives[0] if archives else None
+            body = json.dumps(
+                {
+                    "archive": str(latest) if latest else None,
+                    "bytes": latest.stat().st_size if latest else 0,
+                    "modified": datetime.fromtimestamp(latest.stat().st_mtime).isoformat() if latest else None,
+                },
+                indent=2,
+            )
+            QMessageBox.information(self, self._text("backup_latest_json_new"), body)
+
+    def _show_archive_empty_count_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                empty = [item.filename for item in source.infolist() if not item.is_dir() and item.file_size == 0]
+            QMessageBox.information(self, self._text("archive_empty_count_new"), "\n".join(empty) or "None")
+
+    def _show_git_commit_days_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "log", "--format=%ad", "--date=%A"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+            days = Counter(line for line in output.splitlines() if line)
+        except (OSError, subprocess.CalledProcessError):
+            days = Counter()
+        QMessageBox.information(
+            self,
+            self._text("git_commit_days_new"),
+            "\n".join(f"{key}: {value}" for key, value in sorted(days.items())) or "None",
+        )
+
+    def _show_project_total_lines_new(self) -> None:
+        if self.manager:
+            total = 0
+            for path in self.manager.list_files():
+                try:
+                    total += sum(1 for _ in path.open("r", encoding="utf-8", errors="ignore"))
+                except OSError:
+                    continue
+            QMessageBox.information(self, self._text("project_total_lines_new"), str(total))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

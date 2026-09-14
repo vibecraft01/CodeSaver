@@ -339,6 +339,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-stash-count-json", action="store_true", help="Count Git stashes")
     parser.add_argument("--project-readable-count-json", action="store_true", help="Count readable project files")
+    parser.add_argument("--project-symlink-count-json", action="store_true", help="Count project symbolic links")
+    parser.add_argument("--backup-latest-json", action="store_true", help="Show latest backup details as JSON")
+    parser.add_argument("--archive-empty-count-json", type=Path, metavar="ARCHIVE", help="Count empty archive members")
+    parser.add_argument("--git-commit-days-json", action="store_true", help="Count commits by weekday")
+    parser.add_argument("--project-total-lines-json", action="store_true", help="Count readable project lines")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2563,6 +2568,69 @@ def main(argv: Optional[list[str]] = None) -> int:
                     {"operation": "project-readable-count", "readable": readable, "total": len(manager.list_files())}
                 )
             )
+        elif args.project_symlink_count_json:
+            links = [path for path in manager.project_dir.rglob("*") if path.is_symlink()]
+            print(
+                json.dumps(
+                    {
+                        "operation": "project-symlink-count",
+                        "count": len(links),
+                        "links": [str(path.relative_to(manager.project_dir)) for path in links],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.backup_latest_json:
+            archives = sorted(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, reverse=True)
+            latest = archives[0] if archives else None
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-latest",
+                        "archive": str(latest) if latest else None,
+                        "bytes": latest.stat().st_size if latest else 0,
+                        "modified": datetime.fromtimestamp(latest.stat().st_mtime).isoformat() if latest else None,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.archive_empty_count_json:
+            with zipfile.ZipFile(args.archive_empty_count_json) as archive:
+                empty = [item.filename for item in archive.infolist() if not item.is_dir() and item.file_size == 0]
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-empty-count",
+                        "archive": str(args.archive_empty_count_json),
+                        "count": len(empty),
+                        "members": empty,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        elif args.git_commit_days_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "log", "--format=%ad", "--date=%A"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            days = Counter(line for line in result.stdout.splitlines() if line)
+            print(
+                json.dumps(
+                    {"operation": "git-commit-days", "days": dict(sorted(days.items()))}, ensure_ascii=False, indent=2
+                )
+            )
+        elif args.project_total_lines_json:
+            total = 0
+            for path in manager.list_files():
+                try:
+                    total += sum(1 for _ in path.open("r", encoding="utf-8", errors="ignore"))
+                except OSError:
+                    continue
+            print(json.dumps({"operation": "project-total-lines", "lines": total}))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
