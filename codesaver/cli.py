@@ -351,6 +351,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-tag-total-json", action="store_true", help="Count Git tags")
     parser.add_argument("--project-recent-files-json", action="store_true", help="List recently modified project files")
+    parser.add_argument("--project-directory-count-json", action="store_true", help="Count project directories")
+    parser.add_argument("--backup-oldest-json", action="store_true", help="Show oldest backup as JSON")
+    parser.add_argument(
+        "--archive-member-name-length-json", type=Path, metavar="ARCHIVE", help="Summarize archive member name lengths"
+    )
+    parser.add_argument("--git-commit-total-json", action="store_true", help="Count Git commits")
+    parser.add_argument(
+        "--project-largest-extension-json", action="store_true", help="Show largest project extension group"
+    )
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2009,7 +2018,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.json
                 else (f"{result['bytes']}  {result['member']}" if largest else "No files")
             )
-        elif args.git_commit_count_json:
+        elif args.git_commit_total_json:
             completed = subprocess.run(
                 ["git", "-C", str(manager.project_dir), "rev-list", "--count", "HEAD"],
                 capture_output=True,
@@ -2706,6 +2715,48 @@ def main(argv: Optional[list[str]] = None) -> int:
                     indent=2,
                 )
             )
+        elif args.project_directory_count_json:
+            directories = [path for path in manager.project_dir.rglob("*") if path.is_dir()]
+            print(json.dumps({"operation": "project-directory-count", "count": len(directories)}))
+        elif args.backup_oldest_json:
+            oldest = min(manager.backup_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime, default=None)
+            print(
+                json.dumps(
+                    {
+                        "operation": "backup-oldest",
+                        "archive": str(oldest) if oldest else None,
+                        "modified": datetime.fromtimestamp(oldest.stat().st_mtime).isoformat() if oldest else None,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        elif args.archive_member_name_length_json:
+            with zipfile.ZipFile(args.archive_member_name_length_json) as archive:
+                lengths = [len(item.filename) for item in archive.infolist() if not item.is_dir()]
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-name-length",
+                        "count": len(lengths),
+                        "average": sum(lengths) / len(lengths) if lengths else 0,
+                        "maximum": max(lengths, default=0),
+                    }
+                )
+            )
+        elif args.git_commit_count_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "rev-list", "--count", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(json.dumps({"operation": "git-commit-count", "count": int(result.stdout.strip() or 0)}))
+        elif args.project_largest_extension_json:
+            totals = Counter()
+            for path in manager.list_files():
+                totals[path.suffix.lower() or "[no extension]"] += path.stat().st_size
+            extension, size = max(totals.items(), key=lambda item: item[1], default=(None, 0))
+            print(json.dumps({"operation": "project-largest-extension", "extension": extension, "bytes": size}))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
