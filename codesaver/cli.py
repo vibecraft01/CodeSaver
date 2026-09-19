@@ -360,6 +360,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--project-largest-extension-json", action="store_true", help="Show largest project extension group"
     )
+    parser.add_argument("--project-file-count-json", action="store_true", help="Show project file count as JSON")
+    parser.add_argument("--backup-storage-total-json", action="store_true", help="Show total backup size as JSON")
+    parser.add_argument(
+        "--archive-member-count-json", type=Path, metavar="ARCHIVE", help="Count archive members as JSON"
+    )
+    parser.add_argument("--git-head-json", action="store_true", help="Show Git HEAD as JSON")
+    parser.add_argument("--project-root-size-json", action="store_true", help="Show project root size as JSON")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1560,7 +1567,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "compressed_bytes": sum(item.compress_size for item in members),
             }
             print(json.dumps(result, ensure_ascii=False, indent=2))
-        elif args.backup_total_size_json:
+        elif args.backup_storage_total_json:
             archives = list(manager.backup_dir.glob("*.zip"))
             result = {
                 "operation": "backup-total-size",
@@ -2757,6 +2764,34 @@ def main(argv: Optional[list[str]] = None) -> int:
                 totals[path.suffix.lower() or "[no extension]"] += path.stat().st_size
             extension, size = max(totals.items(), key=lambda item: item[1], default=(None, 0))
             print(json.dumps({"operation": "project-largest-extension", "extension": extension, "bytes": size}))
+        elif args.project_file_count_json:
+            print(json.dumps({"operation": "project-file-count", "count": len(manager.list_files())}))
+        elif args.backup_total_size_json:
+            total = sum(path.stat().st_size for path in manager.backup_dir.glob("*.zip"))
+            print(json.dumps({"operation": "backup-total-size", "bytes": total}))
+        elif args.archive_member_count_json:
+            with zipfile.ZipFile(args.archive_member_count_json) as archive:
+                count = sum(not item.is_dir() for item in archive.infolist())
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-member-count",
+                        "archive": str(args.archive_member_count_json),
+                        "count": count,
+                    }
+                )
+            )
+        elif args.git_head_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(json.dumps({"operation": "git-head", "commit": result.stdout.strip() or None}))
+        elif args.project_root_size_json:
+            total = sum(path.stat().st_size for path in manager.list_files())
+            print(json.dumps({"operation": "project-root-size", "bytes": total}))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)

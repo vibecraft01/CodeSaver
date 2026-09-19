@@ -193,6 +193,11 @@ TEXT["ru"].update(
         "archive_member_name_length_new": "Показать длину имён файлов архива",
         "git_commit_count_new": "Показать количество коммитов Git",
         "project_largest_extension_new": "Показать самое большое расширение",
+        "project_file_count_json_new": "Показать количество файлов JSON",
+        "backup_total_size_json_new": "Показать общий размер бэкапов JSON",
+        "archive_member_count_json_new": "Показать количество файлов архива JSON",
+        "git_head_json_new": "Показать Git HEAD JSON",
+        "project_root_size_json_new": "Показать размер проекта JSON",
     }
 )
 TEXT["en"].update(
@@ -239,6 +244,11 @@ TEXT["en"].update(
         "archive_member_name_length_new": "Show archive name lengths",
         "git_commit_count_new": "Show Git commit count",
         "project_largest_extension_new": "Show largest extension group",
+        "project_file_count_json_new": "Show project file count JSON",
+        "backup_total_size_json_new": "Show total backup size JSON",
+        "archive_member_count_json_new": "Show archive file count JSON",
+        "git_head_json_new": "Show Git HEAD JSON",
+        "project_root_size_json_new": "Show project size JSON",
     }
 )
 
@@ -1040,6 +1050,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(
             self._text("project_largest_extension_new"), self._show_project_largest_extension_latest_new
         )
+        tools_menu.addAction(self._text("project_file_count_json_new"), self._show_project_file_count_json_new)
+        tools_menu.addAction(self._text("backup_total_size_json_new"), self._show_backup_total_size_json_new)
+        tools_menu.addAction(self._text("archive_member_count_json_new"), self._show_archive_member_count_json_new)
+        tools_menu.addAction(self._text("git_head_json_new"), self._show_git_head_json_new)
+        tools_menu.addAction(self._text("project_root_size_json_new"), self._show_project_root_size_json_new)
         tools_menu.addAction(self._text("backup_oldest_date_new"), self._copy_backup_oldest_date_new)
         tools_menu.addAction(self._text("archive_member_extensions_new"), self._show_archive_member_extensions_new)
         tools_menu.addAction(self._text("project_recent_count_new"), self._show_project_recent_count_new)
@@ -3792,6 +3807,40 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, self._text("project_largest_extension_new"), f"{extension}: {format_bytes(size)}"
             )
+
+    def _show_project_file_count_json_new(self) -> None:
+        if self.manager:
+            QMessageBox.information(
+                self, self._text("project_file_count_json_new"), json.dumps({"files": len(self.manager.list_files())})
+            )
+
+    def _show_backup_total_size_json_new(self) -> None:
+        if self.manager:
+            total = sum(path.stat().st_size for path in self.manager.backup_dir.glob("*.zip"))
+            QMessageBox.information(self, self._text("backup_total_size_json_new"), json.dumps({"bytes": total}))
+
+    def _show_archive_member_count_json_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                count = sum(not item.is_dir() for item in source.infolist())
+            QMessageBox.information(self, self._text("archive_member_count_json_new"), json.dumps({"count": count}))
+
+    def _show_git_head_json_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            commit = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "rev-parse", "HEAD"], text=True, stderr=subprocess.STDOUT
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            commit = None
+        QMessageBox.information(self, self._text("git_head_json_new"), json.dumps({"commit": commit}))
+
+    def _show_project_root_size_json_new(self) -> None:
+        if self.manager:
+            total = sum(path.stat().st_size for path in self.manager.list_files())
+            QMessageBox.information(self, self._text("project_root_size_json_new"), json.dumps({"bytes": total}))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():
