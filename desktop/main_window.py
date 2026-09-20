@@ -198,6 +198,11 @@ TEXT["ru"].update(
         "archive_member_count_json_new": "Показать количество файлов архива JSON",
         "git_head_json_new": "Показать Git HEAD JSON",
         "project_root_size_json_new": "Показать размер проекта JSON",
+        "project_maximum_depth_new": "Показать максимальную глубину проекта",
+        "backup_average_age_new": "Показать средний возраст бэкапов",
+        "archive_compression_ratio_new": "Показать степень сжатия архива",
+        "git_current_branch_new": "Показать текущую Git-ветку",
+        "project_zero_byte_count_new": "Показать пустые файлы проекта",
     }
 )
 TEXT["en"].update(
@@ -249,6 +254,11 @@ TEXT["en"].update(
         "archive_member_count_json_new": "Show archive file count JSON",
         "git_head_json_new": "Show Git HEAD JSON",
         "project_root_size_json_new": "Show project size JSON",
+        "project_maximum_depth_new": "Show maximum project depth",
+        "backup_average_age_new": "Show average backup age",
+        "archive_compression_ratio_new": "Show archive compression ratio",
+        "git_current_branch_new": "Show current Git branch",
+        "project_zero_byte_count_new": "Show zero-byte project files",
     }
 )
 
@@ -1055,6 +1065,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_member_count_json_new"), self._show_archive_member_count_json_new)
         tools_menu.addAction(self._text("git_head_json_new"), self._show_git_head_json_new)
         tools_menu.addAction(self._text("project_root_size_json_new"), self._show_project_root_size_json_new)
+        tools_menu.addAction(self._text("project_maximum_depth_new"), self._show_project_maximum_depth_new)
+        tools_menu.addAction(self._text("backup_average_age_new"), self._show_backup_average_age_new)
+        tools_menu.addAction(self._text("archive_compression_ratio_new"), self._show_archive_compression_ratio_new)
+        tools_menu.addAction(self._text("git_current_branch_new"), self._show_git_current_branch_new)
+        tools_menu.addAction(self._text("project_zero_byte_count_new"), self._show_project_zero_byte_count_new)
         tools_menu.addAction(self._text("backup_oldest_date_new"), self._copy_backup_oldest_date_new)
         tools_menu.addAction(self._text("archive_member_extensions_new"), self._show_archive_member_extensions_new)
         tools_menu.addAction(self._text("project_recent_count_new"), self._show_project_recent_count_new)
@@ -3841,6 +3856,53 @@ class MainWindow(QMainWindow):
         if self.manager:
             total = sum(path.stat().st_size for path in self.manager.list_files())
             QMessageBox.information(self, self._text("project_root_size_json_new"), json.dumps({"bytes": total}))
+
+    def _show_project_maximum_depth_new(self) -> None:
+        if self.manager:
+            depths = [len(path.relative_to(self.manager.project_dir).parts) - 1 for path in self.manager.list_files()]
+            QMessageBox.information(self, self._text("project_maximum_depth_new"), str(max(depths, default=0)))
+
+    def _show_backup_average_age_new(self) -> None:
+        if self.manager:
+            ages = [time.time() - path.stat().st_mtime for path in self.manager.backup_dir.glob("*.zip")]
+            QMessageBox.information(
+                self,
+                self._text("backup_average_age_new"),
+                f"{sum(ages) / len(ages) / 86400:.1f} days" if ages else "0 days",
+            )
+
+    def _show_archive_compression_ratio_new(self) -> None:
+        archive = self._selected_archive()
+        if archive:
+            with zipfile.ZipFile(archive) as source:
+                original = sum(item.file_size for item in source.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in source.infolist() if not item.is_dir())
+            QMessageBox.information(
+                self,
+                self._text("archive_compression_ratio_new"),
+                f"{stored / original * 100:.1f}%" if original else "0%",
+            )
+
+    def _show_git_current_branch_new(self) -> None:
+        if not self.manager:
+            return
+        try:
+            branch = subprocess.check_output(
+                ["git", "-C", str(self.manager.project_dir), "branch", "--show-current"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            branch = ""
+        QMessageBox.information(self, self._text("git_current_branch_new"), branch or "detached")
+
+    def _show_project_zero_byte_count_new(self) -> None:
+        if self.manager:
+            files = self.manager.list_files()
+            zero = sum(path.stat().st_size == 0 for path in files)
+            QMessageBox.information(
+                self, self._text("project_zero_byte_count_new"), f"Empty: {zero}\nTotal: {len(files)}"
+            )
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

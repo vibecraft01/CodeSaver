@@ -367,6 +367,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-head-json", action="store_true", help="Show Git HEAD as JSON")
     parser.add_argument("--project-root-size-json", action="store_true", help="Show project root size as JSON")
+    parser.add_argument("--project-maximum-depth-json", action="store_true", help="Show maximum project depth")
+    parser.add_argument("--backup-average-age-json", action="store_true", help="Show average backup age")
+    parser.add_argument(
+        "--archive-compression-ratio-json", type=Path, metavar="ARCHIVE", help="Show archive compression ratio"
+    )
+    parser.add_argument("--git-current-branch-json", action="store_true", help="Show current Git branch")
+    parser.add_argument("--project-zero-byte-count-json", action="store_true", help="Count zero-byte project files")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -2792,6 +2799,38 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.project_root_size_json:
             total = sum(path.stat().st_size for path in manager.list_files())
             print(json.dumps({"operation": "project-root-size", "bytes": total}))
+        elif args.project_maximum_depth_json:
+            depths = [len(path.relative_to(manager.project_dir).parts) - 1 for path in manager.list_files()]
+            print(json.dumps({"operation": "project-maximum-depth", "depth": max(depths, default=0)}))
+        elif args.backup_average_age_json:
+            now = time.time()
+            ages = [now - path.stat().st_mtime for path in manager.backup_dir.glob("*.zip")]
+            print(json.dumps({"operation": "backup-average-age", "seconds": sum(ages) / len(ages) if ages else 0}))
+        elif args.archive_compression_ratio_json:
+            with zipfile.ZipFile(args.archive_compression_ratio_json) as archive:
+                original = sum(item.file_size for item in archive.infolist() if not item.is_dir())
+                stored = sum(item.compress_size for item in archive.infolist() if not item.is_dir())
+            print(
+                json.dumps(
+                    {
+                        "operation": "archive-compression-ratio",
+                        "original_bytes": original,
+                        "stored_bytes": stored,
+                        "ratio": stored / original if original else 0,
+                    }
+                )
+            )
+        elif args.git_current_branch_json:
+            result = subprocess.run(
+                ["git", "-C", str(manager.project_dir), "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(json.dumps({"operation": "git-current-branch", "branch": result.stdout.strip() or None}))
+        elif args.project_zero_byte_count_json:
+            zero = sum(path.stat().st_size == 0 for path in manager.list_files())
+            print(json.dumps({"operation": "project-zero-byte-count", "count": zero}))
         elif args.archive_age:
             archive = args.archive_age.expanduser().resolve()
             age = max(0.0, datetime.now(timezone.utc).timestamp() - archive.stat().st_mtime)
