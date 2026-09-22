@@ -212,6 +212,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--recent-backup-json", type=int, metavar="N", help="Show the N newest backups as JSON")
     parser.add_argument("--backup-size-report-json", action="store_true", help="Show backup size statistics as JSON")
     parser.add_argument("--project-directory-count", action="store_true", help="Count project directories")
+    parser.add_argument("--project-file-dates", action="store_true", help="Show oldest and newest project file")
+    parser.add_argument("--backup-name-lengths", action="store_true", help="Show backup name length statistics")
+    parser.add_argument("--archive-empty-files", type=Path, metavar="ARCHIVE", help="Count empty archive members")
+    parser.add_argument("--git-author-count", action="store_true", help="Count Git authors")
+    parser.add_argument("--project-extension-sizes", action="store_true", help="Show bytes grouped by extension")
+    parser.add_argument("--backup-weekday-summary", action="store_true", help="Summarize backups by weekday")
     parser.add_argument(
         "--archive-latest-member", type=Path, metavar="ARCHIVE", help="Show the newest member in an archive"
     )
@@ -3232,6 +3238,70 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(translate("message.restore_completed", language, count=count))
                 if safety_archive:
                     print(translate("message.restore_safety_created", language, path=safety_archive))
+        elif args.project_file_dates:
+            files = [path for path in manager.list_files() if path.exists()]
+            dates = [path.stat().st_mtime for path in files]
+            result = {
+                "files": len(files),
+                "oldest": min(dates) if dates else None,
+                "newest": max(dates) if dates else None,
+            }
+            print(
+                json.dumps(result)
+                if args.json
+                else f"Files: {len(files)}\nOldest: {result['oldest']}\nNewest: {result['newest']}"
+            )
+        elif args.backup_name_lengths:
+            lengths = [len(path.name) for path in manager.backup_dir.glob("*.zip")]
+            result = {
+                "count": len(lengths),
+                "minimum": min(lengths) if lengths else 0,
+                "maximum": max(lengths) if lengths else 0,
+            }
+            print(
+                json.dumps(result)
+                if args.json
+                else f"Backups: {result['count']}\nName length: {result['minimum']}-{result['maximum']}"
+            )
+        elif args.archive_empty_files:
+            with zipfile.ZipFile(args.archive_empty_files.expanduser()) as archive:
+                empty = sum(1 for member in archive.infolist() if not member.is_dir() and member.file_size == 0)
+            print(
+                json.dumps({"archive": str(args.archive_empty_files), "empty_files": empty})
+                if args.json
+                else f"Empty files: {empty}"
+            )
+        elif args.git_author_count:
+            output = subprocess.run(
+                ["git", "shortlog", "-sne", "HEAD"],
+                cwd=manager.project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout
+            count = len([line for line in output.splitlines() if line.strip()])
+            print(json.dumps({"authors": count}) if args.json else f"Git authors: {count}")
+        elif args.project_extension_sizes:
+            totals = {}
+            for path in manager.list_files():
+                if path.exists():
+                    extension = path.suffix.lower() or "[no extension]"
+                    totals[extension] = totals.get(extension, 0) + path.stat().st_size
+            print(
+                json.dumps(dict(sorted(totals.items())))
+                if args.json
+                else "\n".join(f"{key}: {_format_bytes(value)}" for key, value in sorted(totals.items()))
+            )
+        elif args.backup_weekday_summary:
+            counts = {}
+            for path in manager.backup_dir.glob("*.zip"):
+                weekday = datetime.fromtimestamp(path.stat().st_mtime).strftime("%A")
+                counts[weekday] = counts.get(weekday, 0) + 1
+            print(
+                json.dumps(dict(counts))
+                if args.json
+                else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
+            )
         elif args.dry_run:
             _dry_run(manager, language)
         elif args.cleanup:

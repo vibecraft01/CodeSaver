@@ -1079,6 +1079,12 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("selected_largest_member_new"), self._show_selected_largest_member_new)
         tools_menu.addAction(self._text("export_project_dirs_new"), self._export_project_dirs_new)
         tools_menu.addAction(self._text("project_modified_range_new"), self._show_project_modified_range_new)
+        tools_menu.addAction("Project file date range", self._show_project_file_dates_beta)
+        tools_menu.addAction("Backup name lengths", self._show_backup_name_lengths_beta)
+        tools_menu.addAction("Empty archive members", self._show_archive_empty_files_beta)
+        tools_menu.addAction("Git author count", self._show_git_author_count_beta)
+        tools_menu.addAction("Bytes by extension", self._show_extension_sizes_beta)
+        tools_menu.addAction("Backups by weekday", self._show_backup_weekdays_beta)
         tools_menu.addAction(self._text("largest_project_directory_new"), self._show_largest_project_directory_new)
         tools_menu.addAction(self._text("backup_name_lengths_new"), self._show_backup_name_lengths_new)
         tools_menu.addAction(self._text("latest_git_change_new"), self._show_latest_git_change_new)
@@ -3903,6 +3909,60 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, self._text("project_zero_byte_count_new"), f"Empty: {zero}\nTotal: {len(files)}"
             )
+
+    def _show_project_file_dates_beta(self) -> None:
+        files = [path for path in self.manager.list_files() if path.exists()] if self.manager else []
+        dates = [path.stat().st_mtime for path in files]
+        body = (
+            "No files"
+            if not dates
+            else f"Oldest: {datetime.fromtimestamp(min(dates)).isoformat()}\nNewest: {datetime.fromtimestamp(max(dates)).isoformat()}"
+        )
+        QMessageBox.information(self, "Project file date range", body)
+
+    def _show_backup_name_lengths_beta(self) -> None:
+        archives = list(self.manager.backup_dir.glob("*.zip")) if self.manager else []
+        lengths = [len(path.name) for path in archives]
+        body = f"Archives: {len(lengths)}\nLength: {min(lengths) if lengths else 0}-{max(lengths) if lengths else 0}"
+        QMessageBox.information(self, "Backup name lengths", body)
+
+    def _show_archive_empty_files_beta(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as handle:
+            count = sum(1 for item in handle.infolist() if not item.is_dir() and item.file_size == 0)
+        QMessageBox.information(self, "Empty archive members", f"Empty files: {count}")
+
+    def _show_git_author_count_beta(self) -> None:
+        result = subprocess.run(
+            ["git", "shortlog", "-sne", "HEAD"],
+            cwd=self.manager.project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        count = len([line for line in result.stdout.splitlines() if line.strip()])
+        QMessageBox.information(self, "Git author count", f"Authors: {count}")
+
+    def _show_extension_sizes_beta(self) -> None:
+        totals = Counter()
+        for path in self.manager.list_files():
+            if path.exists():
+                totals[path.suffix.lower() or "[no extension]"] += path.stat().st_size
+        body = "\n".join(f"{key}: {format_bytes(value)}" for key, value in sorted(totals.items()))
+        QMessageBox.information(self, "Bytes by extension", body or "No files")
+
+    def _show_backup_weekdays_beta(self) -> None:
+        counts = Counter(
+            datetime.fromtimestamp(path.stat().st_mtime).strftime("%A")
+            for path in self.manager.backup_dir.glob("*.zip")
+        )
+        QMessageBox.information(
+            self,
+            "Backups by weekday",
+            "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "No backups",
+        )
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

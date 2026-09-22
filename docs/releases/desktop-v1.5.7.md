@@ -1,0 +1,12 @@
+# CodeSaver Desktop v1.5.7
+
+## New functions
+
+- Project file date range report.
+- Backup archive name-length statistics.
+- Empty archive member count.
+- Git author count.
+- Project bytes grouped by extension.
+- Backup weekday summary.
+
+This is a corrective release with the six functions implemented in Desktop.
