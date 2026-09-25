@@ -1085,6 +1085,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction("Git author count", self._show_git_author_count_beta)
         tools_menu.addAction("Bytes by extension", self._show_extension_sizes_beta)
         tools_menu.addAction("Backups by weekday", self._show_backup_weekdays_beta)
+        tools_menu.addAction("Project file kinds", self._show_project_kinds_beta)
+        tools_menu.addAction("Oldest archive member", self._show_oldest_member_beta)
+        tools_menu.addAction("Files across backups", self._show_backup_file_total_beta)
+        tools_menu.addAction("Git branches", self._show_git_branches_beta)
+        tools_menu.addAction("Hidden project files", self._show_hidden_files_beta)
         tools_menu.addAction(self._text("largest_project_directory_new"), self._show_largest_project_directory_new)
         tools_menu.addAction(self._text("backup_name_lengths_new"), self._show_backup_name_lengths_new)
         tools_menu.addAction(self._text("latest_git_change_new"), self._show_latest_git_change_new)
@@ -3963,6 +3968,42 @@ class MainWindow(QMainWindow):
             "Backups by weekday",
             "\n".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "No backups",
         )
+
+    def _show_project_kinds_beta(self) -> None:
+        counts = Counter("directory" if path.is_dir() else "file" for path in self.manager.list_files())
+        QMessageBox.information(
+            self, "Project file kinds", "\n".join(f"{key}: {value}" for key, value in counts.items())
+        )
+
+    def _show_oldest_member_beta(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        with zipfile.ZipFile(archive) as handle:
+            members = [item for item in handle.infolist() if not item.is_dir()]
+        oldest = min(members, key=lambda item: item.date_time) if members else None
+        QMessageBox.information(self, "Oldest archive member", oldest.filename if oldest else "No files")
+
+    def _show_backup_file_total_beta(self) -> None:
+        total = 0
+        for archive in self.manager.backup_dir.glob("*.zip"):
+            with zipfile.ZipFile(archive) as handle:
+                total += sum(1 for item in handle.infolist() if not item.is_dir())
+        QMessageBox.information(self, "Files across backups", str(total))
+
+    def _show_git_branches_beta(self) -> None:
+        result = subprocess.run(
+            ["git", "branch", "--format=%(refname:short)"],
+            cwd=self.manager.project_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        QMessageBox.information(self, "Git branches", result.stdout.strip() or "No branches")
+
+    def _show_hidden_files_beta(self) -> None:
+        count = sum(1 for path in self.manager.list_files() if path.name.startswith("."))
+        QMessageBox.information(self, "Hidden project files", str(count))
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

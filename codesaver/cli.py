@@ -218,6 +218,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--git-author-count", action="store_true", help="Count Git authors")
     parser.add_argument("--project-extension-sizes", action="store_true", help="Show bytes grouped by extension")
     parser.add_argument("--backup-weekday-summary", action="store_true", help="Summarize backups by weekday")
+    parser.add_argument("--project-kind-count", action="store_true", help="Count project files by kind")
+    parser.add_argument("--archive-oldest-member", type=Path, metavar="ARCHIVE", help="Show the oldest archive member")
+    parser.add_argument("--backup-file-total", action="store_true", help="Count files across backups")
+    parser.add_argument("--git-branch-list", action="store_true", help="List local Git branches")
+    parser.add_argument("--hidden-file-count", action="store_true", help="Count hidden project files")
     parser.add_argument(
         "--archive-latest-member", type=Path, metavar="ARCHIVE", help="Show the newest member in an archive"
     )
@@ -231,7 +236,6 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--config-check-json", action="store_true", help="Validate configuration as JSON")
     parser.add_argument("--project-checksum", type=Path, metavar="FILE", help="Write a deterministic project checksum")
     parser.add_argument("--newer-than", type=int, metavar="DAYS", help="List files modified within the last N days")
-    parser.add_argument("--git-branches", action="store_true", help="List local Git branches")
     parser.add_argument("--backup-sizes", action="store_true", help="Show backup sizes sorted largest first")
     parser.add_argument("--archive-paths", type=Path, metavar="ARCHIVE", help="Export archive paths as JSON")
     parser.add_argument("--project-digest-report", type=Path, metavar="FILE", help="Write per-file digest report JSON")
@@ -1732,7 +1736,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             ]
             result = {"operation": "newer-than", "days": args.newer_than, "files": files}
             print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(files))
-        elif args.git_branches:
+        elif args.git_branch_list:
             completed = subprocess.run(
                 ["git", "-C", str(manager.project_dir), "branch", "--format=%(refname:short)"],
                 capture_output=True,
@@ -3302,6 +3306,37 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.json
                 else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
             )
+        elif args.project_kind_count:
+            counts = {}
+            for path in manager.list_files():
+                kind = "directory" if path.is_dir() else "file"
+                counts[kind] = counts.get(kind, 0) + 1
+            print(json.dumps(counts) if args.json else "\n".join(f"{key}: {value}" for key, value in counts.items()))
+        elif args.archive_oldest_member:
+            with zipfile.ZipFile(args.archive_oldest_member.expanduser()) as archive:
+                members = [item for item in archive.infolist() if not item.is_dir()]
+            oldest = min(members, key=lambda item: item.date_time) if members else None
+            result = {"member": oldest.filename if oldest else None, "timestamp": oldest.date_time if oldest else None}
+            print(json.dumps(result) if args.json else f"Oldest member: {result['member']}")
+        elif args.backup_file_total:
+            total = 0
+            for archive_path in manager.backup_dir.glob("*.zip"):
+                with zipfile.ZipFile(archive_path) as archive:
+                    total += sum(1 for item in archive.infolist() if not item.is_dir())
+            print(json.dumps({"files": total}) if args.json else f"Files in backups: {total}")
+        elif args.git_branch_list:
+            result = subprocess.run(
+                ["git", "branch", "--format=%(refname:short)"],
+                cwd=manager.project_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            branches = [line for line in result.stdout.splitlines() if line]
+            print(json.dumps(branches) if args.json else "\n".join(branches))
+        elif args.hidden_file_count:
+            count = sum(1 for path in manager.list_files() if path.name.startswith("."))
+            print(json.dumps({"hidden": count}) if args.json else f"Hidden files: {count}")
         elif args.dry_run:
             _dry_run(manager, language)
         elif args.cleanup:
