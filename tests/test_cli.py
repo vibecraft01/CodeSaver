@@ -75,9 +75,8 @@ class CliFeatureTests(unittest.TestCase):
                 outputs[option] = json.loads(output.getvalue())
 
             self.assertEqual(outputs["--restore-conflicts"]["conflicts"], ["replace.txt"])
-            self.assertCountEqual(
-                outputs["--archive-path-audit"]["unsafe_members"], ["../outside.txt", "C:/outside.txt"]
-            )
+            unsafe_members = [member.replace("\\", "/") for member in outputs["--archive-path-audit"]["unsafe_members"]]
+            self.assertCountEqual(unsafe_members, ["../outside.txt", "C:/outside.txt"])
             self.assertGreater(outputs["--project-long-paths"]["count"], 0)
             self.assertEqual(outputs["--backup-age-over-limit"]["count"], 1)
 
