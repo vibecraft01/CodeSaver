@@ -1,6 +1,6 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.3.7.
+Desktop application source for CodeSaver Desktop 1.5.9.
 
 The current desktop tools include:
 

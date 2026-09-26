@@ -17,7 +17,9 @@ import sys
 import threading
 import time
 import tempfile
+import zipfile
 from datetime import datetime, timezone
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Optional
 
 from . import __version__
@@ -223,6 +225,12 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--backup-file-total", action="store_true", help="Count files across backups")
     parser.add_argument("--git-branch-list", action="store_true", help="List local Git branches")
     parser.add_argument("--hidden-file-count", action="store_true", help="Count hidden project files")
+    parser.add_argument(
+        "--restore-conflicts", type=Path, metavar="ARCHIVE", help="List files an archive restore would overwrite"
+    )
+    parser.add_argument("--archive-path-audit", type=Path, metavar="ARCHIVE", help="Find unsafe paths in a ZIP archive")
+    parser.add_argument("--project-long-paths", type=int, metavar="CHARS", help="List project paths longer than CHARS")
+    parser.add_argument("--backup-age-over-limit", type=int, metavar="DAYS", help="List backups older than DAYS")
     parser.add_argument(
         "--archive-latest-member", type=Path, metavar="ARCHIVE", help="Show the newest member in an archive"
     )
@@ -1282,8 +1290,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 else "\n".join(f"{item['bytes']} bytes  {item['path']}" for item in result["backups"])
             )
         elif args.archive_types:
-            import zipfile
-
             groups: dict[str, dict[str, int]] = {}
             with zipfile.ZipFile(args.archive_types) as archive:
                 for info in archive.infolist():
@@ -1364,8 +1370,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             }
             print(json.dumps(result) if args.json else str(args.git_diff_file))
         elif args.archive_dates:
-            import zipfile
-
             with zipfile.ZipFile(args.archive_dates) as archive:
                 entries = [
                     {"path": info.filename, "modified": datetime(*info.date_time).isoformat()}
@@ -1798,8 +1802,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 else str(args.project_digest_report)
             )
         elif args.archive_compression:
-            import zipfile
-
             with zipfile.ZipFile(args.archive_compression) as archive:
                 original = sum(item.file_size for item in archive.infolist() if not item.is_dir())
                 stored = sum(item.compress_size for item in archive.infolist() if not item.is_dir())
@@ -1879,8 +1881,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 else str(args.project_tree_json)
             )
         elif args.archive_member_count:
-            import zipfile
-
             with zipfile.ZipFile(args.archive_member_count) as archive:
                 count = sum(1 for item in archive.infolist() if not item.is_dir())
             result = {"operation": "archive-member-count", "archive": str(args.archive_member_count), "files": count}
@@ -2902,8 +2902,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 else result.stdout.rstrip()
             )
         elif args.archive_checksums:
-            import zipfile
-
             with zipfile.ZipFile(args.archive_checksums) as archive:
                 checksums = {
                     info.filename: hashlib.sha256(archive.read(info)).hexdigest()
@@ -3306,6 +3304,67 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.json
                 else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
             )
+        elif args.restore_conflicts:
+            root = manager.project_dir.resolve()
+            with zipfile.ZipFile(args.restore_conflicts.expanduser()) as archive:
+                conflicts = []
+                for member in archive.infolist():
+                    if member.is_dir():
+                        continue
+                    target = (root / member.filename).resolve()
+                    if target != root and root not in target.parents:
+                        continue
+                    if target.exists():
+                        conflicts.append(member.filename)
+            result = {"archive": str(args.restore_conflicts), "conflicts": conflicts}
+            print(json.dumps(result, ensure_ascii=False) if args.json else "\n".join(conflicts))
+        elif args.archive_path_audit:
+            with zipfile.ZipFile(args.archive_path_audit.expanduser()) as archive:
+                unsafe = []
+                for member in archive.infolist():
+                    posix_path = PurePosixPath(member.filename)
+                    windows_path = PureWindowsPath(member.filename)
+                    if (
+                        posix_path.is_absolute()
+                        or windows_path.is_absolute()
+                        or windows_path.drive
+                        or ".." in posix_path.parts
+                        or ".." in windows_path.parts
+                    ):
+                        unsafe.append(member.filename)
+            result = {"archive": str(args.archive_path_audit), "unsafe_members": unsafe, "safe": not unsafe}
+            print(
+                json.dumps(result, ensure_ascii=False) if args.json else "\n".join(unsafe or ["No unsafe paths found"])
+            )
+        elif args.project_long_paths is not None:
+            threshold = max(1, args.project_long_paths)
+            long_paths = [
+                {
+                    "path": str(path.relative_to(manager.project_dir)),
+                    "characters": len(str(path.relative_to(manager.project_dir))),
+                }
+                for path in manager.list_files()
+                if len(str(path.relative_to(manager.project_dir))) > threshold
+            ]
+            result = {"threshold": threshold, "count": len(long_paths), "files": long_paths}
+            print(
+                json.dumps(result, ensure_ascii=False) if args.json else "\n".join(item["path"] for item in long_paths)
+            )
+        elif args.backup_age_over_limit is not None:
+            cutoff = time.time() - max(0, args.backup_age_over_limit) * 86400
+            old_backups = [
+                {"path": str(path), "age_days": round((time.time() - path.stat().st_mtime) / 86400, 1)}
+                for path in manager.backup_dir.glob("*.zip")
+                if path.stat().st_mtime < cutoff
+            ]
+            result = {
+                "threshold_days": max(0, args.backup_age_over_limit),
+                "count": len(old_backups),
+                "backups": old_backups,
+            }
+            print(
+                json.dumps(result, ensure_ascii=False) if args.json else "\n".join(item["path"] for item in old_backups)
+            )
         elif args.project_kind_count:
             counts = {}
             for path in manager.list_files():
@@ -3388,7 +3447,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 1
         logger.info("CodeSaver finished successfully")
         return 0
-    except (BackupError, OSError, ValueError) as exc:
+    except (BackupError, OSError, ValueError, zipfile.BadZipFile) as exc:
         if logger:
             logger.error("CodeSaver failed: %s", _error_text(exc, language))
         print(translate("message.error", language, error=_error_text(exc, language)))

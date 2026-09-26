@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.7.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.0) | Python 3.9+ | Updated 2026-09-25 |
-| CodeSaver Desktop | [**1.5.8**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.5.8) | Python 3.10+ with PyQt5 | Updated 2026-09-25 |
+| CodeSaver CLI | [**1.7.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.1) | Python 3.9+ | Updated 2026-09-26 |
+| CodeSaver Desktop | [**1.5.9**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.5.9) | Python 3.10+ with PyQt5 | Updated 2026-09-26 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -68,6 +68,10 @@ GitHub repository snapshot for **20 September 2026**:
 - CSV project inventory export via `--export-inventory`.
 - Safe archive restore preview via `--restore-preview`.
 - Optional cloud upload via `--cloud-upload ARCHIVE --cloud-url URL`.
+- Restore conflict preview with `--restore-conflicts ARCHIVE`.
+- ZIP path safety audit with `--archive-path-audit ARCHIVE`.
+- Long project path search with `--project-long-paths CHARS`.
+- Old backup listing with `--backup-age-over-limit DAYS`.
 - Cloud credentials are read from `CODESAVER_CLOUD_TOKEN` or a custom token variable.
 - Desktop duplicate-file detection using SHA-256.
 - Desktop archive-integrity report export.
@@ -97,7 +101,7 @@ GitHub repository snapshot for **20 September 2026**:
 
 ### Desktop version
 
-CodeSaver Desktop `1.3.0` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.5.9` is a graphical alternative for developers who prefer a visual workflow. It includes:
 - Archive health CSV export, project-directory overview, Git history copying, compression report CSV export, and backup age map.
 - Archive extension summary, project-size CSV export, backup-summary JSON copying, duplicate archive-member detection, and restore-preview copying.
 
@@ -147,6 +151,7 @@ CodeSaver Desktop `1.3.0` is a graphical alternative for developers who prefer a
 - File-type inventory, stale-file detection, total archive storage, Git-tag viewing, and clipboard backup-index export.
 - Archive compression-ratio inspection, timeline CSV export, project file-list copying, archive member dates, and project-info JSON copying.
 - Recently modified-file view, archive-member CSV export, archive/project size comparison, archive age display, and project inventory JSON copying.
+- Restore conflict preview, ZIP path safety audit, long project path search, and age-based old-backup listing.
 - Open the current Git diff, refresh analysis, and pause/resume autosave from dedicated actions.
 - No API keys or external services.
 
@@ -337,13 +342,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.1.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.1.1):
+The current stable binary is available in the [Desktop v1.5.9 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.5.9):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.1.5 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.1.5) is available.
+The stable [CLI v1.7.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.1) is available.
 
 ### Build from source
 

@@ -10,7 +10,7 @@ import sys
 import subprocess
 import csv
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from shutil import disk_usage
 import time
 import zipfile
@@ -146,6 +146,42 @@ TEXT["en"].update(
         "backup_type_count_new": "Show backup types",
         "selected_largest_member_new": "Show largest archive file",
         "export_project_dirs_new": "Export project directories CSV",
+    }
+)
+TEXT["ru"].update(
+    {
+        "restore_conflicts_action": "Предпросмотр перезаписываемых файлов",
+        "archive_path_audit_action": "Проверить пути в ZIP",
+        "long_project_paths_action": "Найти длинные пути проекта",
+        "old_backups_age_action": "Найти старые бэкапы",
+        "restore_conflicts_title": "Файлы, которые будут перезаписаны",
+        "archive_path_audit_title": "Проверка путей ZIP",
+        "long_project_paths_title": "Длинные пути проекта",
+        "long_project_paths_prompt": "Показать пути длиннее, чем символов:",
+        "old_backups_age_title": "Старые бэкапы",
+        "old_backups_age_prompt": "Показать бэкапы старше (дней):",
+        "no_restore_conflicts": "Существующие файлы не будут перезаписаны.",
+        "no_unsafe_archive_paths": "Опасных путей в архиве не найдено.",
+        "no_long_project_paths": "Длинные пути не найдены.",
+        "no_old_backups": "Старых бэкапов не найдено.",
+    }
+)
+TEXT["en"].update(
+    {
+        "restore_conflicts_action": "Preview restore conflicts",
+        "archive_path_audit_action": "Audit ZIP paths",
+        "long_project_paths_action": "Find long project paths",
+        "old_backups_age_action": "Find old backups",
+        "restore_conflicts_title": "Files that would be overwritten",
+        "archive_path_audit_title": "ZIP path audit",
+        "long_project_paths_title": "Long project paths",
+        "long_project_paths_prompt": "Show paths longer than characters:",
+        "old_backups_age_title": "Old backups",
+        "old_backups_age_prompt": "Show backups older than days:",
+        "no_restore_conflicts": "No existing files would be overwritten.",
+        "no_unsafe_archive_paths": "No unsafe archive paths found.",
+        "no_long_project_paths": "No long paths found.",
+        "no_old_backups": "No backups exceed that age.",
     }
 )
 
@@ -1090,6 +1126,10 @@ class MainWindow(QMainWindow):
         tools_menu.addAction("Files across backups", self._show_backup_file_total_beta)
         tools_menu.addAction("Git branches", self._show_git_branches_beta)
         tools_menu.addAction("Hidden project files", self._show_hidden_files_beta)
+        tools_menu.addAction(self._text("restore_conflicts_action"), self._preview_restore_conflicts)
+        tools_menu.addAction(self._text("archive_path_audit_action"), self._audit_selected_archive_paths)
+        tools_menu.addAction(self._text("long_project_paths_action"), self._show_long_project_paths)
+        tools_menu.addAction(self._text("old_backups_age_action"), self._show_old_backups_by_age)
         tools_menu.addAction(self._text("largest_project_directory_new"), self._show_largest_project_directory_new)
         tools_menu.addAction(self._text("backup_name_lengths_new"), self._show_backup_name_lengths_new)
         tools_menu.addAction(self._text("latest_git_change_new"), self._show_latest_git_change_new)
@@ -4004,6 +4044,101 @@ class MainWindow(QMainWindow):
     def _show_hidden_files_beta(self) -> None:
         count = sum(1 for path in self.manager.list_files() if path.name.startswith("."))
         QMessageBox.information(self, "Hidden project files", str(count))
+
+    def _preview_restore_conflicts(self) -> None:
+        archive_path = self._selected_archive()
+        if not archive_path or not self.manager:
+            return
+        root = self.manager.project_dir.resolve()
+        try:
+            with zipfile.ZipFile(archive_path) as archive:
+                conflicts = []
+                for member in archive.infolist():
+                    if member.is_dir():
+                        continue
+                    target = (root / member.filename).resolve()
+                    if target != root and root not in target.parents:
+                        continue
+                    if target.exists():
+                        conflicts.append(member.filename)
+            body = "\n".join(conflicts[:100]) or self._text("no_restore_conflicts")
+            if len(conflicts) > 100:
+                body += f"\n… and {len(conflicts) - 100} more"
+            QMessageBox.information(self, self._text("restore_conflicts_title"), body)
+        except (OSError, zipfile.BadZipFile) as error:
+            self._show_error(str(error))
+
+    def _audit_selected_archive_paths(self) -> None:
+        archive_path = self._selected_archive()
+        if not archive_path:
+            return
+        try:
+            with zipfile.ZipFile(archive_path) as archive:
+                unsafe = []
+                for member in archive.infolist():
+                    posix_path = PurePosixPath(member.filename)
+                    windows_path = PureWindowsPath(member.filename)
+                    if (
+                        posix_path.is_absolute()
+                        or windows_path.is_absolute()
+                        or windows_path.drive
+                        or ".." in posix_path.parts
+                        or ".." in windows_path.parts
+                    ):
+                        unsafe.append(member.filename)
+            body = "\n".join(unsafe[:100]) or self._text("no_unsafe_archive_paths")
+            if len(unsafe) > 100:
+                body += f"\n… and {len(unsafe) - 100} more"
+            QMessageBox.information(self, self._text("archive_path_audit_title"), body)
+        except (OSError, zipfile.BadZipFile) as error:
+            self._show_error(str(error))
+
+    def _show_long_project_paths(self) -> None:
+        if not self.manager:
+            return
+        threshold, accepted = QInputDialog.getInt(
+            self,
+            self._text("long_project_paths_title"),
+            self._text("long_project_paths_prompt"),
+            240,
+            1,
+            32767,
+        )
+        if not accepted:
+            return
+        long_paths = [
+            str(path.relative_to(self.manager.project_dir))
+            for path in self.manager.list_files()
+            if len(str(path.relative_to(self.manager.project_dir))) > threshold
+        ]
+        body = "\n".join(long_paths[:100]) or self._text("no_long_project_paths")
+        if len(long_paths) > 100:
+            body += f"\n… and {len(long_paths) - 100} more"
+        QMessageBox.information(self, self._text("long_project_paths_title"), body)
+
+    def _show_old_backups_by_age(self) -> None:
+        if not self.manager:
+            return
+        days, accepted = QInputDialog.getInt(
+            self,
+            self._text("old_backups_age_title"),
+            self._text("old_backups_age_prompt"),
+            30,
+            0,
+            36500,
+        )
+        if not accepted:
+            return
+        cutoff = time.time() - days * 86400
+        old = [
+            f"{path.name} — {(time.time() - path.stat().st_mtime) / 86400:.1f} days"
+            for path in self.manager.backup_dir.glob("*.zip")
+            if path.stat().st_mtime < cutoff
+        ]
+        body = "\n".join(old[:100]) or self._text("no_old_backups")
+        if len(old) > 100:
+            body += f"\n… and {len(old) - 100} more"
+        QMessageBox.information(self, self._text("old_backups_age_title"), body)
 
     def closeEvent(self, event) -> None:
         if self.settings.minimize_to_tray and not self._allow_close and self.tray.tray.isVisible():

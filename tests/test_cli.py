@@ -1,10 +1,12 @@
 import io
 import json
 import logging
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -20,11 +22,72 @@ from codesaver.cli import (
     _health_check,
     _backup_stats,
     _self_check,
+    main,
 )
 from codesaver.core import BackupManager
 
 
 class CliFeatureTests(unittest.TestCase):
+    def test_safety_and_maintenance_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            (root / "replace.txt").write_text("current", encoding="utf-8")
+            long_dir = root / "directory-name-longer-than-limit"
+            long_dir.mkdir()
+            (long_dir / "file.txt").write_text("content", encoding="utf-8")
+            archive_path = Path(tmp) / "sample.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("replace.txt", "saved")
+                archive.writestr("../outside.txt", "unsafe")
+                archive.writestr("C:\\outside.txt", "unsafe")
+            old_backup = backups / "old.zip"
+            with zipfile.ZipFile(old_backup, "w"):
+                pass
+            old_time = 1
+            os.utime(old_backup, (old_time, old_time))
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "run.log"),
+                "--json",
+            ]
+
+            outputs = {}
+            for option, value in (
+                ("--restore-conflicts", str(archive_path)),
+                ("--archive-path-audit", str(archive_path)),
+                ("--project-long-paths", "10"),
+                ("--backup-age-over-limit", "1"),
+            ):
+                output = io.StringIO()
+                with patch("codesaver.cli._remember_project"):
+                    with patch(
+                        "codesaver.cli.configure_logging", return_value=logging.getLogger("test-cli-new-reports")
+                    ):
+                        with redirect_stdout(output):
+                            self.assertEqual(main([*common, option, value]), 0)
+                outputs[option] = json.loads(output.getvalue())
+
+            self.assertEqual(outputs["--restore-conflicts"]["conflicts"], ["replace.txt"])
+            self.assertCountEqual(
+                outputs["--archive-path-audit"]["unsafe_members"], ["../outside.txt", "C:/outside.txt"]
+            )
+            self.assertGreater(outputs["--project-long-paths"]["count"], 0)
+            self.assertEqual(outputs["--backup-age-over-limit"]["count"], 1)
+
+            corrupt_archive = Path(tmp) / "corrupt.zip"
+            corrupt_archive.write_text("not a zip", encoding="utf-8")
+            with patch("codesaver.cli._remember_project"):
+                with patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-cli-new-reports")):
+                    with redirect_stdout(io.StringIO()):
+                        self.assertEqual(main([*common, "--archive-path-audit", str(corrupt_archive)]), 1)
+
     def test_module_entrypoint_returns_nonzero_for_invalid_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "broken.zip"
