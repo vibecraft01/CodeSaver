@@ -25,6 +25,7 @@ from typing import Optional
 from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
+from .archive_tools import compare_zips, extract_member, find_members, member_compression, verify_zip
 from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
 from .logging_utils import configure_logging
@@ -392,6 +393,25 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--git-current-branch-json", action="store_true", help="Show current Git branch")
     parser.add_argument("--project-zero-byte-count-json", action="store_true", help="Count zero-byte project files")
+    parser.add_argument(
+        "--archive-verify-crc", type=Path, metavar="ARCHIVE", help="Read all ZIP members and verify CRC"
+    )
+    parser.add_argument(
+        "--archive-find-members", type=Path, metavar="ARCHIVE", help="Find archive members using --member-glob"
+    )
+    parser.add_argument("--member-glob", metavar="GLOB", help="Case-insensitive glob for --archive-find-members")
+    parser.add_argument(
+        "--archive-extract-member", nargs=2, metavar=("ARCHIVE", "MEMBER"), help="Safely extract one archive member"
+    )
+    parser.add_argument(
+        "--extract-to", type=Path, metavar="DIR", help="Destination directory for --archive-extract-member"
+    )
+    parser.add_argument(
+        "--compare-zips", nargs=2, type=Path, metavar=("ARCHIVE_A", "ARCHIVE_B"), help="Compare ZIP member contents"
+    )
+    parser.add_argument(
+        "--member-compression", type=Path, metavar="ARCHIVE", help="Report compression savings per member"
+    )
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -3303,6 +3323,57 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps(dict(counts))
                 if args.json
                 else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
+            )
+        elif args.archive_verify_crc:
+            result = verify_zip(args.archive_verify_crc.expanduser().resolve())
+            print(
+                json.dumps(result, ensure_ascii=False)
+                if args.json
+                else ("ZIP CRC check passed" if result["valid"] else f"CRC failure: {result['bad_member']}")
+            )
+            if not result["valid"]:
+                return 1
+        elif args.archive_find_members:
+            if args.member_glob is None:
+                raise BackupError("--member-glob is required with --archive-find-members")
+            matches = find_members(args.archive_find_members.expanduser().resolve(), args.member_glob)
+            result = {"archive": str(args.archive_find_members), "pattern": args.member_glob, "matches": matches}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(matches or ["No matching members"])
+            )
+        elif args.archive_extract_member:
+            if args.extract_to is None:
+                raise BackupError("--extract-to is required with --archive-extract-member")
+            output = extract_member(
+                Path(args.archive_extract_member[0]).expanduser().resolve(),
+                args.archive_extract_member[1],
+                args.extract_to,
+            )
+            result = {
+                "archive": args.archive_extract_member[0],
+                "member": args.archive_extract_member[1],
+                "output": str(output),
+            }
+            print(json.dumps(result, ensure_ascii=False) if args.json else f"Extracted: {output}")
+        elif args.compare_zips:
+            result = compare_zips(*(path.expanduser().resolve() for path in args.compare_zips))
+            summary = (
+                f"Added: {len(result['added'])}\n"
+                f"Removed: {len(result['removed'])}\n"
+                f"Changed: {len(result['changed'])}"
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else summary)
+        elif args.member_compression:
+            rows = member_compression(args.member_compression.expanduser().resolve())
+            result = {"archive": str(args.member_compression), "members": rows}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(
+                    f"{row['path']}: saved {row['saved_bytes']} bytes ({row['savings_percent']}%)" for row in rows
+                )
             )
         elif args.restore_conflicts:
             root = manager.project_dir.resolve()

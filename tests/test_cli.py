@@ -28,6 +28,53 @@ from codesaver.core import BackupManager
 
 
 class CliFeatureTests(unittest.TestCase):
+    def test_new_archive_commands_are_reachable_from_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            first = Path(tmp) / "first.zip"
+            second = Path(tmp) / "second.zip"
+            with zipfile.ZipFile(first, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("src/app.py", "print('first')\n" * 10)
+            with zipfile.ZipFile(second, "w") as archive:
+                archive.writestr("src/app.py", "print('second')\n")
+                archive.writestr("new.txt", "new")
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "run.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-archive-commands")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            self.assertTrue(run("--archive-verify-crc", str(first))["valid"])
+            self.assertEqual(
+                run("--archive-find-members", str(first), "--member-glob", "**/*.PY")["matches"], ["src/app.py"]
+            )
+            compared = run("--compare-zips", str(first), str(second))
+            self.assertEqual(compared["added"], ["new.txt"])
+            self.assertEqual(compared["changed"], ["src/app.py"])
+            extracted = run(
+                "--archive-extract-member", str(first), "src/app.py", "--extract-to", str(Path(tmp) / "out")
+            )
+            self.assertTrue(Path(extracted["output"]).is_file())
+            compression = run("--member-compression", str(first))
+            self.assertEqual(compression["members"][0]["path"], "src/app.py")
+
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

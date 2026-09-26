@@ -41,6 +41,7 @@ from PyQt5.QtCore import QUrl
 
 from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
+from codesaver.archive_tools import compare_zips, extract_member, find_members, member_compression, verify_zip
 
 from .backup_manager import DesktopBackupManager
 from . import __version__
@@ -464,6 +465,15 @@ _DESKTOP_1_2_1_TEXT = {
     "copy_restore_command": "Copy restore command",
     "restore_command_copied": "Restore command copied",
     "search_archive_files": "Search files in selected archive",
+    "archive_crc_check": "Verify selected archive CRC",
+    "archive_glob_search": "Filter archive members by glob",
+    "archive_extract_one": "Extract one archive file safely",
+    "archive_compare_export": "Export detailed archive comparison JSON",
+    "member_compression_report": "Show compression savings per file",
+    "archive_glob_prompt": "Case-insensitive glob (for example: **/*.py):",
+    "archive_member_prompt": "Choose one file to extract:",
+    "archive_extract_destination": "Choose extraction folder",
+    "archive_compare_export_done": "Comparison report exported: {path}",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -604,6 +614,15 @@ TEXT["ru"].update(
         "copy_restore_command": "Копировать команду восстановления",
         "restore_command_copied": "Команда восстановления скопирована",
         "search_archive_files": "Искать файлы в выбранном архиве",
+        "archive_crc_check": "Проверить CRC выбранного архива",
+        "archive_glob_search": "Фильтр файлов архива по glob-маске",
+        "archive_extract_one": "Безопасно извлечь один файл из архива",
+        "archive_compare_export": "Экспортировать сравнение архивов в JSON",
+        "member_compression_report": "Показать сжатие каждого файла",
+        "archive_glob_prompt": "Glob-маска без учёта регистра (например: **/*.py):",
+        "archive_member_prompt": "Выберите один файл для извлечения:",
+        "archive_extract_destination": "Выберите папку для извлечения",
+        "archive_compare_export_done": "Сравнение экспортировано: {path}",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -991,6 +1010,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("free_space"), self._show_backup_free_space)
         tools_menu.addAction(self._text("copy_restore_command"), self._copy_restore_command)
         tools_menu.addAction(self._text("search_archive_files"), self._search_selected_archive_files)
+        tools_menu.addAction(self._text("archive_crc_check"), self._verify_selected_archive_crc)
+        tools_menu.addAction(self._text("archive_glob_search"), self._glob_search_selected_archive)
+        tools_menu.addAction(self._text("archive_extract_one"), self._extract_one_archive_member)
+        tools_menu.addAction(self._text("archive_compare_export"), self._export_archive_comparison_json)
+        tools_menu.addAction(self._text("member_compression_report"), self._show_member_compression_report)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -1906,6 +1930,89 @@ class MainWindow(QMainWindow):
             members = [item for item in self.manager.core.list_backup(archive) if query.casefold() in item.casefold()]
             QMessageBox.information(self, self._text("search_archive_files"), "\n".join(members) or "None")
         except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _verify_selected_archive_crc(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            result = verify_zip(archive)
+            message = "ZIP CRC check passed" if result["valid"] else f"CRC failure: {result['bad_member']}"
+            QMessageBox.information(self, self._text("archive_crc_check"), message)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _glob_search_selected_archive(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        pattern, accepted = QInputDialog.getText(
+            self, self._text("archive_glob_search"), self._text("archive_glob_prompt")
+        )
+        if not accepted or not pattern:
+            return
+        try:
+            matches = find_members(archive, pattern)
+            QMessageBox.information(self, self._text("archive_glob_search"), "\n".join(matches) or "No matches")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _extract_one_archive_member(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            with zipfile.ZipFile(archive) as opened:
+                members = [item.filename for item in opened.infolist() if not item.is_dir()]
+            member, accepted = QInputDialog.getItem(
+                self, self._text("archive_extract_one"), self._text("archive_member_prompt"), members, 0, False
+            )
+            if not accepted or not member:
+                return
+            destination = QFileDialog.getExistingDirectory(self, self._text("archive_extract_destination"))
+            if not destination:
+                return
+            output = extract_member(archive, member, Path(destination))
+            QMessageBox.information(self, self._text("archive_extract_one"), str(output))
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _export_archive_comparison_json(self) -> None:
+        first = self._selected_archive()
+        if not first:
+            return
+        second, _ = QFileDialog.getOpenFileName(
+            self, self._text("compare_archives_prompt"), str(first.parent), "ZIP archives (*.zip)"
+        )
+        if not second:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self, self._text("archive_compare_export"), "archive-comparison.json", "JSON files (*.json)"
+        )
+        if not destination:
+            return
+        try:
+            report = compare_zips(first, Path(second))
+            Path(destination).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            self.statusBar().showMessage(self._text("archive_compare_export_done", path=destination))
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_member_compression_report(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = member_compression(archive)
+            rows.sort(key=lambda row: int(row["saved_bytes"]), reverse=True)
+            body = "\n".join(
+                f"{row['path']}: saved {row['saved_bytes']} bytes ({row['savings_percent']}%)" for row in rows[:100]
+            )
+            if len(rows) > 100:
+                body += f"\n… and {len(rows) - 100} more"
+            QMessageBox.information(self, self._text("member_compression_report"), body or "No files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 
     def _compare_two_archives(self) -> None:
