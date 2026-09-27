@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from shutil import disk_usage
 import time
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QKeySequence
@@ -41,7 +41,18 @@ from PyQt5.QtCore import QUrl
 
 from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
-from codesaver.archive_tools import compare_zips, extract_member, find_members, member_compression, verify_zip
+from codesaver.archive_tools import (
+    compare_zips,
+    duplicate_contents,
+    extract_member,
+    find_members,
+    member_compression,
+    member_permissions,
+    members_in_date_range,
+    members_larger_than,
+    symlink_members,
+    verify_zip,
+)
 
 from .backup_manager import DesktopBackupManager
 from . import __version__
@@ -474,6 +485,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_member_prompt": "Choose one file to extract:",
     "archive_extract_destination": "Choose extraction folder",
     "archive_compare_export_done": "Comparison report exported: {path}",
+    "archive_duplicates_content": "Find identical file contents",
+    "archive_symlinks": "Inspect archive symbolic links",
+    "archive_permissions": "Show saved Unix permissions",
+    "archive_date_range": "Filter archive files by date",
+    "archive_larger_than": "Find files above size threshold",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -623,6 +639,11 @@ TEXT["ru"].update(
         "archive_member_prompt": "Выберите один файл для извлечения:",
         "archive_extract_destination": "Выберите папку для извлечения",
         "archive_compare_export_done": "Сравнение экспортировано: {path}",
+        "archive_duplicates_content": "Найти одинаковое содержимое файлов",
+        "archive_symlinks": "Проверить символические ссылки архива",
+        "archive_permissions": "Показать сохранённые Unix-разрешения",
+        "archive_date_range": "Фильтр файлов архива по датам",
+        "archive_larger_than": "Найти файлы больше заданного размера",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1015,6 +1036,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_extract_one"), self._extract_one_archive_member)
         tools_menu.addAction(self._text("archive_compare_export"), self._export_archive_comparison_json)
         tools_menu.addAction(self._text("member_compression_report"), self._show_member_compression_report)
+        tools_menu.addAction(self._text("archive_duplicates_content"), self._show_archive_duplicate_contents)
+        tools_menu.addAction(self._text("archive_symlinks"), self._show_archive_symlinks)
+        tools_menu.addAction(self._text("archive_permissions"), self._show_archive_permissions)
+        tools_menu.addAction(self._text("archive_date_range"), self._filter_archive_by_date)
+        tools_menu.addAction(self._text("archive_larger_than"), self._filter_archive_by_size)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2012,6 +2038,76 @@ class MainWindow(QMainWindow):
             if len(rows) > 100:
                 body += f"\n… and {len(rows) - 100} more"
             QMessageBox.information(self, self._text("member_compression_report"), body or "No files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_duplicate_contents(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            groups = duplicate_contents(archive)
+            body = "\n\n".join(" = ".join(group) for group in groups)
+            QMessageBox.information(self, self._text("archive_duplicates_content"), body or "No duplicate contents")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_symlinks(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            links = symlink_members(archive)
+            body = "\n".join(f"{item['path']} -> {item['target']}" for item in links)
+            QMessageBox.information(self, self._text("archive_symlinks"), body or "No symlinks")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_permissions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            entries = member_permissions(archive)
+            body = "\n".join(
+                f"{item['mode_octal'] or 'unknown'} {item['kind']} {item['path']}" for item in entries[:300]
+            )
+            if len(entries) > 300:
+                body += f"\n… and {len(entries) - 300} more"
+            QMessageBox.information(self, self._text("archive_permissions"), body or "No entries")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _filter_archive_by_date(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        start_text, accepted = QInputDialog.getText(self, self._text("archive_date_range"), "Start date (YYYY-MM-DD):")
+        if not accepted:
+            return
+        end_text, accepted = QInputDialog.getText(self, self._text("archive_date_range"), "End date (YYYY-MM-DD):")
+        if not accepted:
+            return
+        try:
+            entries = members_in_date_range(archive, date.fromisoformat(start_text), date.fromisoformat(end_text))
+            body = "\n".join(f"{item['timestamp']} {item['path']}" for item in entries)
+            QMessageBox.information(self, self._text("archive_date_range"), body or "No files in date range")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _filter_archive_by_size(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        threshold, accepted = QInputDialog.getInt(
+            self, self._text("archive_larger_than"), "Minimum uncompressed size in bytes:", 1048576, 0, 2147483647
+        )
+        if not accepted:
+            return
+        try:
+            entries = members_larger_than(archive, threshold)
+            body = "\n".join(f"{item['bytes']} {item['path']}" for item in entries)
+            QMessageBox.information(self, self._text("archive_larger_than"), body or "No files above size threshold")
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

@@ -1,11 +1,12 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.6.0.
+Desktop application source for CodeSaver Desktop 1.6.1.
 
 The current desktop tools include:
 
 - selected-archive CRC checks, glob-based member filtering, and safe extraction of a single file;
 - detailed comparison JSON export and per-member compression savings reports;
+- duplicate-content, symlink, permission, timestamp-range, and large-member audits for selected ZIPs;
 
 - comparing two ZIP archives and summarizing added, removed, and changed files;
 - exporting SHA-256 hashes for archive members as CSV;

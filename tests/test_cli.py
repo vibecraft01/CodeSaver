@@ -75,6 +75,55 @@ class CliFeatureTests(unittest.TestCase):
             compression = run("--member-compression", str(first))
             self.assertEqual(compression["members"][0]["path"], "src/app.py")
 
+    def test_archive_metadata_cli_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            archive_path = Path(tmp) / "audit.zip"
+            link = zipfile.ZipInfo("shortcut")
+            link.create_system = 3
+            link.external_attr = (0o120777) << 16
+            link.date_time = (2026, 9, 27, 10, 0, 0)
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                old_one = zipfile.ZipInfo("one.txt", (2020, 1, 1, 0, 0, 0))
+                old_two = zipfile.ZipInfo("two.txt", (2020, 1, 1, 0, 0, 0))
+                old_large = zipfile.ZipInfo("large.bin", (2020, 1, 1, 0, 0, 0))
+                archive.writestr(old_one, "same")
+                archive.writestr(old_two, "same")
+                archive.writestr(old_large, "x" * 50)
+                archive.writestr(link, "target.txt")
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "meta.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-archive-metadata")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            self.assertEqual(
+                run("--archive-duplicates", str(archive_path))["duplicate_groups"], [["one.txt", "two.txt"]]
+            )
+            self.assertEqual(run("--archive-symlinks", str(archive_path))["symlinks"][0]["path"], "shortcut")
+            self.assertEqual(run("--archive-permissions", str(archive_path))["members"][-1]["mode_octal"], "0777")
+            dated = run("--archive-date-range", str(archive_path), "2026-09-27", "2026-09-27")
+            self.assertEqual(dated["members"][0]["path"], "shortcut")
+            oversized = run("--archive-larger-than", str(archive_path), "10")
+            self.assertEqual(oversized["members"], [{"path": "large.bin", "bytes": 50}])
+
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import stat
 import zipfile
+from collections import defaultdict
+from datetime import date, datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
@@ -94,3 +97,63 @@ def member_compression(path: Path) -> list[dict[str, object]]:
                 }
             )
         return rows
+
+
+def duplicate_contents(path: Path) -> list[list[str]]:
+    """Return groups of archive paths whose uncompressed contents are identical."""
+    by_digest: dict[str, list[str]] = defaultdict(list)
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if not info.is_dir():
+                by_digest[hashlib.sha256(archive.read(info)).hexdigest()].append(info.filename)
+    return sorted(sorted(names) for names in by_digest.values() if len(names) > 1)
+
+
+def symlink_members(path: Path) -> list[dict[str, str]]:
+    """List symbolic-link entries recorded in ZIP Unix attributes."""
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "target": archive.read(info).decode("utf-8", errors="replace")}
+            for info in archive.infolist()
+            if stat.S_ISLNK(info.external_attr >> 16)
+        ]
+
+
+def member_permissions(path: Path) -> list[dict[str, object]]:
+    """Report the Unix mode bits stored for every archive entry."""
+    with zipfile.ZipFile(path) as archive:
+        results = []
+        for info in archive.infolist():
+            mode = info.external_attr >> 16
+            results.append(
+                {
+                    "path": info.filename,
+                    "mode_octal": format(stat.S_IMODE(mode), "04o") if mode else None,
+                    "kind": "symlink" if stat.S_ISLNK(mode) else "directory" if info.is_dir() else "file",
+                }
+            )
+        return results
+
+
+def members_in_date_range(path: Path, start: date, end: date) -> list[dict[str, object]]:
+    """List files with ZIP timestamps falling on inclusive calendar dates."""
+    if end < start:
+        raise ValueError("End date must not precede start date")
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "timestamp": datetime(*info.date_time).isoformat(sep=" ")}
+            for info in archive.infolist()
+            if not info.is_dir() and start <= date(*info.date_time[:3]) <= end
+        ]
+
+
+def members_larger_than(path: Path, minimum_bytes: int) -> list[dict[str, object]]:
+    """List files whose uncompressed size is strictly above a byte threshold."""
+    if minimum_bytes < 0:
+        raise ValueError("Minimum size must be non-negative")
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "bytes": info.file_size}
+            for info in archive.infolist()
+            if not info.is_dir() and info.file_size > minimum_bytes
+        ]

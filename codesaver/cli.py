@@ -18,14 +18,25 @@ import threading
 import time
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Optional
 
 from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
-from .archive_tools import compare_zips, extract_member, find_members, member_compression, verify_zip
+from .archive_tools import (
+    compare_zips,
+    duplicate_contents,
+    extract_member,
+    find_members,
+    member_compression,
+    member_permissions,
+    members_in_date_range,
+    members_larger_than,
+    symlink_members,
+    verify_zip,
+)
 from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
 from .logging_utils import configure_logging
@@ -411,6 +422,25 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--member-compression", type=Path, metavar="ARCHIVE", help="Report compression savings per member"
+    )
+    parser.add_argument(
+        "--archive-duplicates", type=Path, metavar="ARCHIVE", help="Find identical file contents in a ZIP"
+    )
+    parser.add_argument(
+        "--archive-symlinks", type=Path, metavar="ARCHIVE", help="List symbolic links recorded in a ZIP"
+    )
+    parser.add_argument("--archive-permissions", type=Path, metavar="ARCHIVE", help="Show stored Unix permissions")
+    parser.add_argument(
+        "--archive-date-range",
+        nargs=3,
+        metavar=("ARCHIVE", "START", "END"),
+        help="List members dated between inclusive YYYY-MM-DD values",
+    )
+    parser.add_argument(
+        "--archive-larger-than",
+        nargs=2,
+        metavar=("ARCHIVE", "BYTES"),
+        help="List members larger than an uncompressed byte threshold",
     )
     parser.add_argument(
         "--restore-files",
@@ -3323,6 +3353,54 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps(dict(counts))
                 if args.json
                 else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
+            )
+        elif args.archive_duplicates:
+            groups = duplicate_contents(args.archive_duplicates.expanduser().resolve())
+            result = {"archive": str(args.archive_duplicates), "duplicate_groups": groups, "count": len(groups)}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(" = ".join(group) for group in groups) or "No duplicate contents"
+            )
+        elif args.archive_symlinks:
+            links = symlink_members(args.archive_symlinks.expanduser().resolve())
+            result = {"archive": str(args.archive_symlinks), "symlinks": links, "count": len(links)}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['path']} -> {item['target']}" for item in links) or "No symlinks"
+            )
+        elif args.archive_permissions:
+            permissions = member_permissions(args.archive_permissions.expanduser().resolve())
+            result = {"archive": str(args.archive_permissions), "members": permissions}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(
+                    f"{item['mode_octal'] or 'unknown'} {item['kind']} {item['path']}" for item in permissions
+                )
+            )
+        elif args.archive_date_range:
+            archive_name, start_value, end_value = args.archive_date_range
+            members = members_in_date_range(
+                Path(archive_name).expanduser().resolve(),
+                date.fromisoformat(start_value),
+                date.fromisoformat(end_value),
+            )
+            result = {"archive": archive_name, "start": start_value, "end": end_value, "members": members}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['timestamp']} {item['path']}" for item in members) or "No files in date range"
+            )
+        elif args.archive_larger_than:
+            archive_name, threshold_value = args.archive_larger_than
+            members = members_larger_than(Path(archive_name).expanduser().resolve(), int(threshold_value))
+            result = {"archive": archive_name, "minimum_bytes": int(threshold_value), "members": members}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['bytes']} {item['path']}" for item in members) or "No files above size threshold"
             )
         elif args.archive_verify_crc:
             result = verify_zip(args.archive_verify_crc.expanduser().resolve())
