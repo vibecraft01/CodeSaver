@@ -3,13 +3,19 @@ import stat
 import unittest
 import zipfile
 from datetime import date
+import warnings
 from pathlib import Path
 
 from codesaver.archive_tools import (
     compare_zips,
+    case_colliding_paths,
+    compression_methods,
     duplicate_contents,
+    duplicate_member_paths,
+    encrypted_members,
     extract_member,
     find_members,
+    high_ratio_members,
     member_compression,
     member_permissions,
     members_in_date_range,
@@ -17,6 +23,24 @@ from codesaver.archive_tools import (
     symlink_members,
     verify_zip,
 )
+
+
+def _mark_member_encrypted(path: Path, member_name: str) -> None:
+    data = bytearray(path.read_bytes())
+    target = member_name.encode("utf-8")
+    for signature, name_length_offset, name_start_offset, flag_offset in (
+        (b"PK\x03\x04", 26, 30, 6),
+        (b"PK\x01\x02", 28, 46, 8),
+    ):
+        cursor = data.find(signature)
+        while cursor >= 0:
+            name_length = int.from_bytes(data[cursor + name_length_offset : cursor + name_length_offset + 2], "little")
+            name_start = cursor + name_start_offset
+            if data[name_start : name_start + name_length] == target:
+                flags = int.from_bytes(data[cursor + flag_offset : cursor + flag_offset + 2], "little")
+                data[cursor + flag_offset : cursor + flag_offset + 2] = (flags | 1).to_bytes(2, "little")
+            cursor = data.find(signature, cursor + len(signature))
+    path.write_bytes(data)
 
 
 class ArchiveToolsTests(unittest.TestCase):
@@ -78,6 +102,32 @@ class ArchiveToolsTests(unittest.TestCase):
             dated = members_in_date_range(archive_path, date(2026, 9, 27), date(2026, 9, 27))
             self.assertEqual({item["path"] for item in dated}, {"shortcut"})
             self.assertEqual(members_larger_than(archive_path, 20), [{"path": "large.bin", "bytes": 50}])
+
+    def test_archive_security_and_portability_audits(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "security.zip"
+            encrypted = zipfile.ZipInfo("secret.bin")
+            encrypted.flag_bits |= 0x1
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("same.txt", "repeat")
+                    archive.writestr("same.txt", "repeat")
+                    archive.writestr("Readme.md", "upper")
+                    archive.writestr("README.md", "lower")
+                    archive.writestr(encrypted, "encrypted")
+                    archive.writestr("compressible.txt", "A" * 10000)
+            _mark_member_encrypted(archive_path, "secret.bin")
+
+            duplicates = duplicate_member_paths(archive_path)
+            self.assertEqual(duplicates, [{"path": "same.txt", "entries": [0, 1]}])
+            self.assertEqual(case_colliding_paths(archive_path), [["README.md", "Readme.md"]])
+            self.assertEqual(encrypted_members(archive_path), ["secret.bin"])
+            methods = compression_methods(archive_path)
+            self.assertEqual({item["method"] for item in methods}, {"stored", "deflate"})
+            self.assertEqual(sum(int(item["files"]) for item in methods), 6)
+            ratios = high_ratio_members(archive_path, 100)
+            self.assertEqual([item["path"] for item in ratios], ["compressible.txt"])
 
 
 if __name__ == "__main__":

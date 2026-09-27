@@ -27,9 +27,14 @@ from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
 from .archive_tools import (
     compare_zips,
+    case_colliding_paths,
+    compression_methods,
     duplicate_contents,
+    duplicate_member_paths,
+    encrypted_members,
     extract_member,
     find_members,
+    high_ratio_members,
     member_compression,
     member_permissions,
     members_in_date_range,
@@ -441,6 +446,18 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         nargs=2,
         metavar=("ARCHIVE", "BYTES"),
         help="List members larger than an uncompressed byte threshold",
+    )
+    parser.add_argument("--archive-duplicate-paths", type=Path, metavar="ARCHIVE", help="Find repeated names in a ZIP")
+    parser.add_argument(
+        "--archive-case-collisions", type=Path, metavar="ARCHIVE", help="Find member paths that collide by case"
+    )
+    parser.add_argument("--archive-encrypted", type=Path, metavar="ARCHIVE", help="List encrypted ZIP members")
+    parser.add_argument("--archive-methods", type=Path, metavar="ARCHIVE", help="Summarize ZIP compression methods")
+    parser.add_argument(
+        "--archive-high-ratio",
+        nargs=2,
+        metavar=("ARCHIVE", "RATIO"),
+        help="List members whose expansion ratio meets the given threshold",
     )
     parser.add_argument(
         "--restore-files",
@@ -3353,6 +3370,49 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps(dict(counts))
                 if args.json
                 else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
+            )
+        elif args.archive_duplicate_paths:
+            matches = duplicate_member_paths(args.archive_duplicate_paths.expanduser().resolve())
+            result = {"archive": str(args.archive_duplicate_paths), "duplicate_paths": matches, "count": len(matches)}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['path']} (entries {', '.join(map(str, item['entries']))})" for item in matches)
+                or "No repeated member paths"
+            )
+        elif args.archive_case_collisions:
+            groups = case_colliding_paths(args.archive_case_collisions.expanduser().resolve())
+            result = {"archive": str(args.archive_case_collisions), "collisions": groups, "count": len(groups)}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(" <> ".join(group) for group in groups) or "No case-colliding paths"
+            )
+        elif args.archive_encrypted:
+            names = encrypted_members(args.archive_encrypted.expanduser().resolve())
+            result = {"archive": str(args.archive_encrypted), "encrypted_members": names, "count": len(names)}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(names) or "No encrypted members"
+            )
+        elif args.archive_methods:
+            methods = compression_methods(args.archive_methods.expanduser().resolve())
+            result = {"archive": str(args.archive_methods), "methods": methods}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['method']} (ID {item['method_id']}): {item['files']} files" for item in methods)
+            )
+        elif args.archive_high_ratio:
+            archive_name, ratio_value = args.archive_high_ratio
+            matches = high_ratio_members(Path(archive_name).expanduser().resolve(), float(ratio_value))
+            result = {"archive": archive_name, "minimum_ratio": float(ratio_value), "members": matches}
+            print(
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if args.json
+                else "\n".join(f"{item['ratio']}:1 {item['path']}" for item in matches)
+                or "No members meet the ratio threshold"
             )
         elif args.archive_duplicates:
             groups = duplicate_contents(args.archive_duplicates.expanduser().resolve())

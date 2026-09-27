@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -25,6 +26,24 @@ from codesaver.cli import (
     main,
 )
 from codesaver.core import BackupManager
+
+
+def _mark_member_encrypted(path: Path, member_name: str) -> None:
+    data = bytearray(path.read_bytes())
+    target = member_name.encode("utf-8")
+    for signature, name_length_offset, name_start_offset, flag_offset in (
+        (b"PK\x03\x04", 26, 30, 6),
+        (b"PK\x01\x02", 28, 46, 8),
+    ):
+        cursor = data.find(signature)
+        while cursor >= 0:
+            name_length = int.from_bytes(data[cursor + name_length_offset : cursor + name_length_offset + 2], "little")
+            name_start = cursor + name_start_offset
+            if data[name_start : name_start + name_length] == target:
+                flags = int.from_bytes(data[cursor + flag_offset : cursor + flag_offset + 2], "little")
+                data[cursor + flag_offset : cursor + flag_offset + 2] = (flags | 1).to_bytes(2, "little")
+            cursor = data.find(signature, cursor + len(signature))
+    path.write_bytes(data)
 
 
 class CliFeatureTests(unittest.TestCase):
@@ -123,6 +142,55 @@ class CliFeatureTests(unittest.TestCase):
             self.assertEqual(dated["members"][0]["path"], "shortcut")
             oversized = run("--archive-larger-than", str(archive_path), "10")
             self.assertEqual(oversized["members"], [{"path": "large.bin", "bytes": 50}])
+
+    def test_archive_security_cli_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            archive_path = Path(tmp) / "security.zip"
+            encrypted = zipfile.ZipInfo("secret.bin")
+            encrypted.flag_bits |= 0x1
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("same.txt", "repeat")
+                    archive.writestr("same.txt", "repeat")
+                    archive.writestr("Readme.md", "upper")
+                    archive.writestr("README.md", "lower")
+                    archive.writestr(encrypted, "encrypted")
+                    archive.writestr("compressible.txt", "A" * 10000)
+            _mark_member_encrypted(archive_path, "secret.bin")
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "security.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-archive-security")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            self.assertEqual(run("--archive-duplicate-paths", str(archive_path))["count"], 1)
+            self.assertEqual(
+                run("--archive-case-collisions", str(archive_path))["collisions"], [["README.md", "Readme.md"]]
+            )
+            self.assertEqual(run("--archive-encrypted", str(archive_path))["encrypted_members"], ["secret.bin"])
+            methods = run("--archive-methods", str(archive_path))["methods"]
+            self.assertEqual({item["method"] for item in methods}, {"stored", "deflate"})
+            high_ratio = run("--archive-high-ratio", str(archive_path), "100")
+            self.assertEqual(high_ratio["members"][0]["path"], "compressible.txt")
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

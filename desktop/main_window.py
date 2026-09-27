@@ -42,10 +42,15 @@ from PyQt5.QtCore import QUrl
 from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
+    case_colliding_paths,
     compare_zips,
+    compression_methods,
     duplicate_contents,
+    duplicate_member_paths,
+    encrypted_members,
     extract_member,
     find_members,
+    high_ratio_members,
     member_compression,
     member_permissions,
     members_in_date_range,
@@ -490,6 +495,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_permissions": "Show saved Unix permissions",
     "archive_date_range": "Filter archive files by date",
     "archive_larger_than": "Find files above size threshold",
+    "archive_duplicate_paths": "Find repeated paths in archive",
+    "archive_case_collisions": "Find case-conflicting paths",
+    "archive_encrypted": "List encrypted archive files",
+    "archive_methods": "Summarize archive compression methods",
+    "archive_high_ratio": "Find unusually high expansion ratios",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -644,6 +654,11 @@ TEXT["ru"].update(
         "archive_permissions": "Показать сохранённые Unix-разрешения",
         "archive_date_range": "Фильтр файлов архива по датам",
         "archive_larger_than": "Найти файлы больше заданного размера",
+        "archive_duplicate_paths": "Найти повторяющиеся пути в архиве",
+        "archive_case_collisions": "Найти конфликты имён по регистру",
+        "archive_encrypted": "Показать зашифрованные файлы архива",
+        "archive_methods": "Сводка методов сжатия архива",
+        "archive_high_ratio": "Найти подозрительно высокий коэффициент распаковки",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1041,6 +1056,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_permissions"), self._show_archive_permissions)
         tools_menu.addAction(self._text("archive_date_range"), self._filter_archive_by_date)
         tools_menu.addAction(self._text("archive_larger_than"), self._filter_archive_by_size)
+        tools_menu.addAction(self._text("archive_duplicate_paths"), self._show_archive_duplicate_paths)
+        tools_menu.addAction(self._text("archive_case_collisions"), self._show_archive_case_collisions)
+        tools_menu.addAction(self._text("archive_encrypted"), self._show_archive_encrypted_members)
+        tools_menu.addAction(self._text("archive_methods"), self._show_archive_methods)
+        tools_menu.addAction(self._text("archive_high_ratio"), self._filter_archive_high_ratio)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2108,6 +2128,80 @@ class MainWindow(QMainWindow):
             entries = members_larger_than(archive, threshold)
             body = "\n".join(f"{item['bytes']} {item['path']}" for item in entries)
             QMessageBox.information(self, self._text("archive_larger_than"), body or "No files above size threshold")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_duplicate_paths(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = duplicate_member_paths(archive)
+            body = "\n".join(f"{item['path']} (entries {', '.join(map(str, item['entries']))})" for item in rows)
+            QMessageBox.information(self, self._text("archive_duplicate_paths"), body or "No repeated member paths")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_case_collisions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            groups = case_colliding_paths(archive)
+            QMessageBox.information(
+                self,
+                self._text("archive_case_collisions"),
+                "\n".join(" <> ".join(group) for group in groups) or "No case-colliding paths",
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_encrypted_members(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            names = encrypted_members(archive)
+            QMessageBox.information(self, self._text("archive_encrypted"), "\n".join(names) or "No encrypted members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_methods(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            methods = compression_methods(archive)
+            body = "\n".join(
+                f"{item['method']} (ID {item['method_id']}): {item['files']} files, "
+                f"{format_bytes(int(item['original_bytes']))} → {format_bytes(int(item['stored_bytes']))}"
+                for item in methods
+            )
+            QMessageBox.information(self, self._text("archive_methods"), body or "No files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _filter_archive_high_ratio(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        threshold, accepted = QInputDialog.getDouble(
+            self,
+            self._text("archive_high_ratio"),
+            "Minimum expansion ratio (for example, 100):",
+            100.0,
+            0.01,
+            1000000.0,
+            2,
+        )
+        if not accepted:
+            return
+        try:
+            matches = high_ratio_members(archive, threshold)
+            body = "\n".join(f"{item['ratio']}:1 {item['path']}" for item in matches)
+            QMessageBox.information(
+                self, self._text("archive_high_ratio"), body or "No members meet the ratio threshold"
+            )
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

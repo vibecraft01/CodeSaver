@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.7.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.3) | Python 3.9+ | Updated 2026-09-27 |
-| CodeSaver Desktop | [**1.6.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.1) | Python 3.10+ with PyQt5 | Updated 2026-09-27 |
+| CodeSaver CLI | [**1.7.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.4) | Python 3.9+ | Updated 2026-09-27 |
+| CodeSaver Desktop | [**1.6.2**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.2) | Python 3.10+ with PyQt5 | Updated 2026-09-27 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -25,9 +25,11 @@ GitHub repository snapshot for **20 September 2026**:
 | Unique cloners | 140 |
 | Repository views | 267 |
 | Unique visitors | 14 |
-| GitHub stars | 8 |
+| GitHub stars | 10 |
 | Public releases | 112 |
 | Commits | 194 |
+
+The star count was refreshed on 27 September 2026; the other figures above remain the 20 September snapshot.
 
 ## Features
 
@@ -82,6 +84,11 @@ GitHub repository snapshot for **20 September 2026**:
 - Review saved Unix file modes with `--archive-permissions ARCHIVE`.
 - Filter archived files by inclusive ZIP timestamp dates using `--archive-date-range ARCHIVE START END`.
 - Find members whose uncompressed size exceeds a byte limit with `--archive-larger-than ARCHIVE BYTES`.
+- Detect repeated member names inside a ZIP with `--archive-duplicate-paths ARCHIVE`.
+- Find case-insensitive path collisions that can break extraction across operating systems.
+- List ZIP members marked as encrypted with `--archive-encrypted ARCHIVE`.
+- Summarize compression methods and byte totals with `--archive-methods ARCHIVE`.
+- Flag members above a configurable expansion ratio with `--archive-high-ratio ARCHIVE RATIO`.
 - Cloud credentials are read from `CODESAVER_CLOUD_TOKEN` or a custom token variable.
 - Desktop duplicate-file detection using SHA-256.
 - Desktop archive-integrity report export.
@@ -111,7 +118,8 @@ GitHub repository snapshot for **20 September 2026**:
 
 ### Desktop version
 
-CodeSaver Desktop `1.6.1` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.6.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
+- Duplicate-path, case-collision, encryption, compression-method, and high-expansion-ratio audits for selected archives.
 - Duplicate-content scanning, symlink inspection, Unix permission review, timestamp filtering, and large-member search for selected ZIPs.
 - Selected-archive CRC verification, glob-based member filtering, and safe single-file extraction.
 - Detailed JSON comparison export for two ZIP snapshots and per-file compression savings inspection.
@@ -355,13 +363,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.6.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.1):
+The current stable binary is available in the [Desktop v1.6.2 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.2):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.7.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.3) is available.
+The stable [CLI v1.7.4 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.4) is available.
 
 ### Build from source
 

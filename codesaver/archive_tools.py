@@ -157,3 +157,76 @@ def members_larger_than(path: Path, minimum_bytes: int) -> list[dict[str, object
             for info in archive.infolist()
             if not info.is_dir() and info.file_size > minimum_bytes
         ]
+
+
+def duplicate_member_paths(path: Path) -> list[dict[str, object]]:
+    """Report repeated non-directory names stored more than once in a ZIP."""
+    names: dict[str, list[int]] = defaultdict(list)
+    with zipfile.ZipFile(path) as archive:
+        for index, info in enumerate(archive.infolist()):
+            if not info.is_dir():
+                names[info.filename].append(index)
+    return [{"path": name, "entries": indexes} for name, indexes in sorted(names.items()) if len(indexes) > 1]
+
+
+def case_colliding_paths(path: Path) -> list[list[str]]:
+    """Find distinct member paths that collide under case-insensitive filesystems."""
+    names: dict[str, set[str]] = defaultdict(set)
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if not info.is_dir():
+                names[info.filename.casefold()].add(info.filename)
+    return sorted(sorted(group) for group in names.values() if len(group) > 1)
+
+
+def encrypted_members(path: Path) -> list[str]:
+    """List members marked as encrypted by the ZIP general-purpose flag."""
+    with zipfile.ZipFile(path) as archive:
+        return sorted(info.filename for info in archive.infolist() if not info.is_dir() and info.flag_bits & 0x1)
+
+
+def compression_methods(path: Path) -> list[dict[str, object]]:
+    """Summarize archive compression methods and their stored/raw byte totals."""
+    labels = {
+        zipfile.ZIP_STORED: "stored",
+        zipfile.ZIP_DEFLATED: "deflate",
+        zipfile.ZIP_BZIP2: "bzip2",
+        zipfile.ZIP_LZMA: "lzma",
+    }
+    if hasattr(zipfile, "ZIP_ZSTANDARD"):
+        labels[getattr(zipfile, "ZIP_ZSTANDARD")] = "zstandard"
+    methods: dict[int, dict[str, int]] = defaultdict(lambda: {"files": 0, "original_bytes": 0, "stored_bytes": 0})
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            record = methods[info.compress_type]
+            record["files"] += 1
+            record["original_bytes"] += info.file_size
+            record["stored_bytes"] += info.compress_size
+    return [
+        {"method_id": method_id, "method": labels.get(method_id, "unknown"), **values}
+        for method_id, values in sorted(methods.items())
+    ]
+
+
+def high_ratio_members(path: Path, minimum_ratio: float) -> list[dict[str, object]]:
+    """List files whose uncompressed/compressed ratio meets a threshold."""
+    if minimum_ratio <= 0:
+        raise ValueError("Minimum compression ratio must be greater than zero")
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir() or info.compress_size <= 0:
+                continue
+            ratio = info.file_size / info.compress_size
+            if ratio >= minimum_ratio:
+                results.append(
+                    {
+                        "path": info.filename,
+                        "ratio": round(ratio, 2),
+                        "original_bytes": info.file_size,
+                        "stored_bytes": info.compress_size,
+                    }
+                )
+    return sorted(results, key=lambda item: (-float(item["ratio"]), str(item["path"])))
