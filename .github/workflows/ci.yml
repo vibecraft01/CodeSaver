@@ -23,4 +23,4 @@ jobs:
       - name: Check formatting
         run: python -m black --check codesaver tests
       - name: Run linter
-        run: python -m flake8 codesaver tests
+        run: python -c "import sys; sys.setrecursionlimit(10000); from flake8.main.cli import main; raise SystemExit(main())" codesaver tests
