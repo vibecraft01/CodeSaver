@@ -936,6 +936,46 @@ def _self_check(manager: BackupManager) -> dict[str, object]:
     return result
 
 
+def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
+    """Handle the newest archive-structure commands outside the long CLI chain."""
+    if args.archive_portability_audit:
+        issues = portable_path_issues(args.archive_portability_audit.expanduser().resolve())
+        result = {"archive": str(args.archive_portability_audit), "issues": issues, "count": len(issues)}
+        plain = "\n".join(f"{item['path']}: {', '.join(item['issues'])}" for item in issues)
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No non-portable member names"
+        )
+    elif args.archive_unicode_collisions:
+        collisions = unicode_name_collisions(args.archive_unicode_collisions.expanduser().resolve())
+        result = {"archive": str(args.archive_unicode_collisions), "collisions": collisions, "count": len(collisions)}
+        plain = "\n".join(" <> ".join(group) for group in collisions)
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else plain or "No Unicode-normalized collisions"
+        )
+    elif args.archive_depth_report:
+        result = archive_depth_report(args.archive_depth_report.expanduser().resolve())
+        result["archive"] = str(args.archive_depth_report)
+        plain = f"Maximum depth: {result['max_depth']}\n" + "\n".join(
+            f"Depth {depth}: {count}" for depth, count in result["files_by_depth"].items()
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain)
+    elif args.archive_symlink_audit:
+        links = unsafe_symlink_targets(args.archive_symlink_audit.expanduser().resolve())
+        result = {"archive": str(args.archive_symlink_audit), "unsafe_symlinks": links, "count": len(links)}
+        plain = "\n".join(f"{item['path']} -> {item['target']}" for item in links)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No unsafe symlink targets")
+    elif args.archive_prefix_conflicts:
+        conflicts = file_directory_conflicts(args.archive_prefix_conflicts.expanduser().resolve())
+        result = {"archive": str(args.archive_prefix_conflicts), "conflicts": conflicts, "count": len(conflicts)}
+        plain = "\n".join(f"{item['file']} conflicts with {item['child']}" for item in conflicts)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No file/directory conflicts")
+    else:
+        return False
+    return True
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
@@ -976,6 +1016,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         health_failed = False
         if args.version:
             print(__version__)
+        elif _handle_archive_structure_audit(args):
+            pass
         elif args.plan_json:
             files = manager.list_files()
             plan = {
@@ -3390,53 +3432,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 json.dumps(dict(counts))
                 if args.json
                 else "\n".join(f"{key}: {value}" for key, value in sorted(counts.items()))
-            )
-        elif args.archive_portability_audit:
-            issues = portable_path_issues(args.archive_portability_audit.expanduser().resolve())
-            result = {"archive": str(args.archive_portability_audit), "issues": issues, "count": len(issues)}
-            print(
-                json.dumps(result, ensure_ascii=False, indent=2)
-                if args.json
-                else "\n".join(f"{item['path']}: {', '.join(item['issues'])}" for item in issues)
-                or "No non-portable member names"
-            )
-        elif args.archive_unicode_collisions:
-            collisions = unicode_name_collisions(args.archive_unicode_collisions.expanduser().resolve())
-            result = {
-                "archive": str(args.archive_unicode_collisions),
-                "collisions": collisions,
-                "count": len(collisions),
-            }
-            print(
-                json.dumps(result, ensure_ascii=False, indent=2)
-                if args.json
-                else "\n".join(" <> ".join(group) for group in collisions) or "No Unicode-normalized collisions"
-            )
-        elif args.archive_depth_report:
-            result = archive_depth_report(args.archive_depth_report.expanduser().resolve())
-            result["archive"] = str(args.archive_depth_report)
-            print(
-                json.dumps(result, ensure_ascii=False, indent=2)
-                if args.json
-                else f"Maximum depth: {result['max_depth']}\n"
-                + "\n".join(f"Depth {depth}: {count}" for depth, count in result["files_by_depth"].items())
-            )
-        elif args.archive_symlink_audit:
-            links = unsafe_symlink_targets(args.archive_symlink_audit.expanduser().resolve())
-            result = {"archive": str(args.archive_symlink_audit), "unsafe_symlinks": links, "count": len(links)}
-            print(
-                json.dumps(result, ensure_ascii=False, indent=2)
-                if args.json
-                else "\n".join(f"{item['path']} -> {item['target']}" for item in links) or "No unsafe symlink targets"
-            )
-        elif args.archive_prefix_conflicts:
-            conflicts = file_directory_conflicts(args.archive_prefix_conflicts.expanduser().resolve())
-            result = {"archive": str(args.archive_prefix_conflicts), "conflicts": conflicts, "count": len(conflicts)}
-            print(
-                json.dumps(result, ensure_ascii=False, indent=2)
-                if args.json
-                else "\n".join(f"{item['file']} conflicts with {item['child']}" for item in conflicts)
-                or "No file/directory conflicts"
             )
         elif args.archive_duplicate_paths:
             matches = duplicate_member_paths(args.archive_duplicate_paths.expanduser().resolve())
