@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import re
 import stat
+import unicodedata
 import zipfile
 from collections import defaultdict
 from datetime import date, datetime
@@ -230,3 +232,99 @@ def high_ratio_members(path: Path, minimum_ratio: float) -> list[dict[str, objec
                     }
                 )
     return sorted(results, key=lambda item: (-float(item["ratio"]), str(item["path"])))
+
+
+def portable_path_issues(path: Path) -> list[dict[str, object]]:
+    """Find ZIP member names likely to fail or change meaning on Windows."""
+    reserved = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$", re.IGNORECASE)
+    invalid_chars = set('<>:"|?*')
+    issues = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            name = info.filename.rstrip("/")
+            win_path = PureWindowsPath(name)
+            reasons = []
+            if win_path.drive or win_path.is_absolute() or name.startswith(("/", "\\")):
+                reasons.append("absolute-or-drive-path")
+            for part in re.split(r"[/\\]", name):
+                if part in {"", ".", ".."}:
+                    if part == "..":
+                        reasons.append("parent-traversal")
+                    continue
+                if any(character in invalid_chars or ord(character) < 32 for character in part):
+                    reasons.append("windows-invalid-character")
+                if part.endswith((".", " ")):
+                    reasons.append("trailing-dot-or-space")
+                if reserved.fullmatch(part):
+                    reasons.append("reserved-device-name")
+            if reasons:
+                issues.append({"path": info.filename, "issues": sorted(set(reasons))})
+    return issues
+
+
+def unicode_name_collisions(path: Path) -> list[list[str]]:
+    """Find paths identical after Unicode NFC normalization and case folding."""
+    groups: dict[str, set[str]] = defaultdict(set)
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if not info.is_dir():
+                groups[unicodedata.normalize("NFC", info.filename).casefold()].add(info.filename)
+    return sorted(sorted(group) for group in groups.values() if len(group) > 1)
+
+
+def archive_depth_report(path: Path) -> dict[str, object]:
+    """Summarize non-directory members by path depth and identify deepest paths."""
+    counts: dict[int, int] = defaultdict(int)
+    members: list[tuple[int, str]] = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            depth = len([part for part in re.split(r"[/\\]", info.filename) if part])
+            counts[depth] += 1
+            members.append((depth, info.filename))
+    maximum = max(counts, default=0)
+    return {
+        "max_depth": maximum,
+        "files_by_depth": {str(depth): counts[depth] for depth in sorted(counts)},
+        "deepest_members": sorted(name for depth, name in members if depth == maximum),
+    }
+
+
+def unsafe_symlink_targets(path: Path) -> list[dict[str, str]]:
+    """Flag symlinks with absolute, drive-qualified, or parent-traversing targets."""
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if not stat.S_ISLNK(info.external_attr >> 16):
+                continue
+            target = archive.read(info).decode("utf-8", errors="replace")
+            posix_target = PurePosixPath(target)
+            windows_target = PureWindowsPath(target)
+            if (
+                posix_target.is_absolute()
+                or windows_target.is_absolute()
+                or windows_target.drive
+                or ".." in posix_target.parts
+                or ".." in windows_target.parts
+            ):
+                results.append({"path": info.filename, "target": target})
+    return results
+
+
+def file_directory_conflicts(path: Path) -> list[dict[str, str]]:
+    """Find files whose names are also required as parent directories."""
+    files: set[str] = set()
+    parents: dict[str, str] = {}
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            normalized = "/".join(part for part in re.split(r"[/\\]", info.filename) if part)
+            if not normalized:
+                continue
+            if not info.is_dir():
+                files.add(normalized)
+            parts = normalized.split("/")
+            for index in range(1, len(parts)):
+                parent = "/".join(parts[:index])
+                parents[parent] = normalized
+    return [{"file": name, "child": parents[name]} for name in sorted(files & parents.keys())]

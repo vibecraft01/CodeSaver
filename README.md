@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.7.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.4) | Python 3.9+ | Updated 2026-09-27 |
-| CodeSaver Desktop | [**1.6.2**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.2) | Python 3.10+ with PyQt5 | Updated 2026-09-27 |
+| CodeSaver CLI | [**1.7.5**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.5) | Python 3.9+ | Updated 2026-09-28 |
+| CodeSaver Desktop | [**1.6.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.3) | Python 3.10+ with PyQt5 | Updated 2026-09-28 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -29,7 +29,7 @@ GitHub repository snapshot for **20 September 2026**:
 | Public releases | 112 |
 | Commits | 194 |
 
-The star count was refreshed on 27 September 2026; the other figures above remain the 20 September snapshot.
+The star count was refreshed on 28 September 2026; the other figures above remain the 20 September snapshot.
 
 ## Features
 
@@ -89,6 +89,11 @@ The star count was refreshed on 27 September 2026; the other figures above remai
 - List ZIP members marked as encrypted with `--archive-encrypted ARCHIVE`.
 - Summarize compression methods and byte totals with `--archive-methods ARCHIVE`.
 - Flag members above a configurable expansion ratio with `--archive-high-ratio ARCHIVE RATIO`.
+- Audit Windows portability issues such as reserved names, invalid characters, and trailing dots/spaces.
+- Detect filename collisions after Unicode NFC normalization and case folding.
+- Summarize file counts by path depth and list the deepest archive paths.
+- Audit archived symlink targets for absolute paths and parent traversal.
+- Find conflicts where an archive path is both a file and a required parent folder.
 - Cloud credentials are read from `CODESAVER_CLOUD_TOKEN` or a custom token variable.
 - Desktop duplicate-file detection using SHA-256.
 - Desktop archive-integrity report export.
@@ -118,7 +123,8 @@ The star count was refreshed on 27 September 2026; the other figures above remai
 
 ### Desktop version
 
-CodeSaver Desktop `1.6.2` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.6.3` is a graphical alternative for developers who prefer a visual workflow. It includes:
+- Windows filename portability, Unicode collision, path-depth, symlink-target, and file/folder conflict audits.
 - Duplicate-path, case-collision, encryption, compression-method, and high-expansion-ratio audits for selected archives.
 - Duplicate-content scanning, symlink inspection, Unix permission review, timestamp filtering, and large-member search for selected ZIPs.
 - Selected-archive CRC verification, glob-based member filtering, and safe single-file extraction.
@@ -363,13 +369,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.6.2 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.2):
+The current stable binary is available in the [Desktop v1.6.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.3):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.7.4 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.4) is available.
+The stable [CLI v1.7.5 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.7.5) is available.
 
 ### Build from source
 

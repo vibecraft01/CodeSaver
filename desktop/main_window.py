@@ -49,13 +49,18 @@ from codesaver.archive_tools import (
     duplicate_member_paths,
     encrypted_members,
     extract_member,
+    file_directory_conflicts,
     find_members,
     high_ratio_members,
+    archive_depth_report,
     member_compression,
     member_permissions,
     members_in_date_range,
     members_larger_than,
+    portable_path_issues,
     symlink_members,
+    unicode_name_collisions,
+    unsafe_symlink_targets,
     verify_zip,
 )
 
@@ -500,6 +505,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_encrypted": "List encrypted archive files",
     "archive_methods": "Summarize archive compression methods",
     "archive_high_ratio": "Find unusually high expansion ratios",
+    "archive_portability_audit": "Audit names for Windows compatibility",
+    "archive_unicode_collisions": "Find Unicode-normalized path collisions",
+    "archive_depth_report": "Show archive path-depth summary",
+    "archive_symlink_audit": "Audit symlink targets for traversal",
+    "archive_prefix_conflicts": "Find file/folder name conflicts",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -659,6 +669,11 @@ TEXT["ru"].update(
         "archive_encrypted": "Показать зашифрованные файлы архива",
         "archive_methods": "Сводка методов сжатия архива",
         "archive_high_ratio": "Найти подозрительно высокий коэффициент распаковки",
+        "archive_portability_audit": "Проверить совместимость имён с Windows",
+        "archive_unicode_collisions": "Найти коллизии Unicode-нормализации имён",
+        "archive_depth_report": "Сводка глубины путей архива",
+        "archive_symlink_audit": "Проверить цели симлинков на выход за папку",
+        "archive_prefix_conflicts": "Найти конфликты имён файла и папки",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1061,6 +1076,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_encrypted"), self._show_archive_encrypted_members)
         tools_menu.addAction(self._text("archive_methods"), self._show_archive_methods)
         tools_menu.addAction(self._text("archive_high_ratio"), self._filter_archive_high_ratio)
+        tools_menu.addAction(self._text("archive_portability_audit"), self._show_archive_portability_issues)
+        tools_menu.addAction(self._text("archive_unicode_collisions"), self._show_archive_unicode_collisions)
+        tools_menu.addAction(self._text("archive_depth_report"), self._show_archive_depth_report)
+        tools_menu.addAction(self._text("archive_symlink_audit"), self._show_archive_symlink_audit)
+        tools_menu.addAction(self._text("archive_prefix_conflicts"), self._show_archive_prefix_conflicts)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2202,6 +2222,70 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, self._text("archive_high_ratio"), body or "No members meet the ratio threshold"
             )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_portability_issues(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            issues = portable_path_issues(archive)
+            body = "\n".join(f"{item['path']}: {', '.join(item['issues'])}" for item in issues)
+            QMessageBox.information(
+                self, self._text("archive_portability_audit"), body or "No non-portable member names"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_unicode_collisions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            groups = unicode_name_collisions(archive)
+            QMessageBox.information(
+                self,
+                self._text("archive_unicode_collisions"),
+                "\n".join(" <> ".join(group) for group in groups) or "No Unicode-normalized collisions",
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_depth_report(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = archive_depth_report(archive)
+            body = f"Maximum depth: {report['max_depth']}\n" + "\n".join(
+                f"Depth {depth}: {count}" for depth, count in report["files_by_depth"].items()
+            )
+            if report["deepest_members"]:
+                body += "\n\nDeepest:\n" + "\n".join(report["deepest_members"][:100])
+            QMessageBox.information(self, self._text("archive_depth_report"), body)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_symlink_audit(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            links = unsafe_symlink_targets(archive)
+            body = "\n".join(f"{item['path']} -> {item['target']}" for item in links)
+            QMessageBox.information(self, self._text("archive_symlink_audit"), body or "No unsafe symlink targets")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_prefix_conflicts(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            conflicts = file_directory_conflicts(archive)
+            body = "\n".join(f"{item['file']} conflicts with {item['child']}" for item in conflicts)
+            QMessageBox.information(self, self._text("archive_prefix_conflicts"), body or "No file/directory conflicts")
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

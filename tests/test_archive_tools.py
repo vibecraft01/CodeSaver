@@ -16,11 +16,16 @@ from codesaver.archive_tools import (
     extract_member,
     find_members,
     high_ratio_members,
+    archive_depth_report,
+    file_directory_conflicts,
     member_compression,
     member_permissions,
     members_in_date_range,
     members_larger_than,
+    portable_path_issues,
     symlink_members,
+    unicode_name_collisions,
+    unsafe_symlink_targets,
     verify_zip,
 )
 
@@ -128,6 +133,35 @@ class ArchiveToolsTests(unittest.TestCase):
             self.assertEqual(sum(int(item["files"]) for item in methods), 6)
             ratios = high_ratio_members(archive_path, 100)
             self.assertEqual([item["path"] for item in ratios], ["compressible.txt"])
+
+    def test_archive_name_and_structure_audits(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "structure.zip"
+            link = zipfile.ZipInfo("links/outside")
+            link.create_system = 3
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("CON.txt", "reserved")
+                archive.writestr("bad?.txt", "invalid")
+                archive.writestr("../escape.txt", "traversal")
+                archive.writestr("café.txt", "composed")
+                archive.writestr("cafe\u0301.txt", "decomposed")
+                archive.writestr("root", "file")
+                archive.writestr("root/child/deep.txt", "nested")
+                archive.writestr(link, "../../outside")
+
+            issues = {item["path"]: item["issues"] for item in portable_path_issues(archive_path)}
+            self.assertIn("reserved-device-name", issues["CON.txt"])
+            self.assertIn("windows-invalid-character", issues["bad?.txt"])
+            self.assertIn("parent-traversal", issues["../escape.txt"])
+            self.assertEqual(len(unicode_name_collisions(archive_path)), 1)
+            report = archive_depth_report(archive_path)
+            self.assertEqual(report["max_depth"], 3)
+            self.assertEqual(report["deepest_members"], ["root/child/deep.txt"])
+            self.assertEqual(
+                unsafe_symlink_targets(archive_path), [{"path": "links/outside", "target": "../../outside"}]
+            )
+            self.assertEqual(file_directory_conflicts(archive_path), [{"file": "root", "child": "root/child/deep.txt"}])
 
 
 if __name__ == "__main__":

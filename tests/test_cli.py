@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+import stat
 import tempfile
 import unittest
 import warnings
@@ -191,6 +192,51 @@ class CliFeatureTests(unittest.TestCase):
             self.assertEqual({item["method"] for item in methods}, {"stored", "deflate"})
             high_ratio = run("--archive-high-ratio", str(archive_path), "100")
             self.assertEqual(high_ratio["members"][0]["path"], "compressible.txt")
+
+    def test_archive_structure_cli_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            archive_path = Path(tmp) / "structure.zip"
+            link = zipfile.ZipInfo("links/outside")
+            link.create_system = 3
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("CON.txt", "reserved")
+                archive.writestr("café.txt", "composed")
+                archive.writestr("cafe\u0301.txt", "decomposed")
+                archive.writestr("root", "file")
+                archive.writestr("root/child/deep.txt", "nested")
+                archive.writestr(link, "../../outside")
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "structure.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-archive-structure")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            portability = run("--archive-portability-audit", str(archive_path))
+            self.assertIn("reserved-device-name", portability["issues"][0]["issues"])
+            self.assertEqual(len(run("--archive-unicode-collisions", str(archive_path))["collisions"]), 1)
+            depth = run("--archive-depth-report", str(archive_path))
+            self.assertEqual(depth["max_depth"], 3)
+            self.assertEqual(run("--archive-symlink-audit", str(archive_path))["count"], 1)
+            self.assertEqual(run("--archive-prefix-conflicts", str(archive_path))["conflicts"][0]["file"], "root")
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

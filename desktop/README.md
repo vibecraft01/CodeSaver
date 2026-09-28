@@ -1,6 +1,6 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.6.2.
+Desktop application source for CodeSaver Desktop 1.6.3.
 
 The current desktop tools include:
 
@@ -8,6 +8,7 @@ The current desktop tools include:
 - detailed comparison JSON export and per-member compression savings reports;
 - duplicate-content, symlink, permission, timestamp-range, and large-member audits for selected ZIPs;
 - repeated-name, case-collision, encryption, compression-method, and high-expansion-ratio checks;
+- portability, Unicode normalization, path-depth, symlink-target, and file/directory conflict audits;
 
 - comparing two ZIP archives and summarizing added, removed, and changed files;
 - exporting SHA-256 hashes for archive members as CSV;
