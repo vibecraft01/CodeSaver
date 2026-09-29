@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.7.6 and Desktop v1.6.4 — 2026-09-29
+
+- Added five archive inspection tools to both CLI and Desktop: long-path report, root-layout summary, ZIP comment inspection, per-member CRC-32 inventory, and timestamp summary.
+- Validated locally and prepared for publication after green cross-platform CI/builds.
+
 ## [Desktop 1.3.7] - 2026-09-07
 
 - Added archive creation-date copying.

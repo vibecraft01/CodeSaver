@@ -7,6 +7,11 @@ import warnings
 from pathlib import Path
 
 from codesaver.archive_tools import (
+    archive_comment_report,
+    archive_crc_inventory,
+    archive_path_length_report,
+    archive_root_layout,
+    archive_timestamp_summary,
     compare_zips,
     case_colliding_paths,
     compression_methods,
@@ -49,6 +54,33 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_archive_comment_crc_root_path_and_timestamp_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "reports.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.comment = b"backup notes"
+                member = zipfile.ZipInfo("src/" + "long_name.py")
+                member.comment = b"source file"
+                member.date_time = (2024, 3, 4, 5, 6, 8)
+                archive.writestr(member, "print('ok')")
+                archive.writestr(zipfile.ZipInfo("README.md", (2025, 1, 2, 0, 0, 0)), "docs")
+
+            lengths = archive_path_length_report(archive_path, limit=10)
+            self.assertEqual(lengths["maximum_characters"], len("src/long_name.py"))
+            self.assertEqual(len(lengths["long_paths"]), 1)
+            layout = archive_root_layout(archive_path)
+            self.assertEqual(layout["root_folders"], {"src": 1})
+            self.assertEqual(layout["loose_files"], ["README.md"])
+            comments = archive_comment_report(archive_path)
+            self.assertEqual(comments["archive_comment"], "backup notes")
+            self.assertEqual(comments["member_comments"][0]["comment"], "source file")
+            inventory = archive_crc_inventory(archive_path)
+            with zipfile.ZipFile(archive_path) as archive:
+                self.assertEqual(inventory[0]["crc32"], f'{archive.getinfo("src/long_name.py").CRC:08x}')
+            timestamps = archive_timestamp_summary(archive_path)
+            self.assertEqual(timestamps["files_by_year"], {"2024": 1, "2025": 1})
+            self.assertEqual(timestamps["oldest"]["path"], "src/long_name.py")
+
     def test_archive_inspection_and_safe_single_member_extraction(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -328,3 +328,87 @@ def file_directory_conflicts(path: Path) -> list[dict[str, str]]:
                 parent = "/".join(parts[:index])
                 parents[parent] = normalized
     return [{"file": name, "child": parents[name]} for name in sorted(files & parents.keys())]
+
+
+def archive_path_length_report(path: Path, limit: int = 240) -> dict[str, object]:
+    """Summarize member-name lengths and list paths beyond a portability limit."""
+    if limit < 1:
+        raise ValueError("Path length limit must be positive")
+    with zipfile.ZipFile(path) as archive:
+        rows = [
+            {"path": info.filename, "characters": len(info.filename), "utf8_bytes": len(info.filename.encode("utf-8"))}
+            for info in archive.infolist()
+            if not info.is_dir()
+        ]
+    return {
+        "limit": limit,
+        "maximum_characters": max((int(row["characters"]) for row in rows), default=0),
+        "long_paths": [row for row in rows if int(row["characters"]) > limit],
+        "files": len(rows),
+    }
+
+
+def archive_root_layout(path: Path) -> dict[str, object]:
+    """Summarize top-level folders and members stored directly at the archive root."""
+    roots: dict[str, int] = defaultdict(int)
+    loose: list[str] = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            parts = [part for part in re.split(r"[/\\]", info.filename) if part]
+            if len(parts) < 2:
+                loose.append(info.filename)
+            else:
+                roots[parts[0]] += 1
+    return {"root_folders": dict(sorted(roots.items())), "loose_files": sorted(loose), "folder_count": len(roots)}
+
+
+def archive_comment_report(path: Path) -> dict[str, object]:
+    """Return archive-level and per-member comments with their byte lengths."""
+    with zipfile.ZipFile(path) as archive:
+        global_comment_bytes = len(archive.comment)
+        global_comment = archive.comment.decode("utf-8", errors="replace")
+        member_comments = [
+            {
+                "path": info.filename,
+                "comment": info.comment.decode("utf-8", errors="replace"),
+                "bytes": len(info.comment),
+            }
+            for info in archive.infolist()
+            if info.comment
+        ]
+    return {
+        "archive_comment": global_comment,
+        "archive_comment_bytes": global_comment_bytes,
+        "member_comments": member_comments,
+    }
+
+
+def archive_crc_inventory(path: Path) -> list[dict[str, object]]:
+    """List stored CRC-32 checksums without reading/decompressing member data."""
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "crc32": f"{info.CRC:08x}", "bytes": info.file_size}
+            for info in archive.infolist()
+            if not info.is_dir()
+        ]
+
+
+def archive_timestamp_summary(path: Path) -> dict[str, object]:
+    """Summarize member timestamps by year and identify oldest/newest entries."""
+    by_year: dict[str, int] = defaultdict(int)
+    members: list[tuple[datetime, str]] = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            timestamp = datetime(*info.date_time)
+            by_year[str(timestamp.year)] += 1
+            members.append((timestamp, info.filename))
+    ordered = sorted(members)
+    return {
+        "files_by_year": dict(sorted(by_year.items())),
+        "oldest": {"path": ordered[0][1], "timestamp": ordered[0][0].isoformat(sep=" ")} if ordered else None,
+        "newest": {"path": ordered[-1][1], "timestamp": ordered[-1][0].isoformat(sep=" ")} if ordered else None,
+    }

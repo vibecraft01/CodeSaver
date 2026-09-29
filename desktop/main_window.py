@@ -42,6 +42,8 @@ from PyQt5.QtCore import QUrl
 from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
+    archive_comment_report,
+    archive_crc_inventory,
     case_colliding_paths,
     compare_zips,
     compression_methods,
@@ -53,6 +55,9 @@ from codesaver.archive_tools import (
     find_members,
     high_ratio_members,
     archive_depth_report,
+    archive_path_length_report,
+    archive_root_layout,
+    archive_timestamp_summary,
     member_compression,
     member_permissions,
     members_in_date_range,
@@ -510,6 +515,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_depth_report": "Show archive path-depth summary",
     "archive_symlink_audit": "Audit symlink targets for traversal",
     "archive_prefix_conflicts": "Find file/folder name conflicts",
+    "archive_path_lengths": "Find long paths inside archive",
+    "archive_root_layout": "Summarize archive root layout",
+    "archive_comments": "Inspect archive comments",
+    "archive_crc_inventory": "Show per-file CRC-32 inventory",
+    "archive_timestamps": "Summarize member timestamps",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -674,6 +684,11 @@ TEXT["ru"].update(
         "archive_depth_report": "Сводка глубины путей архива",
         "archive_symlink_audit": "Проверить цели симлинков на выход за папку",
         "archive_prefix_conflicts": "Найти конфликты имён файла и папки",
+        "archive_path_lengths": "Найти длинные пути внутри архива",
+        "archive_root_layout": "Сводка структуры корня архива",
+        "archive_comments": "Показать комментарии архива",
+        "archive_crc_inventory": "Показать CRC-32 каждого файла",
+        "archive_timestamps": "Сводка дат файлов архива",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1081,6 +1096,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_depth_report"), self._show_archive_depth_report)
         tools_menu.addAction(self._text("archive_symlink_audit"), self._show_archive_symlink_audit)
         tools_menu.addAction(self._text("archive_prefix_conflicts"), self._show_archive_prefix_conflicts)
+        tools_menu.addAction(self._text("archive_path_lengths"), self._show_archive_path_lengths)
+        tools_menu.addAction(self._text("archive_root_layout"), self._show_archive_root_layout)
+        tools_menu.addAction(self._text("archive_comments"), self._show_archive_comments)
+        tools_menu.addAction(self._text("archive_crc_inventory"), self._show_archive_crc_inventory)
+        tools_menu.addAction(self._text("archive_timestamps"), self._show_archive_timestamps)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2286,6 +2306,65 @@ class MainWindow(QMainWindow):
             conflicts = file_directory_conflicts(archive)
             body = "\n".join(f"{item['file']} conflicts with {item['child']}" for item in conflicts)
             QMessageBox.information(self, self._text("archive_prefix_conflicts"), body or "No file/directory conflicts")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_path_lengths(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = archive_path_length_report(archive)
+            body = f"Longest path: {report['maximum_characters']} characters\n" + "\n".join(
+                f"{item['characters']} characters: {item['path']}" for item in report["long_paths"]
+            )
+            QMessageBox.information(self, self._text("archive_path_lengths"), body or "No files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_root_layout(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = archive_root_layout(archive)
+            folders = "\n".join(f"{name}: {count} files" for name, count in report["root_folders"].items())
+            body = folders + "\nLoose files: " + ", ".join(report["loose_files"])
+            QMessageBox.information(self, self._text("archive_root_layout"), body)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_comments(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = archive_comment_report(archive)
+            members = "\n".join(f"{item['path']}: {item['comment']}" for item in report["member_comments"])
+            body = f"Archive: {report['archive_comment']}\n" + (members or "No member comments")
+            QMessageBox.information(self, self._text("archive_comments"), body)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_crc_inventory(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = archive_crc_inventory(archive)
+            body = "\n".join(f"{item['crc32']}  {item['path']} ({item['bytes']} bytes)" for item in rows)
+            QMessageBox.information(self, self._text("archive_crc_inventory"), body or "No files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_timestamps(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = archive_timestamp_summary(archive)
+            body = f"Files by year: {report['files_by_year']}\nOldest: {report['oldest']}\nNewest: {report['newest']}"
+            QMessageBox.information(self, self._text("archive_timestamps"), body)
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

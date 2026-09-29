@@ -237,6 +237,11 @@ class CliFeatureTests(unittest.TestCase):
             self.assertEqual(depth["max_depth"], 3)
             self.assertEqual(run("--archive-symlink-audit", str(archive_path))["count"], 1)
             self.assertEqual(run("--archive-prefix-conflicts", str(archive_path))["conflicts"][0]["file"], "root")
+            self.assertGreater(run("--archive-path-lengths", str(archive_path))["maximum_characters"], 0)
+            self.assertEqual(run("--archive-root-layout", str(archive_path))["root_folders"]["root"], 1)
+            self.assertEqual(run("--archive-comments", str(archive_path))["archive_comment"], "")
+            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 6)
+            self.assertIn("1980", run("--archive-timestamps", str(archive_path))["files_by_year"])
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
