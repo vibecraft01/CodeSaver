@@ -482,3 +482,92 @@ def empty_directory_members(path: Path) -> list[str]:
             for other in directories
         )
     )
+
+
+def unicode_control_names(path: Path) -> list[dict[str, object]]:
+    """Find member names containing control or formatting characters, including bidi controls."""
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            suspicious = [
+                {
+                    "character": character,
+                    "codepoint": f"U+{ord(character):04X}",
+                    "category": unicodedata.category(character),
+                    "name": unicodedata.name(character, "UNNAMED"),
+                }
+                for character in info.filename
+                if unicodedata.category(character) in {"Cc", "Cf", "Cs"}
+            ]
+            if suspicious:
+                results.append({"path": info.filename, "characters": suspicious})
+    return results
+
+
+def long_path_components(path: Path, limit: int = 255) -> list[dict[str, object]]:
+    """Find individual path components longer than a filesystem portability limit."""
+    if limit < 1:
+        raise ValueError("Component length limit must be positive")
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            for component in re.split(r"[/\\]", info.filename):
+                if len(component) > limit:
+                    results.append(
+                        {
+                            "path": info.filename,
+                            "component": component,
+                            "characters": len(component),
+                            "utf8_bytes": len(component.encode("utf-8")),
+                        }
+                    )
+    return results
+
+
+def duplicate_directory_entries(path: Path) -> list[dict[str, object]]:
+    """Report repeated explicit directory records, including their ZIP entry indexes."""
+    indexes: dict[str, list[int]] = defaultdict(list)
+    with zipfile.ZipFile(path) as archive:
+        for index, info in enumerate(archive.infolist()):
+            if info.is_dir():
+                indexes[info.filename.rstrip("/\\")].append(index)
+    return [{"path": name, "entries": positions} for name, positions in sorted(indexes.items()) if len(positions) > 1]
+
+
+def unsupported_compression_members(path: Path) -> list[dict[str, object]]:
+    """List members using a compression method unsupported by this Python runtime."""
+    supported = {
+        zipfile.ZIP_STORED,
+        zipfile.ZIP_DEFLATED,
+        zipfile.ZIP_BZIP2,
+        zipfile.ZIP_LZMA,
+    }
+    if hasattr(zipfile, "ZIP_ZSTANDARD"):
+        supported.add(getattr(zipfile, "ZIP_ZSTANDARD"))
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "method_id": info.compress_type}
+            for info in archive.infolist()
+            if not info.is_dir() and info.compress_type not in supported
+        ]
+
+
+def member_type_conflicts(path: Path) -> list[dict[str, str]]:
+    """Find names whose trailing-slash directory marker conflicts with Unix type bits."""
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            mode = info.external_attr >> 16
+            unix_type = stat.S_IFMT(mode)
+            if not unix_type:
+                continue
+            is_unix_directory = unix_type == stat.S_IFDIR
+            if is_unix_directory != info.is_dir():
+                results.append(
+                    {
+                        "path": info.filename,
+                        "name_type": "directory" if info.is_dir() else "file",
+                        "unix_type": "directory" if is_unix_directory else "non-directory",
+                    }
+                )
+    return results

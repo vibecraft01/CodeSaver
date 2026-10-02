@@ -32,10 +32,15 @@ from .archive_tools import (
     archive_root_layout,
     archive_timestamp_summary,
     duplicate_member_basenames,
+    duplicate_directory_entries,
     empty_directory_members,
     executable_members,
     hidden_members,
+    long_path_components,
+    member_type_conflicts,
     mixed_separator_members,
+    unicode_control_names,
+    unsupported_compression_members,
     compare_zips,
     case_colliding_paths,
     compression_methods,
@@ -499,6 +504,19 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-backslash-paths", type=Path, metavar="ARCHIVE", help="Find nonstandard ZIP paths")
     parser.add_argument("--archive-executables", type=Path, metavar="ARCHIVE", help="List executable-mode members")
     parser.add_argument("--archive-empty-directories", type=Path, metavar="ARCHIVE", help="List empty ZIP folders")
+    parser.add_argument(
+        "--archive-unicode-controls", type=Path, metavar="ARCHIVE", help="Find invisible/control path characters"
+    )
+    parser.add_argument("--archive-long-components", type=Path, metavar="ARCHIVE", help="Find overlong path components")
+    parser.add_argument(
+        "--archive-duplicate-directories", type=Path, metavar="ARCHIVE", help="Find repeated ZIP folder records"
+    )
+    parser.add_argument(
+        "--archive-unsupported-compression", type=Path, metavar="ARCHIVE", help="Find unreadable compression methods"
+    )
+    parser.add_argument(
+        "--archive-type-conflicts", type=Path, metavar="ARCHIVE", help="Find file/directory metadata mismatches"
+    )
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1050,6 +1068,41 @@ def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
             json.dumps(result, ensure_ascii=False, indent=2)
             if args.json
             else "\n".join(names) or "No empty directories"
+        )
+    elif args.archive_unicode_controls:
+        rows = unicode_control_names(args.archive_unicode_controls.expanduser().resolve())
+        result = {"archive": str(args.archive_unicode_controls), "members": rows, "count": len(rows)}
+        plain = "\n".join(
+            f"{item['path']}: " + ", ".join(char["codepoint"] for char in item["characters"]) for item in rows
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No control/format characters"
+        )
+    elif args.archive_long_components:
+        rows = long_path_components(args.archive_long_components.expanduser().resolve())
+        result = {"archive": str(args.archive_long_components), "components": rows, "count": len(rows)}
+        plain = "\n".join(f"{item['characters']} characters in {item['path']}: {item['component']}" for item in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No overlong components")
+    elif args.archive_duplicate_directories:
+        rows = duplicate_directory_entries(args.archive_duplicate_directories.expanduser().resolve())
+        result = {"archive": str(args.archive_duplicate_directories), "directories": rows, "count": len(rows)}
+        plain = "\n".join(f"{item['path']} (entries {', '.join(map(str, item['entries']))})" for item in rows)
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No repeated directory entries"
+        )
+    elif args.archive_unsupported_compression:
+        rows = unsupported_compression_members(args.archive_unsupported_compression.expanduser().resolve())
+        result = {"archive": str(args.archive_unsupported_compression), "members": rows, "count": len(rows)}
+        plain = "\n".join(f"method {item['method_id']}: {item['path']}" for item in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No unsupported methods")
+    elif args.archive_type_conflicts:
+        rows = member_type_conflicts(args.archive_type_conflicts.expanduser().resolve())
+        result = {"archive": str(args.archive_type_conflicts), "conflicts": rows, "count": len(rows)}
+        plain = "\n".join(f"{item['path']}: name={item['name_type']}, Unix={item['unix_type']}" for item in rows)
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else plain or "No file/directory type conflicts"
         )
     else:
         return False

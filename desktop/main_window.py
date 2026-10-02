@@ -63,6 +63,11 @@ from codesaver.archive_tools import (
     archive_path_length_report,
     archive_root_layout,
     archive_timestamp_summary,
+    duplicate_directory_entries,
+    long_path_components,
+    member_type_conflicts,
+    unicode_control_names,
+    unsupported_compression_members,
     member_compression,
     member_permissions,
     members_in_date_range,
@@ -530,6 +535,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_backslash_paths": "Find backslash ZIP paths",
     "archive_executables": "List executable files in archive",
     "archive_empty_directories": "Find empty archive folders",
+    "archive_unicode_controls": "Audit invisible Unicode in paths",
+    "archive_long_components": "Find overlong path components",
+    "archive_duplicate_directories": "Find repeated folder records",
+    "archive_unsupported_compression": "Find unsupported compression methods",
+    "archive_type_conflicts": "Audit file/folder metadata conflicts",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -704,6 +714,11 @@ TEXT["ru"].update(
         "archive_backslash_paths": "Найти пути с обратной косой чертой",
         "archive_executables": "Показать исполняемые файлы архива",
         "archive_empty_directories": "Найти пустые папки архива",
+        "archive_unicode_controls": "Проверить невидимые Unicode-символы в путях",
+        "archive_long_components": "Найти слишком длинные части пути",
+        "archive_duplicate_directories": "Найти повторные записи папок",
+        "archive_unsupported_compression": "Найти неподдерживаемые методы сжатия",
+        "archive_type_conflicts": "Проверить конфликты типа файла и папки",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1121,6 +1136,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_backslash_paths"), self._show_backslash_archive_paths)
         tools_menu.addAction(self._text("archive_executables"), self._show_archive_executables)
         tools_menu.addAction(self._text("archive_empty_directories"), self._show_empty_archive_directories)
+        tools_menu.addAction(self._text("archive_unicode_controls"), self._show_archive_unicode_controls)
+        tools_menu.addAction(self._text("archive_long_components"), self._show_archive_long_components)
+        tools_menu.addAction(self._text("archive_duplicate_directories"), self._show_duplicate_directory_entries)
+        tools_menu.addAction(self._text("archive_unsupported_compression"), self._show_unsupported_compression)
+        tools_menu.addAction(self._text("archive_type_conflicts"), self._show_member_type_conflicts)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2440,6 +2460,71 @@ class MainWindow(QMainWindow):
             names = empty_directory_members(archive)
             QMessageBox.information(
                 self, self._text("archive_empty_directories"), "\n".join(names) or "No empty directories"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_unicode_controls(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = unicode_control_names(archive)
+            body = "\n".join(
+                f"{item['path']}: " + ", ".join(char["codepoint"] for char in item["characters"]) for item in rows
+            )
+            QMessageBox.information(
+                self, self._text("archive_unicode_controls"), body or "No control/format characters"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_long_components(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = long_path_components(archive)
+            body = "\n".join(f"{item['characters']} chars: {item['component']} ({item['path']})" for item in rows)
+            QMessageBox.information(self, self._text("archive_long_components"), body or "No overlong components")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_duplicate_directory_entries(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = duplicate_directory_entries(archive)
+            body = "\n".join(f"{item['path']}: entries {item['entries']}" for item in rows)
+            QMessageBox.information(
+                self, self._text("archive_duplicate_directories"), body or "No repeated directory entries"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_unsupported_compression(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = unsupported_compression_members(archive)
+            body = "\n".join(f"method {item['method_id']}: {item['path']}" for item in rows)
+            QMessageBox.information(
+                self, self._text("archive_unsupported_compression"), body or "No unsupported methods"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_member_type_conflicts(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = member_type_conflicts(archive)
+            body = "\n".join(f"{item['path']}: name={item['name_type']}, Unix={item['unix_type']}" for item in rows)
+            QMessageBox.information(
+                self, self._text("archive_type_conflicts"), body or "No file/directory type conflicts"
             )
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))

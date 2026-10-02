@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.7.8 and Desktop v1.6.6 — 2026-10-02
+
+- Added five archive integrity and portability reports to CLI and Desktop: Unicode controls, long components, duplicate directory records, unsupported codecs, and name/type metadata conflicts.
+- Prepared for publication after green cross-platform CI and package builds.
+
 # CodeSaver CLI v1.7.7 and Desktop v1.6.5 — 2026-10-02
 
 - Added five archive hygiene reports to both applications: repeated basenames, hidden members, backslash paths, executable-mode files, and explicit empty folders.

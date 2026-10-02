@@ -206,6 +206,13 @@ class CliFeatureTests(unittest.TestCase):
             executable = zipfile.ZipInfo("bin/tool")
             executable.create_system = 3
             executable.external_attr = (stat.S_IFREG | 0o755) << 16
+            file_with_directory_mode = zipfile.ZipInfo("file-with-dir-mode")
+            file_with_directory_mode.create_system = 3
+            file_with_directory_mode.external_attr = (stat.S_IFDIR | 0o755) << 16
+            directory_with_file_mode = zipfile.ZipInfo("dir-with-file-mode/")
+            directory_with_file_mode.create_system = 3
+            directory_with_file_mode.external_attr = (stat.S_IFREG | 0o644) << 16
+            long_component = "x" * 256 + ".txt"
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr("CON.txt", "reserved")
                 archive.writestr("café.txt", "composed")
@@ -219,8 +226,29 @@ class CliFeatureTests(unittest.TestCase):
                 archive.writestr("win\\legacy.txt", "legacy")
                 archive.writestr(executable, "binary")
                 archive.writestr("empty/", "")
+                archive.writestr("dup/", "")
+                archive.writestr("dup/", "")
+                archive.writestr(file_with_directory_mode, "data")
+                archive.writestr(directory_with_file_mode, "data")
+                archive.writestr(long_component, "long")
+                archive.writestr("report-\u202eexe.txt", "bidi")
+                archive.writestr("unknown.bin", "codec")
             zip_bytes = archive_path.read_bytes()
-            archive_path.write_bytes(zip_bytes.replace(b"win/legacy.txt", b"win\\legacy.txt"))
+            zip_bytes = bytearray(zip_bytes.replace(b"win/legacy.txt", b"win\\legacy.txt"))
+            for signature, name_length_offset, name_start_offset, method_offset in (
+                (b"PK\x03\x04", 26, 30, 8),
+                (b"PK\x01\x02", 28, 46, 10),
+            ):
+                cursor = zip_bytes.find(signature)
+                while cursor >= 0:
+                    name_length = int.from_bytes(
+                        zip_bytes[cursor + name_length_offset : cursor + name_length_offset + 2], "little"
+                    )
+                    name_start = cursor + name_start_offset
+                    if zip_bytes[name_start : name_start + name_length] == b"unknown.bin":
+                        zip_bytes[cursor + method_offset : cursor + method_offset + 2] = (99).to_bytes(2, "little")
+                    cursor = zip_bytes.find(signature, cursor + len(signature))
+            archive_path.write_bytes(zip_bytes)
             common = [
                 "--project-dir",
                 str(root),
@@ -251,13 +279,24 @@ class CliFeatureTests(unittest.TestCase):
             self.assertGreater(run("--archive-path-lengths", str(archive_path))["maximum_characters"], 0)
             self.assertEqual(run("--archive-root-layout", str(archive_path))["root_folders"]["root"], 1)
             self.assertEqual(run("--archive-comments", str(archive_path))["archive_comment"], "")
-            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 11)
+            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 15)
             self.assertIn("1980", run("--archive-timestamps", str(archive_path))["files_by_year"])
             self.assertEqual(len(run("--archive-duplicate-basenames", str(archive_path))["groups"]), 1)
             self.assertEqual(run("--archive-hidden-members", str(archive_path))["members"], ["config/.env"])
             self.assertEqual(run("--archive-backslash-paths", str(archive_path))["members"], ["win\\legacy.txt"])
             self.assertEqual(run("--archive-executables", str(archive_path))["members"][0]["path"], "bin/tool")
-            self.assertEqual(run("--archive-empty-directories", str(archive_path))["directories"], ["empty"])
+            self.assertEqual(
+                run("--archive-empty-directories", str(archive_path))["directories"],
+                ["dir-with-file-mode", "dup", "empty"],
+            )
+            self.assertEqual(
+                run("--archive-unicode-controls", str(archive_path))["members"][0]["characters"][0]["codepoint"],
+                "U+202E",
+            )
+            self.assertEqual(run("--archive-long-components", str(archive_path))["components"][0]["characters"], 260)
+            self.assertEqual(run("--archive-duplicate-directories", str(archive_path))["directories"][0]["path"], "dup")
+            self.assertEqual(run("--archive-unsupported-compression", str(archive_path))["members"][0]["method_id"], 99)
+            self.assertEqual(len(run("--archive-type-conflicts", str(archive_path))["conflicts"]), 2)
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

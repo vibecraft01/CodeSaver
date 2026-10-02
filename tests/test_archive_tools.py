@@ -7,11 +7,16 @@ import warnings
 from pathlib import Path
 
 from codesaver.archive_tools import (
+    duplicate_directory_entries,
     duplicate_member_basenames,
     empty_directory_members,
     executable_members,
     hidden_members,
+    long_path_components,
+    member_type_conflicts,
     mixed_separator_members,
+    unicode_control_names,
+    unsupported_compression_members,
     archive_comment_report,
     archive_crc_inventory,
     archive_path_length_report,
@@ -59,6 +64,51 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_unicode_component_duplicate_directory_compression_and_type_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "metadata.zip"
+            file_marked_as_dir = zipfile.ZipInfo("file-with-dir-mode")
+            file_marked_as_dir.create_system = 3
+            file_marked_as_dir.external_attr = (stat.S_IFDIR | 0o755) << 16
+            dir_marked_as_file = zipfile.ZipInfo("dir-with-file-mode/")
+            dir_marked_as_file.create_system = 3
+            dir_marked_as_file.external_attr = (stat.S_IFREG | 0o644) << 16
+            long_name = "x" * 256 + ".txt"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("report-\u202eexe.txt", "bidi")
+                archive.writestr("dup/", "")
+                archive.writestr("dup/", "")
+                archive.writestr(file_marked_as_dir, "data")
+                archive.writestr(dir_marked_as_file, "data")
+                archive.writestr(long_name, "long")
+                archive.writestr("unknown.bin", "codec")
+
+            data = bytearray(archive_path.read_bytes())
+            for signature, name_length_offset, name_start_offset, method_offset in (
+                (b"PK\x03\x04", 26, 30, 8),
+                (b"PK\x01\x02", 28, 46, 10),
+            ):
+                cursor = data.find(signature)
+                while cursor >= 0:
+                    name_length = int.from_bytes(
+                        data[cursor + name_length_offset : cursor + name_length_offset + 2], "little"
+                    )
+                    name_start = cursor + name_start_offset
+                    if data[name_start : name_start + name_length] == b"unknown.bin":
+                        data[cursor + method_offset : cursor + method_offset + 2] = (99).to_bytes(2, "little")
+                    cursor = data.find(signature, cursor + len(signature))
+            archive_path.write_bytes(data)
+
+            unicode_rows = unicode_control_names(archive_path)
+            self.assertEqual(unicode_rows[0]["characters"][0]["codepoint"], "U+202E")
+            self.assertEqual(long_path_components(archive_path)[0]["characters"], 260)
+            self.assertEqual(duplicate_directory_entries(archive_path), [{"path": "dup", "entries": [1, 2]}])
+            self.assertEqual(unsupported_compression_members(archive_path), [{"path": "unknown.bin", "method_id": 99}])
+            self.assertEqual(
+                {row["path"] for row in member_type_conflicts(archive_path)},
+                {"file-with-dir-mode", "dir-with-file-mode/"},
+            )
+
     def test_archive_hidden_executable_separator_basename_and_empty_folder_reports(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive_path = Path(temporary) / "layout.zip"
