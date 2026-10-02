@@ -44,6 +44,11 @@ from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
     archive_comment_report,
     archive_crc_inventory,
+    duplicate_member_basenames,
+    empty_directory_members,
+    executable_members,
+    hidden_members,
+    mixed_separator_members,
     case_colliding_paths,
     compare_zips,
     compression_methods,
@@ -520,6 +525,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_comments": "Inspect archive comments",
     "archive_crc_inventory": "Show per-file CRC-32 inventory",
     "archive_timestamps": "Summarize member timestamps",
+    "archive_duplicate_basenames": "Find repeated filenames across folders",
+    "archive_hidden_members": "List hidden archive files",
+    "archive_backslash_paths": "Find backslash ZIP paths",
+    "archive_executables": "List executable files in archive",
+    "archive_empty_directories": "Find empty archive folders",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -689,6 +699,11 @@ TEXT["ru"].update(
         "archive_comments": "Показать комментарии архива",
         "archive_crc_inventory": "Показать CRC-32 каждого файла",
         "archive_timestamps": "Сводка дат файлов архива",
+        "archive_duplicate_basenames": "Найти одинаковые имена в разных папках",
+        "archive_hidden_members": "Показать скрытые файлы архива",
+        "archive_backslash_paths": "Найти пути с обратной косой чертой",
+        "archive_executables": "Показать исполняемые файлы архива",
+        "archive_empty_directories": "Найти пустые папки архива",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1101,6 +1116,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_comments"), self._show_archive_comments)
         tools_menu.addAction(self._text("archive_crc_inventory"), self._show_archive_crc_inventory)
         tools_menu.addAction(self._text("archive_timestamps"), self._show_archive_timestamps)
+        tools_menu.addAction(self._text("archive_duplicate_basenames"), self._show_duplicate_basenames)
+        tools_menu.addAction(self._text("archive_hidden_members"), self._show_hidden_archive_members)
+        tools_menu.addAction(self._text("archive_backslash_paths"), self._show_backslash_archive_paths)
+        tools_menu.addAction(self._text("archive_executables"), self._show_archive_executables)
+        tools_menu.addAction(self._text("archive_empty_directories"), self._show_empty_archive_directories)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2365,6 +2385,62 @@ class MainWindow(QMainWindow):
             report = archive_timestamp_summary(archive)
             body = f"Files by year: {report['files_by_year']}\nOldest: {report['oldest']}\nNewest: {report['newest']}"
             QMessageBox.information(self, self._text("archive_timestamps"), body)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_duplicate_basenames(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            groups = duplicate_member_basenames(archive)
+            body = "\n".join(f"{item['basename']}: {', '.join(item['paths'])}" for item in groups)
+            QMessageBox.information(self, self._text("archive_duplicate_basenames"), body or "No repeated basenames")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_hidden_archive_members(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            names = hidden_members(archive)
+            QMessageBox.information(self, self._text("archive_hidden_members"), "\n".join(names) or "No hidden members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_backslash_archive_paths(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            names = mixed_separator_members(archive)
+            QMessageBox.information(
+                self, self._text("archive_backslash_paths"), "\n".join(names) or "No backslash paths"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_executables(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = executable_members(archive)
+            body = "\n".join(f"{item['mode_octal']} {item['path']}" for item in rows)
+            QMessageBox.information(self, self._text("archive_executables"), body or "No executable-mode members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_empty_archive_directories(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            names = empty_directory_members(archive)
+            QMessageBox.information(
+                self, self._text("archive_empty_directories"), "\n".join(names) or "No empty directories"
+            )
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

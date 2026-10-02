@@ -412,3 +412,73 @@ def archive_timestamp_summary(path: Path) -> dict[str, object]:
         "oldest": {"path": ordered[0][1], "timestamp": ordered[0][0].isoformat(sep=" ")} if ordered else None,
         "newest": {"path": ordered[-1][1], "timestamp": ordered[-1][0].isoformat(sep=" ")} if ordered else None,
     }
+
+
+def duplicate_member_basenames(path: Path) -> list[dict[str, object]]:
+    """Group distinct archive paths that share the same final filename."""
+    names: dict[str, set[str]] = defaultdict(set)
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            basename = re.split(r"[/\\]", info.filename.rstrip("/\\"))[-1].casefold()
+            names[basename].add(info.filename)
+    return [{"basename": name, "paths": sorted(paths)} for name, paths in sorted(names.items()) if len(paths) > 1]
+
+
+def hidden_members(path: Path) -> list[str]:
+    """List entries hidden by dot-prefixed path components or the DOS hidden flag."""
+    with zipfile.ZipFile(path) as archive:
+        return sorted(
+            info.filename
+            for info in archive.infolist()
+            if not info.is_dir()
+            and (
+                any(part.startswith(".") for part in re.split(r"[/\\]", info.filename) if part)
+                or bool(info.external_attr & 0x02)
+            )
+        )
+
+
+def mixed_separator_members(path: Path) -> list[str]:
+    """List member names containing backslashes in their raw ZIP local headers."""
+    with zipfile.ZipFile(path) as archive:
+        names = []
+        for info in archive.infolist():
+            archive.fp.seek(info.header_offset)
+            header = archive.fp.read(30)
+            filename_length = int.from_bytes(header[26:28], "little")
+            raw_name = archive.fp.read(filename_length)
+            if b"\\" in raw_name:
+                encoding = "utf-8" if info.flag_bits & 0x800 else "cp437"
+                names.append(raw_name.decode(encoding, errors="replace"))
+        return sorted(names)
+
+
+def executable_members(path: Path) -> list[dict[str, str]]:
+    """List members carrying Unix executable permission bits."""
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "mode_octal": format(stat.S_IMODE(info.external_attr >> 16), "04o")}
+            for info in archive.infolist()
+            if not info.is_dir()
+            and not stat.S_ISLNK(info.external_attr >> 16)
+            and stat.S_IMODE(info.external_attr >> 16) & 0o111
+        ]
+
+
+def empty_directory_members(path: Path) -> list[str]:
+    """List explicit ZIP directory entries that contain no archived descendants."""
+    with zipfile.ZipFile(path) as archive:
+        entries = archive.infolist()
+    directories = {info.filename.rstrip("/") for info in entries if info.is_dir()}
+    files = [info.filename for info in entries if not info.is_dir()]
+    return sorted(
+        directory
+        for directory in directories
+        if not any(name.startswith(directory + "/") or name.startswith(directory + "\\") for name in files)
+        and not any(
+            other != directory and (other.startswith(directory + "/") or other.startswith(directory + "\\"))
+            for other in directories
+        )
+    )

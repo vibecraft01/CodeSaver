@@ -7,6 +7,11 @@ import warnings
 from pathlib import Path
 
 from codesaver.archive_tools import (
+    duplicate_member_basenames,
+    empty_directory_members,
+    executable_members,
+    hidden_members,
+    mixed_separator_members,
     archive_comment_report,
     archive_crc_inventory,
     archive_path_length_report,
@@ -54,6 +59,33 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_archive_hidden_executable_separator_basename_and_empty_folder_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "layout.zip"
+            executable = zipfile.ZipInfo("bin/tool")
+            executable.create_system = 3
+            executable.external_attr = (stat.S_IFREG | 0o755) << 16
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("src/readme.md", "source")
+                archive.writestr("docs/readme.md", "docs")
+                archive.writestr("config/.env", "secret")
+                archive.writestr("win\\legacy.txt", "legacy")
+                archive.writestr(executable, "binary")
+                archive.writestr("empty/", "")
+                archive.writestr("nonempty/", "")
+                archive.writestr("nonempty/file.txt", "file")
+            zip_bytes = archive_path.read_bytes()
+            archive_path.write_bytes(zip_bytes.replace(b"win/legacy.txt", b"win\\legacy.txt"))
+
+            self.assertEqual(
+                duplicate_member_basenames(archive_path),
+                [{"basename": "readme.md", "paths": ["docs/readme.md", "src/readme.md"]}],
+            )
+            self.assertEqual(hidden_members(archive_path), ["config/.env"])
+            self.assertEqual(mixed_separator_members(archive_path), ["win\\legacy.txt"])
+            self.assertEqual(executable_members(archive_path), [{"path": "bin/tool", "mode_octal": "0755"}])
+            self.assertEqual(empty_directory_members(archive_path), ["empty"])
+
     def test_archive_comment_crc_root_path_and_timestamp_reports(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive_path = Path(temporary) / "reports.zip"

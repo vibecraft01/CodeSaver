@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.7.7 and Desktop v1.6.5 — 2026-10-02
+
+- Added five archive hygiene reports to both applications: repeated basenames, hidden members, backslash paths, executable-mode files, and explicit empty folders.
+- Prepared for publication after green cross-platform CI and package builds.
+
 # CodeSaver CLI v1.7.6 and Desktop v1.6.4 — 2026-09-29
 
 - Added five archive inspection tools to both CLI and Desktop: long-path report, root-layout summary, ZIP comment inspection, per-member CRC-32 inventory, and timestamp summary.

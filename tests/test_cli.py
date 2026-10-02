@@ -203,6 +203,9 @@ class CliFeatureTests(unittest.TestCase):
             link = zipfile.ZipInfo("links/outside")
             link.create_system = 3
             link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            executable = zipfile.ZipInfo("bin/tool")
+            executable.create_system = 3
+            executable.external_attr = (stat.S_IFREG | 0o755) << 16
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr("CON.txt", "reserved")
                 archive.writestr("café.txt", "composed")
@@ -210,6 +213,14 @@ class CliFeatureTests(unittest.TestCase):
                 archive.writestr("root", "file")
                 archive.writestr("root/child/deep.txt", "nested")
                 archive.writestr(link, "../../outside")
+                archive.writestr("src/readme.md", "source")
+                archive.writestr("docs/readme.md", "docs")
+                archive.writestr("config/.env", "secret")
+                archive.writestr("win\\legacy.txt", "legacy")
+                archive.writestr(executable, "binary")
+                archive.writestr("empty/", "")
+            zip_bytes = archive_path.read_bytes()
+            archive_path.write_bytes(zip_bytes.replace(b"win/legacy.txt", b"win\\legacy.txt"))
             common = [
                 "--project-dir",
                 str(root),
@@ -240,8 +251,13 @@ class CliFeatureTests(unittest.TestCase):
             self.assertGreater(run("--archive-path-lengths", str(archive_path))["maximum_characters"], 0)
             self.assertEqual(run("--archive-root-layout", str(archive_path))["root_folders"]["root"], 1)
             self.assertEqual(run("--archive-comments", str(archive_path))["archive_comment"], "")
-            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 6)
+            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 11)
             self.assertIn("1980", run("--archive-timestamps", str(archive_path))["files_by_year"])
+            self.assertEqual(len(run("--archive-duplicate-basenames", str(archive_path))["groups"]), 1)
+            self.assertEqual(run("--archive-hidden-members", str(archive_path))["members"], ["config/.env"])
+            self.assertEqual(run("--archive-backslash-paths", str(archive_path))["members"], ["win\\legacy.txt"])
+            self.assertEqual(run("--archive-executables", str(archive_path))["members"][0]["path"], "bin/tool")
+            self.assertEqual(run("--archive-empty-directories", str(archive_path))["directories"], ["empty"])
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

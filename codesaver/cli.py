@@ -31,6 +31,11 @@ from .archive_tools import (
     archive_path_length_report,
     archive_root_layout,
     archive_timestamp_summary,
+    duplicate_member_basenames,
+    empty_directory_members,
+    executable_members,
+    hidden_members,
+    mixed_separator_members,
     compare_zips,
     case_colliding_paths,
     compression_methods,
@@ -489,6 +494,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-comments", type=Path, metavar="ARCHIVE", help="Show archive and member comments")
     parser.add_argument("--archive-crc-inventory", type=Path, metavar="ARCHIVE", help="List stored member CRC-32s")
     parser.add_argument("--archive-timestamps", type=Path, metavar="ARCHIVE", help="Summarize member timestamps")
+    parser.add_argument("--archive-duplicate-basenames", type=Path, metavar="ARCHIVE", help="Group repeated filenames")
+    parser.add_argument("--archive-hidden-members", type=Path, metavar="ARCHIVE", help="List hidden archive members")
+    parser.add_argument("--archive-backslash-paths", type=Path, metavar="ARCHIVE", help="Find nonstandard ZIP paths")
+    parser.add_argument("--archive-executables", type=Path, metavar="ARCHIVE", help="List executable-mode members")
+    parser.add_argument("--archive-empty-directories", type=Path, metavar="ARCHIVE", help="List empty ZIP folders")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1011,6 +1021,36 @@ def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
         result["archive"] = str(args.archive_timestamps)
         plain = f"Files by year: {result['files_by_year']}\nOldest: {result['oldest']}\nNewest: {result['newest']}"
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain)
+    elif args.archive_duplicate_basenames:
+        groups = duplicate_member_basenames(args.archive_duplicate_basenames.expanduser().resolve())
+        result = {"archive": str(args.archive_duplicate_basenames), "groups": groups, "count": len(groups)}
+        plain = "\n".join(f"{item['basename']}: {', '.join(item['paths'])}" for item in groups)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No repeated basenames")
+    elif args.archive_hidden_members:
+        names = hidden_members(args.archive_hidden_members.expanduser().resolve())
+        result = {"archive": str(args.archive_hidden_members), "members": names, "count": len(names)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else "\n".join(names) or "No hidden members"
+        )
+    elif args.archive_backslash_paths:
+        names = mixed_separator_members(args.archive_backslash_paths.expanduser().resolve())
+        result = {"archive": str(args.archive_backslash_paths), "members": names, "count": len(names)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else "\n".join(names) or "No backslash paths"
+        )
+    elif args.archive_executables:
+        rows = executable_members(args.archive_executables.expanduser().resolve())
+        result = {"archive": str(args.archive_executables), "members": rows, "count": len(rows)}
+        plain = "\n".join(f"{item['mode_octal']} {item['path']}" for item in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No executable-mode members")
+    elif args.archive_empty_directories:
+        names = empty_directory_members(args.archive_empty_directories.expanduser().resolve())
+        result = {"archive": str(args.archive_empty_directories), "directories": names, "count": len(names)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(names) or "No empty directories"
+        )
     else:
         return False
     return True
