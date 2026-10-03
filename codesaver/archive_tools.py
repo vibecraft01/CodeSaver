@@ -577,7 +577,7 @@ def absolute_member_paths(path: Path) -> list[str]:
     """Find ZIP members whose names are rooted or carry a Windows drive prefix."""
     with zipfile.ZipFile(path) as archive:
         return sorted(
-            info.filename
+            info.filename.replace("\\", "/")
             for info in archive.infolist()
             if PurePosixPath(info.filename.replace("\\", "/")).is_absolute()
             or PureWindowsPath(info.filename).is_absolute()

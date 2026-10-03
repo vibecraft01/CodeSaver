@@ -242,7 +242,7 @@ class CliFeatureTests(unittest.TestCase):
                 archive.writestr(long_component, "long")
                 archive.writestr("report-\u202eexe.txt", "bidi")
                 archive.writestr("unknown.bin", "codec")
-                archive.writestr("C:\\drive.txt", "drive")
+                archive.writestr("C:/drive.txt", "drive")
                 archive.writestr("compat/K.txt", "ascii")
                 archive.writestr("compat/K.txt", "kelvin")
                 archive.writestr(risky_mode, "script")
@@ -298,7 +298,10 @@ class CliFeatureTests(unittest.TestCase):
             self.assertIn("1980", run("--archive-timestamps", str(archive_path))["files_by_year"])
             self.assertEqual(len(run("--archive-duplicate-basenames", str(archive_path))["groups"]), 2)
             self.assertEqual(run("--archive-hidden-members", str(archive_path))["members"], ["config/.env"])
-            self.assertEqual(run("--archive-backslash-paths", str(archive_path))["members"], ["win\\legacy.txt"])
+            self.assertEqual(
+                run("--archive-backslash-paths", str(archive_path))["members"],
+                ["win\\legacy.txt"],
+            )
             self.assertEqual(run("--archive-executables", str(archive_path))["members"][0]["path"], "bin/tool")
             self.assertEqual(
                 run("--archive-empty-directories", str(archive_path))["directories"],
