@@ -43,6 +43,8 @@ from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
     absolute_member_paths,
+    dangling_symlink_members,
+    directory_payload_members,
     archive_comment_report,
     archive_crc_inventory,
     duplicate_member_basenames,
@@ -50,6 +52,8 @@ from codesaver.archive_tools import (
     extra_field_audit,
     executable_members,
     hidden_members,
+    future_timestamp_members,
+    implicit_parent_directories,
     mixed_separator_members,
     case_colliding_paths,
     compare_zips,
@@ -77,6 +81,7 @@ from codesaver.archive_tools import (
     portable_path_issues,
     risky_member_permissions,
     special_file_members,
+    symlink_cycles,
     symlink_members,
     unicode_name_collisions,
     unicode_compatibility_collisions,
@@ -550,6 +555,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_extra_fields": "Find duplicate ZIP extra fields",
     "archive_risky_permissions": "Find risky Unix permissions",
     "archive_special_files": "Find Unix devices and sockets",
+    "archive_dangling_symlinks": "Find missing internal symlink targets",
+    "archive_symlink_cycles": "Find archive symlink loops",
+    "archive_directory_payloads": "Find folders carrying unexpected data",
+    "archive_implicit_parents": "List implied parent folders",
+    "archive_future_dates": "Find implausible future timestamps",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -734,6 +744,11 @@ TEXT["ru"].update(
         "archive_extra_fields": "Найти повторяющиеся поля ZIP",
         "archive_risky_permissions": "Найти опасные Unix-права",
         "archive_special_files": "Найти устройства и сокеты Unix",
+        "archive_dangling_symlinks": "Найти отсутствующие цели симлинков",
+        "archive_symlink_cycles": "Найти циклы симлинков в архиве",
+        "archive_directory_payloads": "Найти папки с неожиданными данными",
+        "archive_implicit_parents": "Показать неявные родительские папки",
+        "archive_future_dates": "Найти подозрительные будущие даты",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1161,6 +1176,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_extra_fields"), self._show_archive_extra_field_issues)
         tools_menu.addAction(self._text("archive_risky_permissions"), self._show_risky_archive_permissions)
         tools_menu.addAction(self._text("archive_special_files"), self._show_special_archive_files)
+        tools_menu.addAction(self._text("archive_dangling_symlinks"), self._show_dangling_archive_symlinks)
+        tools_menu.addAction(self._text("archive_symlink_cycles"), self._show_archive_symlink_cycles)
+        tools_menu.addAction(self._text("archive_directory_payloads"), self._show_directory_payloads)
+        tools_menu.addAction(self._text("archive_implicit_parents"), self._show_implicit_archive_parents)
+        tools_menu.addAction(self._text("archive_future_dates"), self._show_future_archive_dates)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2608,6 +2628,66 @@ class MainWindow(QMainWindow):
             rows = special_file_members(archive)
             body = "\n".join(f"{item['type']}: {item['path']}" for item in rows)
             QMessageBox.information(self, self._text("archive_special_files"), body or "No Unix special files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_dangling_archive_symlinks(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = dangling_symlink_members(archive)
+            body = "\n".join(f"{item['path']} -> {item['target']} (missing: {item['resolved_path']})" for item in rows)
+            QMessageBox.information(
+                self, self._text("archive_dangling_symlinks"), body or "No dangling internal symlinks"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_symlink_cycles(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = symlink_cycles(archive)
+            body = "\n".join(" -> ".join(row) for row in rows)
+            QMessageBox.information(self, self._text("archive_symlink_cycles"), body or "No symlink cycles")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_directory_payloads(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = directory_payload_members(archive)
+            body = "\n".join(f"{row['path']}: {row['bytes']} bytes" for row in rows)
+            QMessageBox.information(self, self._text("archive_directory_payloads"), body or "No directory payloads")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_implicit_archive_parents(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = implicit_parent_directories(archive)
+            QMessageBox.information(
+                self,
+                self._text("archive_implicit_parents"),
+                "\n".join(rows) or "All parent directories are explicit",
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_future_archive_dates(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = future_timestamp_members(archive)
+            body = "\n".join(f"{row['timestamp']}: {row['path']}" for row in rows)
+            QMessageBox.information(self, self._text("archive_future_dates"), body or "No future timestamps")
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

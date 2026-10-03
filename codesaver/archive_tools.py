@@ -9,8 +9,9 @@ import stat
 import unicodedata
 import zipfile
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Optional
 
 
 def verify_zip(path: Path) -> dict[str, object]:
@@ -651,3 +652,102 @@ def special_file_members(path: Path) -> list[dict[str, str]]:
             if file_type in special_types:
                 results.append({"path": info.filename, "type": special_types[file_type]})
     return results
+
+
+def _internal_link_target(member: str, target: str) -> Optional[str]:
+    """Resolve a relative ZIP symlink target lexically, rejecting rooted escapes."""
+    target = target.replace("\\", "/")
+    if PurePosixPath(target).is_absolute() or PureWindowsPath(target).drive:
+        return None
+    parts = member.replace("\\", "/").split("/")[:-1]
+    for part in target.split("/"):
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not parts:
+                return None
+            parts.pop()
+        else:
+            parts.append(part)
+    return "/".join(parts)
+
+
+def dangling_symlink_members(path: Path) -> list[dict[str, str]]:
+    """Find relative archive symlinks whose normalized target is absent from the ZIP."""
+    with zipfile.ZipFile(path) as archive:
+        entries = archive.infolist()
+        names = {info.filename.replace("\\", "/").rstrip("/") for info in entries}
+        dangling = []
+        for info in entries:
+            if not stat.S_ISLNK(info.external_attr >> 16):
+                continue
+            target = archive.read(info).decode("utf-8", errors="replace")
+            resolved = _internal_link_target(info.filename, target)
+            if resolved is not None and resolved not in names:
+                dangling.append({"path": info.filename, "target": target, "resolved_path": resolved})
+        return dangling
+
+
+def symlink_cycles(path: Path) -> list[list[str]]:
+    """Find cycles formed by archive symlinks that point to other symlink members."""
+    with zipfile.ZipFile(path) as archive:
+        links = {
+            info.filename.replace("\\", "/").rstrip("/"): _internal_link_target(
+                info.filename, archive.read(info).decode("utf-8", errors="replace")
+            )
+            for info in archive.infolist()
+            if stat.S_ISLNK(info.external_attr >> 16)
+        }
+    found: set[tuple[str, ...]] = set()
+    for start in sorted(links):
+        chain: list[str] = []
+        positions: dict[str, int] = {}
+        current: Optional[str] = start
+        while current in links:
+            if current in positions:
+                cycle = chain[positions[current] :]
+                rotations = [tuple(cycle[index:] + cycle[:index]) for index in range(len(cycle))]
+                found.add(min(rotations))
+                break
+            positions[current] = len(chain)
+            chain.append(current)
+            current = links[current]
+    return [list(cycle) for cycle in sorted(found)]
+
+
+def directory_payload_members(path: Path) -> list[dict[str, object]]:
+    """List explicit ZIP directory records that unexpectedly carry payload bytes."""
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "bytes": info.file_size}
+            for info in archive.infolist()
+            if info.is_dir() and info.file_size > 0
+        ]
+
+
+def implicit_parent_directories(path: Path) -> list[str]:
+    """List parent directory paths implied by members but lacking explicit ZIP entries."""
+    with zipfile.ZipFile(path) as archive:
+        entries = archive.infolist()
+    explicit = {info.filename.replace("\\", "/").rstrip("/") for info in entries if info.is_dir()}
+    missing = set()
+    for info in entries:
+        parts = info.filename.replace("\\", "/").strip("/").split("/")[:-1]
+        for index in range(1, len(parts) + 1):
+            parent = "/".join(parts[:index])
+            if parent not in explicit:
+                missing.add(parent)
+    return sorted(missing)
+
+
+def future_timestamp_members(path: Path, grace_hours: int = 24) -> list[dict[str, str]]:
+    """Find members dated implausibly far in the future, allowing for clock skew."""
+    if grace_hours < 0:
+        raise ValueError("Timestamp grace period cannot be negative")
+    threshold = datetime.now() + timedelta(hours=grace_hours)
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "timestamp": datetime(*info.date_time).isoformat(sep=" ")}
+            for info in archive.infolist()
+            if datetime(*info.date_time) > threshold
+        ]

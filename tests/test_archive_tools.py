@@ -8,12 +8,16 @@ from pathlib import Path
 
 from codesaver.archive_tools import (
     absolute_member_paths,
+    dangling_symlink_members,
+    directory_payload_members,
     duplicate_directory_entries,
     duplicate_member_basenames,
     empty_directory_members,
     extra_field_audit,
     executable_members,
     hidden_members,
+    future_timestamp_members,
+    implicit_parent_directories,
     long_path_components,
     member_type_conflicts,
     mixed_separator_members,
@@ -43,6 +47,7 @@ from codesaver.archive_tools import (
     risky_member_permissions,
     special_file_members,
     symlink_members,
+    symlink_cycles,
     unicode_name_collisions,
     unicode_compatibility_collisions,
     unsafe_symlink_targets,
@@ -69,6 +74,41 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_symlink_and_archive_layout_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "layout-diagnostics.zip"
+            links = {}
+            for name, target in (
+                ("cycle/a", "b"),
+                ("cycle/b", "a"),
+                ("dangling", "missing.txt"),
+                ("valid-link", "future.txt"),
+            ):
+                link = zipfile.ZipInfo(name)
+                link.create_system = 3
+                link.external_attr = (stat.S_IFLNK | 0o777) << 16
+                links[name] = (link, target)
+            directory_data = zipfile.ZipInfo("payload/")
+            directory_data.external_attr = 0x10
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                for link, target in links.values():
+                    archive.writestr(link, target)
+                archive.writestr("cycle/", "")
+                archive.writestr(zipfile.ZipInfo("future.txt", (2099, 1, 2, 0, 0, 0)), "future")
+                archive.writestr("implicit/deep/file.txt", "data")
+                archive.writestr(directory_data, "unexpected")
+
+            self.assertEqual(
+                dangling_symlink_members(archive_path),
+                [{"path": "dangling", "target": "missing.txt", "resolved_path": "missing.txt"}],
+            )
+            self.assertEqual(symlink_cycles(archive_path), [["cycle/a", "cycle/b"]])
+            self.assertEqual(directory_payload_members(archive_path), [{"path": "payload/", "bytes": 10}])
+            self.assertEqual(implicit_parent_directories(archive_path), ["implicit", "implicit/deep"])
+            self.assertEqual(
+                future_timestamp_members(archive_path), [{"path": "future.txt", "timestamp": "2099-01-02 00:00:00"}]
+            )
+
     def test_absolute_unicode_extra_field_permission_and_special_file_reports(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive_path = Path(temporary) / "extended-audits.zip"

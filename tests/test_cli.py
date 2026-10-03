@@ -329,6 +329,61 @@ class CliFeatureTests(unittest.TestCase):
                 run("--archive-special-files", str(archive_path))["members"], [{"path": "pipe", "type": "fifo"}]
             )
 
+    def test_cli_archive_layout_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            backups = Path(temporary) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            archive_path = Path(temporary) / "layout-diagnostics.zip"
+            links = []
+            for name, target in (
+                ("cycle/a", "b"),
+                ("cycle/b", "a"),
+                ("dangling", "missing.txt"),
+                ("valid-link", "future.txt"),
+            ):
+                link = zipfile.ZipInfo(name)
+                link.create_system = 3
+                link.external_attr = (stat.S_IFLNK | 0o777) << 16
+                links.append((link, target))
+            directory_data = zipfile.ZipInfo("payload/")
+            directory_data.external_attr = 0x10
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                for link, target in links:
+                    archive.writestr(link, target)
+                archive.writestr("cycle/", "")
+                archive.writestr(zipfile.ZipInfo("future.txt", (2099, 1, 2, 0, 0, 0)), "future")
+                archive.writestr("implicit/deep/file.txt", "data")
+                archive.writestr(directory_data, "unexpected")
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(temporary) / "layout.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-archive-layout")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            self.assertEqual(run("--archive-dangling-symlinks", str(archive_path))["count"], 1)
+            self.assertEqual(run("--archive-symlink-cycles", str(archive_path))["cycles"], [["cycle/a", "cycle/b"]])
+            self.assertEqual(run("--archive-directory-payloads", str(archive_path))["directories"][0]["bytes"], 10)
+            self.assertEqual(
+                run("--archive-implicit-parents", str(archive_path))["directories"], ["implicit", "implicit/deep"]
+            )
+            self.assertEqual(run("--archive-future-dates", str(archive_path))["members"][0]["path"], "future.txt")
+
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

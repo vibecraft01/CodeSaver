@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.0 and Desktop v1.6.8 — 2026-10-03
+
+- Added five archive layout diagnostics to both applications: dangling symlinks, symlink cycles, directory payloads, implicit parent folders, and future timestamps.
+- Prepared for publication after green cross-platform CI and package builds.
+
 # CodeSaver CLI v1.7.9 and Desktop v1.6.7 — 2026-10-03
 
 - Added five archive audits to CLI and Desktop: absolute paths, Unicode compatibility collisions, ZIP extra fields, risky Unix permissions, and special Unix file types.

@@ -34,10 +34,14 @@ from .archive_tools import (
     archive_timestamp_summary,
     duplicate_member_basenames,
     duplicate_directory_entries,
+    dangling_symlink_members,
+    directory_payload_members,
     empty_directory_members,
     extra_field_audit,
     executable_members,
     hidden_members,
+    future_timestamp_members,
+    implicit_parent_directories,
     long_path_components,
     member_type_conflicts,
     mixed_separator_members,
@@ -61,6 +65,7 @@ from .archive_tools import (
     portable_path_issues,
     risky_member_permissions,
     special_file_members,
+    symlink_cycles,
     symlink_members,
     unicode_name_collisions,
     unicode_compatibility_collisions,
@@ -536,6 +541,17 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         "--archive-risky-permissions", type=Path, metavar="ARCHIVE", help="Find risky Unix permission bits"
     )
     parser.add_argument("--archive-special-files", type=Path, metavar="ARCHIVE", help="Find Unix devices and sockets")
+    parser.add_argument(
+        "--archive-dangling-symlinks", type=Path, metavar="ARCHIVE", help="Find missing internal symlink targets"
+    )
+    parser.add_argument("--archive-symlink-cycles", type=Path, metavar="ARCHIVE", help="Find symlink loops")
+    parser.add_argument("--archive-directory-payloads", type=Path, metavar="ARCHIVE", help="Find folders carrying data")
+    parser.add_argument(
+        "--archive-implicit-parents", type=Path, metavar="ARCHIVE", help="List unrecorded parent folders"
+    )
+    parser.add_argument(
+        "--archive-future-dates", type=Path, metavar="ARCHIVE", help="Find implausible future timestamps"
+    )
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1156,6 +1172,45 @@ def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
             json.dumps(result, ensure_ascii=False, indent=2)
             if args.json
             else "\n".join(f"{item['type']}: {item['path']}" for item in rows) or "No special Unix files"
+        )
+    elif args.archive_dangling_symlinks:
+        rows = dangling_symlink_members(args.archive_dangling_symlinks.expanduser().resolve())
+        result = {"archive": str(args.archive_dangling_symlinks), "symlinks": rows, "count": len(rows)}
+        plain = "\n".join(f"{item['path']} -> {item['target']} (missing: {item['resolved_path']})" for item in rows)
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No dangling internal symlinks"
+        )
+    elif args.archive_symlink_cycles:
+        rows = symlink_cycles(args.archive_symlink_cycles.expanduser().resolve())
+        result = {"archive": str(args.archive_symlink_cycles), "cycles": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(" -> ".join(row) for row in rows) or "No symlink cycles"
+        )
+    elif args.archive_directory_payloads:
+        rows = directory_payload_members(args.archive_directory_payloads.expanduser().resolve())
+        result = {"archive": str(args.archive_directory_payloads), "directories": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(f"{row['path']}: {row['bytes']} bytes" for row in rows) or "No directory payloads"
+        )
+    elif args.archive_implicit_parents:
+        rows = implicit_parent_directories(args.archive_implicit_parents.expanduser().resolve())
+        result = {"archive": str(args.archive_implicit_parents), "directories": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(rows) or "All parent directories are explicit"
+        )
+    elif args.archive_future_dates:
+        rows = future_timestamp_members(args.archive_future_dates.expanduser().resolve())
+        result = {"archive": str(args.archive_future_dates), "members": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(f"{row['timestamp']}: {row['path']}" for row in rows) or "No future timestamps"
         )
     else:
         return False
