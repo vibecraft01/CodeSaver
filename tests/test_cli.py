@@ -212,6 +212,15 @@ class CliFeatureTests(unittest.TestCase):
             directory_with_file_mode = zipfile.ZipInfo("dir-with-file-mode/")
             directory_with_file_mode.create_system = 3
             directory_with_file_mode.external_attr = (stat.S_IFREG | 0o644) << 16
+            risky_mode = zipfile.ZipInfo("risky.sh")
+            risky_mode.create_system = 3
+            risky_mode.external_attr = (stat.S_IFREG | stat.S_ISUID | 0o002 | 0o755) << 16
+            fifo = zipfile.ZipInfo("pipe")
+            fifo.create_system = 3
+            fifo.external_attr = (stat.S_IFIFO | 0o600) << 16
+            duplicate_extra = zipfile.ZipInfo("extra.bin")
+            extra_field = b"\xfe\xca\x01\x00x"
+            duplicate_extra.extra = extra_field + extra_field
             long_component = "x" * 256 + ".txt"
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr("CON.txt", "reserved")
@@ -233,6 +242,12 @@ class CliFeatureTests(unittest.TestCase):
                 archive.writestr(long_component, "long")
                 archive.writestr("report-\u202eexe.txt", "bidi")
                 archive.writestr("unknown.bin", "codec")
+                archive.writestr("C:\\drive.txt", "drive")
+                archive.writestr("compat/K.txt", "ascii")
+                archive.writestr("compat/K.txt", "kelvin")
+                archive.writestr(risky_mode, "script")
+                archive.writestr(fifo, "")
+                archive.writestr(duplicate_extra, "extra")
             zip_bytes = archive_path.read_bytes()
             zip_bytes = bytearray(zip_bytes.replace(b"win/legacy.txt", b"win\\legacy.txt"))
             for signature, name_length_offset, name_start_offset, method_offset in (
@@ -271,7 +286,7 @@ class CliFeatureTests(unittest.TestCase):
 
             portability = run("--archive-portability-audit", str(archive_path))
             self.assertIn("reserved-device-name", portability["issues"][0]["issues"])
-            self.assertEqual(len(run("--archive-unicode-collisions", str(archive_path))["collisions"]), 1)
+            self.assertEqual(len(run("--archive-unicode-collisions", str(archive_path))["collisions"]), 2)
             depth = run("--archive-depth-report", str(archive_path))
             self.assertEqual(depth["max_depth"], 3)
             self.assertEqual(run("--archive-symlink-audit", str(archive_path))["count"], 1)
@@ -279,9 +294,9 @@ class CliFeatureTests(unittest.TestCase):
             self.assertGreater(run("--archive-path-lengths", str(archive_path))["maximum_characters"], 0)
             self.assertEqual(run("--archive-root-layout", str(archive_path))["root_folders"]["root"], 1)
             self.assertEqual(run("--archive-comments", str(archive_path))["archive_comment"], "")
-            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 15)
+            self.assertEqual(run("--archive-crc-inventory", str(archive_path))["count"], 21)
             self.assertIn("1980", run("--archive-timestamps", str(archive_path))["files_by_year"])
-            self.assertEqual(len(run("--archive-duplicate-basenames", str(archive_path))["groups"]), 1)
+            self.assertEqual(len(run("--archive-duplicate-basenames", str(archive_path))["groups"]), 2)
             self.assertEqual(run("--archive-hidden-members", str(archive_path))["members"], ["config/.env"])
             self.assertEqual(run("--archive-backslash-paths", str(archive_path))["members"], ["win\\legacy.txt"])
             self.assertEqual(run("--archive-executables", str(archive_path))["members"][0]["path"], "bin/tool")
@@ -297,6 +312,19 @@ class CliFeatureTests(unittest.TestCase):
             self.assertEqual(run("--archive-duplicate-directories", str(archive_path))["directories"][0]["path"], "dup")
             self.assertEqual(run("--archive-unsupported-compression", str(archive_path))["members"][0]["method_id"], 99)
             self.assertEqual(len(run("--archive-type-conflicts", str(archive_path))["conflicts"]), 2)
+            self.assertEqual(run("--archive-absolute-paths", str(archive_path))["members"], ["C:/drive.txt"])
+            self.assertEqual(
+                run("--archive-unicode-compatibility", str(archive_path))["collisions"],
+                [["cafe\u0301.txt", "café.txt"], ["compat/K.txt", "compat/K.txt"]],
+            )
+            self.assertEqual(
+                run("--archive-extra-fields", str(archive_path))["issues"][0]["duplicate_field_ids"], [0xCAFE]
+            )
+            risky_members = run("--archive-risky-permissions", str(archive_path))["members"]
+            self.assertIn("world-writable", risky_members[0]["risks"])
+            self.assertEqual(
+                run("--archive-special-files", str(archive_path))["members"], [{"path": "pipe", "type": "fifo"}]
+            )
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

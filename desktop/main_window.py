@@ -42,10 +42,12 @@ from PyQt5.QtCore import QUrl
 from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
+    absolute_member_paths,
     archive_comment_report,
     archive_crc_inventory,
     duplicate_member_basenames,
     empty_directory_members,
+    extra_field_audit,
     executable_members,
     hidden_members,
     mixed_separator_members,
@@ -73,8 +75,11 @@ from codesaver.archive_tools import (
     members_in_date_range,
     members_larger_than,
     portable_path_issues,
+    risky_member_permissions,
+    special_file_members,
     symlink_members,
     unicode_name_collisions,
+    unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
 )
@@ -540,6 +545,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_duplicate_directories": "Find repeated folder records",
     "archive_unsupported_compression": "Find unsupported compression methods",
     "archive_type_conflicts": "Audit file/folder metadata conflicts",
+    "archive_absolute_paths": "Find rooted archive paths",
+    "archive_unicode_compatibility": "Find Unicode compatibility collisions",
+    "archive_extra_fields": "Find duplicate ZIP extra fields",
+    "archive_risky_permissions": "Find risky Unix permissions",
+    "archive_special_files": "Find Unix devices and sockets",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -719,6 +729,11 @@ TEXT["ru"].update(
         "archive_duplicate_directories": "Найти повторные записи папок",
         "archive_unsupported_compression": "Найти неподдерживаемые методы сжатия",
         "archive_type_conflicts": "Проверить конфликты типа файла и папки",
+        "archive_absolute_paths": "Найти абсолютные пути в архиве",
+        "archive_unicode_compatibility": "Найти Unicode NFKC-коллизии",
+        "archive_extra_fields": "Найти повторяющиеся поля ZIP",
+        "archive_risky_permissions": "Найти опасные Unix-права",
+        "archive_special_files": "Найти устройства и сокеты Unix",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1141,6 +1156,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_duplicate_directories"), self._show_duplicate_directory_entries)
         tools_menu.addAction(self._text("archive_unsupported_compression"), self._show_unsupported_compression)
         tools_menu.addAction(self._text("archive_type_conflicts"), self._show_member_type_conflicts)
+        tools_menu.addAction(self._text("archive_absolute_paths"), self._show_absolute_archive_paths)
+        tools_menu.addAction(self._text("archive_unicode_compatibility"), self._show_unicode_compatibility_collisions)
+        tools_menu.addAction(self._text("archive_extra_fields"), self._show_archive_extra_field_issues)
+        tools_menu.addAction(self._text("archive_risky_permissions"), self._show_risky_archive_permissions)
+        tools_menu.addAction(self._text("archive_special_files"), self._show_special_archive_files)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2526,6 +2546,68 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, self._text("archive_type_conflicts"), body or "No file/directory type conflicts"
             )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_absolute_archive_paths(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = absolute_member_paths(archive)
+            QMessageBox.information(
+                self,
+                self._text("archive_absolute_paths"),
+                "\n".join(rows) or "No rooted archive paths",
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_unicode_compatibility_collisions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = unicode_compatibility_collisions(archive)
+            body = "\n".join(" <> ".join(group) for group in rows)
+            QMessageBox.information(
+                self, self._text("archive_unicode_compatibility"), body or "No Unicode NFKC collisions"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_extra_field_issues(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = extra_field_audit(archive)
+            body = "\n".join(f"{item['path']}: duplicate IDs={item['duplicate_field_ids']}" for item in rows)
+            QMessageBox.information(self, self._text("archive_extra_fields"), body or "No extra-field issues")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_risky_archive_permissions(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = risky_member_permissions(archive)
+            body = "\n".join(f"{item['mode_octal']} {item['path']}: {', '.join(item['risks'])}" for item in rows)
+            QMessageBox.information(
+                self, self._text("archive_risky_permissions"), body or "No risky Unix permission bits"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_special_archive_files(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = special_file_members(archive)
+            body = "\n".join(f"{item['type']}: {item['path']}" for item in rows)
+            QMessageBox.information(self, self._text("archive_special_files"), body or "No Unix special files")
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

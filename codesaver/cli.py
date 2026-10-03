@@ -26,6 +26,7 @@ from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
 from .archive_tools import (
+    absolute_member_paths,
     archive_comment_report,
     archive_crc_inventory,
     archive_path_length_report,
@@ -34,6 +35,7 @@ from .archive_tools import (
     duplicate_member_basenames,
     duplicate_directory_entries,
     empty_directory_members,
+    extra_field_audit,
     executable_members,
     hidden_members,
     long_path_components,
@@ -57,8 +59,11 @@ from .archive_tools import (
     members_in_date_range,
     members_larger_than,
     portable_path_issues,
+    risky_member_permissions,
+    special_file_members,
     symlink_members,
     unicode_name_collisions,
+    unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
 )
@@ -517,6 +522,20 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--archive-type-conflicts", type=Path, metavar="ARCHIVE", help="Find file/directory metadata mismatches"
     )
+    parser.add_argument("--archive-absolute-paths", type=Path, metavar="ARCHIVE", help="Find rooted member paths")
+    parser.add_argument(
+        "--archive-unicode-compatibility",
+        type=Path,
+        metavar="ARCHIVE",
+        help="Find Unicode NFKC path collisions",
+    )
+    parser.add_argument(
+        "--archive-extra-fields", type=Path, metavar="ARCHIVE", help="Find duplicate ZIP extra-field records"
+    )
+    parser.add_argument(
+        "--archive-risky-permissions", type=Path, metavar="ARCHIVE", help="Find risky Unix permission bits"
+    )
+    parser.add_argument("--archive-special-files", type=Path, metavar="ARCHIVE", help="Find Unix devices and sockets")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1103,6 +1122,40 @@ def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
             json.dumps(result, ensure_ascii=False, indent=2)
             if args.json
             else plain or "No file/directory type conflicts"
+        )
+    elif args.archive_absolute_paths:
+        rows = absolute_member_paths(args.archive_absolute_paths.expanduser().resolve())
+        result = {"archive": str(args.archive_absolute_paths), "members": rows, "count": len(rows)}
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else "\n".join(rows) or "No rooted paths")
+    elif args.archive_unicode_compatibility:
+        rows = unicode_compatibility_collisions(args.archive_unicode_compatibility.expanduser().resolve())
+        result = {"archive": str(args.archive_unicode_compatibility), "collisions": rows, "count": len(rows)}
+        plain = "\n".join(" <> ".join(group) for group in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No NFKC collisions")
+    elif args.archive_extra_fields:
+        rows = extra_field_audit(args.archive_extra_fields.expanduser().resolve())
+        result = {"archive": str(args.archive_extra_fields), "issues": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(str(item) for item in rows) or "No extra-field issues"
+        )
+    elif args.archive_risky_permissions:
+        rows = risky_member_permissions(args.archive_risky_permissions.expanduser().resolve())
+        result = {"archive": str(args.archive_risky_permissions), "members": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(f"{item['mode_octal']} {item['path']}: {', '.join(item['risks'])}" for item in rows)
+            or "No risky permission bits"
+        )
+    elif args.archive_special_files:
+        rows = special_file_members(args.archive_special_files.expanduser().resolve())
+        result = {"archive": str(args.archive_special_files), "members": rows, "count": len(rows)}
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else "\n".join(f"{item['type']}: {item['path']}" for item in rows) or "No special Unix files"
         )
     else:
         return False

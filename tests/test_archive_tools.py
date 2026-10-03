@@ -7,9 +7,11 @@ import warnings
 from pathlib import Path
 
 from codesaver.archive_tools import (
+    absolute_member_paths,
     duplicate_directory_entries,
     duplicate_member_basenames,
     empty_directory_members,
+    extra_field_audit,
     executable_members,
     hidden_members,
     long_path_components,
@@ -38,8 +40,11 @@ from codesaver.archive_tools import (
     members_in_date_range,
     members_larger_than,
     portable_path_issues,
+    risky_member_permissions,
+    special_file_members,
     symlink_members,
     unicode_name_collisions,
+    unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
 )
@@ -64,6 +69,36 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_absolute_unicode_extra_field_permission_and_special_file_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "extended-audits.zip"
+            risky = zipfile.ZipInfo("risky.sh")
+            risky.create_system = 3
+            risky.external_attr = (stat.S_IFREG | stat.S_ISUID | 0o002 | 0o755) << 16
+            fifo = zipfile.ZipInfo("pipe")
+            fifo.create_system = 3
+            fifo.external_attr = (stat.S_IFIFO | 0o600) << 16
+            duplicated_extra = zipfile.ZipInfo("extra.bin")
+            field = b"\xfe\xca\x01\x00x"
+            duplicated_extra.extra = field + field
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("/rooted.txt", "root")
+                archive.writestr("C:\\drive.txt", "drive")
+                archive.writestr("compat/K.txt", "ascii")
+                archive.writestr("compat/K.txt", "kelvin")
+                archive.writestr(risky, "script")
+                archive.writestr(fifo, "")
+                archive.writestr(duplicated_extra, "data")
+
+            self.assertEqual(absolute_member_paths(archive_path), ["/rooted.txt", "C:/drive.txt"])
+            self.assertEqual(unicode_compatibility_collisions(archive_path), [["compat/K.txt", "compat/K.txt"]])
+            self.assertEqual(extra_field_audit(archive_path)[0]["duplicate_field_ids"], [0xCAFE])
+            self.assertEqual(
+                risky_member_permissions(archive_path),
+                [{"path": "risky.sh", "mode_octal": "4757", "risks": ["setuid", "world-writable"]}],
+            )
+            self.assertEqual(special_file_members(archive_path), [{"path": "pipe", "type": "fifo"}])
+
     def test_unicode_component_duplicate_directory_compression_and_type_reports(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive_path = Path(temporary) / "metadata.zip"

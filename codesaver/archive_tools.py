@@ -571,3 +571,83 @@ def member_type_conflicts(path: Path) -> list[dict[str, str]]:
                     }
                 )
     return results
+
+
+def absolute_member_paths(path: Path) -> list[str]:
+    """Find ZIP members whose names are rooted or carry a Windows drive prefix."""
+    with zipfile.ZipFile(path) as archive:
+        return sorted(
+            info.filename
+            for info in archive.infolist()
+            if PurePosixPath(info.filename.replace("\\", "/")).is_absolute()
+            or PureWindowsPath(info.filename).is_absolute()
+            or bool(PureWindowsPath(info.filename).drive)
+        )
+
+
+def unicode_compatibility_collisions(path: Path) -> list[list[str]]:
+    """Find distinct member paths that collide after Unicode NFKC and case folding."""
+    grouped: dict[str, set[str]] = defaultdict(set)
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            normalized = unicodedata.normalize("NFKC", info.filename).casefold()
+            grouped[normalized].add(info.filename)
+    return [sorted(names) for _, names in sorted(grouped.items()) if len(names) > 1]
+
+
+def extra_field_audit(path: Path) -> list[dict[str, object]]:
+    """Report repeated ZIP extra-field identifiers without unpacking member data."""
+    issues = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            offset = 0
+            identifiers: list[int] = []
+            while offset < len(info.extra):
+                if len(info.extra) - offset < 4:
+                    break
+                field_id = int.from_bytes(info.extra[offset : offset + 2], "little")
+                field_length = int.from_bytes(info.extra[offset + 2 : offset + 4], "little")
+                offset += 4
+                if field_length > len(info.extra) - offset:
+                    break
+                identifiers.append(field_id)
+                offset += field_length
+            duplicates = sorted({item for item in identifiers if identifiers.count(item) > 1})
+            if duplicates:
+                issues.append({"path": info.filename, "duplicate_field_ids": duplicates})
+    return issues
+
+
+def risky_member_permissions(path: Path) -> list[dict[str, object]]:
+    """Find Unix members with setuid, setgid, sticky, or world-writable permission bits."""
+    risky_bits = (
+        (stat.S_ISUID, "setuid"),
+        (stat.S_ISGID, "setgid"),
+        (stat.S_ISVTX, "sticky"),
+        (0o002, "world-writable"),
+    )
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            mode = stat.S_IMODE(info.external_attr >> 16)
+            flags = [name for bit, name in risky_bits if mode & bit]
+            if flags:
+                results.append({"path": info.filename, "mode_octal": format(mode, "04o"), "risks": flags})
+    return results
+
+
+def special_file_members(path: Path) -> list[dict[str, str]]:
+    """List archive entries marked as Unix devices, FIFOs, or sockets."""
+    special_types = {
+        stat.S_IFIFO: "fifo",
+        stat.S_IFCHR: "character-device",
+        stat.S_IFBLK: "block-device",
+        stat.S_IFSOCK: "socket",
+    }
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            file_type = stat.S_IFMT(info.external_attr >> 16)
+            if file_type in special_types:
+                results.append({"path": info.filename, "type": special_types[file_type]})
+    return results
