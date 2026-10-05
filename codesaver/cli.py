@@ -27,11 +27,13 @@ from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
 from .archive_tools import (
     absolute_member_paths,
+    aes_encrypted_members,
     archive_comment_report,
     archive_crc_inventory,
     archive_path_length_report,
     archive_root_layout,
     archive_timestamp_summary,
+    directory_storage_summary,
     duplicate_member_basenames,
     duplicate_directory_entries,
     dangling_symlink_members,
@@ -42,6 +44,7 @@ from .archive_tools import (
     hidden_members,
     future_timestamp_members,
     implicit_parent_directories,
+    legacy_encoded_names,
     long_path_components,
     member_type_conflicts,
     mixed_separator_members,
@@ -65,12 +68,14 @@ from .archive_tools import (
     portable_path_issues,
     risky_member_permissions,
     special_file_members,
+    signature_mismatches,
     symlink_cycles,
     symlink_members,
     unicode_name_collisions,
     unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
+    zip_preamble_report,
 )
 from .core import BackupError, BackupManager
 from .lang import SUPPORTED_LANGUAGES, detect_language, normalize_language, translate
@@ -552,6 +557,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--archive-future-dates", type=Path, metavar="ARCHIVE", help="Find implausible future timestamps"
     )
+    parser.add_argument(
+        "--archive-signature-audit", type=Path, metavar="ARCHIVE", help="Compare known signatures to extensions"
+    )
+    parser.add_argument("--archive-legacy-names", type=Path, metavar="ARCHIVE", help="Find names without UTF-8 flag")
+    parser.add_argument("--archive-aes-encryption", type=Path, metavar="ARCHIVE", help="Inspect WinZip AES metadata")
+    parser.add_argument("--archive-directory-sizes", type=Path, metavar="ARCHIVE", help="Summarize bytes by folder")
+    parser.add_argument("--archive-preamble", type=Path, metavar="ARCHIVE", help="Inspect data before ZIP payload")
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1212,6 +1224,36 @@ def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
             if args.json
             else "\n".join(f"{row['timestamp']}: {row['path']}" for row in rows) or "No future timestamps"
         )
+    elif args.archive_signature_audit:
+        rows = signature_mismatches(args.archive_signature_audit.expanduser().resolve())
+        result = {"archive": str(args.archive_signature_audit), "mismatches": rows, "count": len(rows)}
+        plain = "\n".join(
+            f"{row['path']}: {row['detected_format']} signature, extension {row['extension']}" for row in rows
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No known signature mismatches"
+        )
+    elif args.archive_legacy_names:
+        rows = legacy_encoded_names(args.archive_legacy_names.expanduser().resolve())
+        result = {"archive": str(args.archive_legacy_names), "members": rows, "count": len(rows)}
+        plain = "\n".join(f"{row['encoding']}: {row['path']}" for row in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No legacy-encoded names")
+    elif args.archive_aes_encryption:
+        rows = aes_encrypted_members(args.archive_aes_encryption.expanduser().resolve())
+        result = {"archive": str(args.archive_aes_encryption), "members": rows, "count": len(rows)}
+        plain = "\n".join(f"{row['path']}: AES strength {row['strength']}, vendor {row['vendor']}" for row in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No AES-encrypted members")
+    elif args.archive_directory_sizes:
+        rows = directory_storage_summary(args.archive_directory_sizes.expanduser().resolve())
+        result = {"archive": str(args.archive_directory_sizes), "directories": rows, "count": len(rows)}
+        plain = "\n".join(
+            f"{row['path']}: {row['files']} files, {row['uncompressed_bytes']} unpacked bytes" for row in rows
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No files")
+    elif args.archive_preamble:
+        result = zip_preamble_report(args.archive_preamble.expanduser().resolve())
+        plain = f"Preamble: {result['preamble_bytes']} bytes; signature={result['signature_hex']}"
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain)
     else:
         return False
     return True

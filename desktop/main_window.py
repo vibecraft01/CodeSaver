@@ -43,6 +43,8 @@ from codesaver.core import BackupError
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
     absolute_member_paths,
+    aes_encrypted_members,
+    directory_storage_summary,
     dangling_symlink_members,
     directory_payload_members,
     archive_comment_report,
@@ -53,6 +55,7 @@ from codesaver.archive_tools import (
     executable_members,
     hidden_members,
     future_timestamp_members,
+    legacy_encoded_names,
     implicit_parent_directories,
     mixed_separator_members,
     case_colliding_paths,
@@ -81,12 +84,14 @@ from codesaver.archive_tools import (
     portable_path_issues,
     risky_member_permissions,
     special_file_members,
+    signature_mismatches,
     symlink_cycles,
     symlink_members,
     unicode_name_collisions,
     unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
+    zip_preamble_report,
 )
 
 from .backup_manager import DesktopBackupManager
@@ -560,6 +565,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_directory_payloads": "Find folders carrying unexpected data",
     "archive_implicit_parents": "List implied parent folders",
     "archive_future_dates": "Find implausible future timestamps",
+    "archive_signature_audit": "Check known file signatures",
+    "archive_legacy_names": "Find non-UTF-8 archive names",
+    "archive_aes_encryption": "Inspect AES encryption metadata",
+    "archive_directory_sizes": "Summarize storage by folder",
+    "archive_preamble": "Inspect ZIP executable preamble",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -749,6 +759,11 @@ TEXT["ru"].update(
         "archive_directory_payloads": "Найти папки с неожиданными данными",
         "archive_implicit_parents": "Показать неявные родительские папки",
         "archive_future_dates": "Найти подозрительные будущие даты",
+        "archive_signature_audit": "Проверить сигнатуры форматов файлов",
+        "archive_legacy_names": "Найти имена без UTF-8",
+        "archive_aes_encryption": "Показать параметры AES-шифрования",
+        "archive_directory_sizes": "Сводка размеров по папкам",
+        "archive_preamble": "Проверить префикс ZIP-архива",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1181,6 +1196,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_directory_payloads"), self._show_directory_payloads)
         tools_menu.addAction(self._text("archive_implicit_parents"), self._show_implicit_archive_parents)
         tools_menu.addAction(self._text("archive_future_dates"), self._show_future_archive_dates)
+        tools_menu.addAction(self._text("archive_signature_audit"), self._show_archive_signature_mismatches)
+        tools_menu.addAction(self._text("archive_legacy_names"), self._show_legacy_archive_names)
+        tools_menu.addAction(self._text("archive_aes_encryption"), self._show_aes_archive_metadata)
+        tools_menu.addAction(self._text("archive_directory_sizes"), self._show_archive_directory_sizes)
+        tools_menu.addAction(self._text("archive_preamble"), self._show_archive_preamble)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2688,6 +2708,69 @@ class MainWindow(QMainWindow):
             rows = future_timestamp_members(archive)
             body = "\n".join(f"{row['timestamp']}: {row['path']}" for row in rows)
             QMessageBox.information(self, self._text("archive_future_dates"), body or "No future timestamps")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_signature_mismatches(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = signature_mismatches(archive)
+            body = "\n".join(
+                f"{row['path']}: {row['detected_format']} signature, extension {row['extension']}" for row in rows
+            )
+            QMessageBox.information(
+                self, self._text("archive_signature_audit"), body or "No known signature mismatches"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_legacy_archive_names(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = legacy_encoded_names(archive)
+            body = "\n".join(f"{row['encoding']}: {row['path']}" for row in rows)
+            QMessageBox.information(self, self._text("archive_legacy_names"), body or "No legacy-encoded names")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_aes_archive_metadata(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = aes_encrypted_members(archive)
+            body = "\n".join(f"{row['path']}: AES strength {row['strength']}, vendor {row['vendor']}" for row in rows)
+            QMessageBox.information(self, self._text("archive_aes_encryption"), body or "No AES-encrypted members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_directory_sizes(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = directory_storage_summary(archive)
+            body = "\n".join(
+                f"{row['path']}: {row['files']} files, {row['uncompressed_bytes']} unpacked bytes, "
+                f"{row['compressed_bytes']} stored bytes"
+                for row in rows
+            )
+            QMessageBox.information(self, self._text("archive_directory_sizes"), body or "No files")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_archive_preamble(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = zip_preamble_report(archive)
+            body = f"Preamble: {report['preamble_bytes']} bytes; signature={report['signature_hex']}"
+            QMessageBox.information(self, self._text("archive_preamble"), body)
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

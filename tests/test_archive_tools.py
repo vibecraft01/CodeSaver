@@ -8,9 +8,11 @@ from pathlib import Path
 
 from codesaver.archive_tools import (
     absolute_member_paths,
+    aes_encrypted_members,
     dangling_symlink_members,
     directory_payload_members,
     duplicate_directory_entries,
+    directory_storage_summary,
     duplicate_member_basenames,
     empty_directory_members,
     extra_field_audit,
@@ -43,15 +45,18 @@ from codesaver.archive_tools import (
     member_permissions,
     members_in_date_range,
     members_larger_than,
+    legacy_encoded_names,
     portable_path_issues,
     risky_member_permissions,
     special_file_members,
     symlink_members,
     symlink_cycles,
+    signature_mismatches,
     unicode_name_collisions,
     unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
+    zip_preamble_report,
 )
 
 
@@ -74,6 +79,50 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_signature_encoding_encryption_directory_and_preamble_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive_path = Path(temporary) / "audit.zip"
+            aes = zipfile.ZipInfo("encrypted.bin")
+            aes.extra = b"\x01\x99\x07\x00\x02\x00AE\x03\x08\x00"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("misleading.txt", b"%PDF-1.7 document")
+                archive.writestr("document.pdf", b"%PDF-1.7 document")
+                archive.writestr("nested/member.bin", b"payload")
+                archive.writestr("café.txt", b"legacy name")
+                archive.writestr(aes, b"encrypted")
+            data = bytearray(archive_path.read_bytes())
+            encoded_name = "café.txt".encode("utf-8")
+            for signature, name_length_offset, name_start_offset, flag_offset in (
+                (b"PK\x03\x04", 26, 30, 6),
+                (b"PK\x01\x02", 28, 46, 8),
+            ):
+                cursor = data.find(signature)
+                while cursor >= 0:
+                    name_length = int.from_bytes(
+                        data[cursor + name_length_offset : cursor + name_length_offset + 2], "little"
+                    )
+                    name_start = cursor + name_start_offset
+                    if data[name_start : name_start + name_length] == encoded_name:
+                        flags = int.from_bytes(data[cursor + flag_offset : cursor + flag_offset + 2], "little")
+                        data[cursor + flag_offset : cursor + flag_offset + 2] = (flags & ~0x800).to_bytes(2, "little")
+                    cursor = data.find(signature, cursor + len(signature))
+            archive_path.write_bytes(data)
+
+            self.assertEqual(
+                signature_mismatches(archive_path),
+                [{"path": "misleading.txt", "extension": ".txt", "detected_format": "PDF"}],
+            )
+            self.assertEqual(legacy_encoded_names(archive_path)[0]["encoding"], "CP437")
+            self.assertEqual(aes_encrypted_members(archive_path)[0]["strength"], 3)
+            nested = {row["path"]: row for row in directory_storage_summary(archive_path)}["nested"]
+            self.assertEqual((nested["files"], nested["uncompressed_bytes"]), (1, 7))
+
+            sfx_path = Path(temporary) / "launcher.zip"
+            sfx_path.write_bytes(b"MZ\x90\x00CodeSaver launcher\r\n" + archive_path.read_bytes())
+            preamble = zip_preamble_report(sfx_path)
+            self.assertTrue(preamble["has_preamble"])
+            self.assertEqual(preamble["preamble_bytes"], 24)
+
     def test_symlink_and_archive_layout_diagnostics(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive_path = Path(temporary) / "layout-diagnostics.zip"

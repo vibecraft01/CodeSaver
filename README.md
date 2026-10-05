@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.8.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.0) | Python 3.9+ | Updated 2026-10-03 |
-| CodeSaver Desktop | [**1.6.8**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.8) | Python 3.10+ with PyQt5 | Updated 2026-10-03 |
+| CodeSaver CLI | [**1.8.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.1) | Python 3.9+ | Updated 2026-10-05 |
+| CodeSaver Desktop | [**1.6.9**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.9) | Python 3.10+ with PyQt5 | Updated 2026-10-05 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -118,6 +118,11 @@ The star count was refreshed on 28 September 2026; the other figures above remai
 - Detect explicit directory entries containing unexpected payload data.
 - List implied parent folders not explicitly recorded in the ZIP.
 - Flag member timestamps implausibly far in the future (with clock-skew tolerance).
+- Compare recognized file signatures with their filename extensions.
+- Find legacy-encoded archive names missing the UTF-8 flag.
+- Inspect WinZip AES encryption parameters stored in member metadata.
+- Summarize compressed and uncompressed sizes for each archive folder.
+- Detect self-extracting ZIPs and report their prepended data signature.
 - Cloud credentials are read from `CODESAVER_CLOUD_TOKEN` or a custom token variable.
 - Desktop duplicate-file detection using SHA-256.
 - Desktop archive-integrity report export.
@@ -147,13 +152,14 @@ The star count was refreshed on 28 September 2026; the other figures above remai
 
 ### Desktop version
 
-CodeSaver Desktop `1.6.8` is a graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.6.9` is a graphical alternative for developers who prefer a visual workflow. It includes:
 - Windows filename portability, Unicode collision, path-depth, symlink-target, and file/folder conflict audits.
 - Long member-path search, root-folder layout, ZIP comments, per-file CRC-32 inventory, and timestamp summary.
 - Duplicate-basename, hidden-file, backslash-path, executable-mode, and empty-directory archive checks.
 - Unicode control-character, long component, duplicate directory-record, unsupported compression, and file-type metadata audits.
 - Absolute path, Unicode NFKC collision, ZIP extra-field, risky Unix permission, and special-file audits.
 - Dangling-symlink, symlink-cycle, directory-payload, implicit-parent, and future-timestamp reports.
+- File-signature, legacy-name, AES-metadata, per-folder storage, and ZIP-preamble reports.
 - Duplicate-path, case-collision, encryption, compression-method, and high-expansion-ratio audits for selected archives.
 - Duplicate-content scanning, symlink inspection, Unix permission review, timestamp filtering, and large-member search for selected ZIPs.
 - Selected-archive CRC verification, glob-based member filtering, and safe single-file extraction.
@@ -398,13 +404,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.6.8 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.8):
+The current stable binary is available in the [Desktop v1.6.9 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.6.9):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.8.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.0) is available.
+The stable [CLI v1.8.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.1) is available.
 
 ### Build from source
 

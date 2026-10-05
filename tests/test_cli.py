@@ -349,6 +349,8 @@ class CliFeatureTests(unittest.TestCase):
                 links.append((link, target))
             directory_data = zipfile.ZipInfo("payload/")
             directory_data.external_attr = 0x10
+            aes = zipfile.ZipInfo("encrypted.bin")
+            aes.extra = b"\x01\x99\x07\x00\x02\x00AE\x03\x08\x00"
             with zipfile.ZipFile(archive_path, "w") as archive:
                 for link, target in links:
                     archive.writestr(link, target)
@@ -356,6 +358,29 @@ class CliFeatureTests(unittest.TestCase):
                 archive.writestr(zipfile.ZipInfo("future.txt", (2099, 1, 2, 0, 0, 0)), "future")
                 archive.writestr("implicit/deep/file.txt", "data")
                 archive.writestr(directory_data, "unexpected")
+                archive.writestr("misleading.txt", b"%PDF-1.7 document")
+                archive.writestr("nested/member.bin", b"payload")
+                archive.writestr("café.txt", b"legacy name")
+                archive.writestr(aes, b"encrypted")
+            raw_archive = bytearray(archive_path.read_bytes())
+            encoded_name = "café.txt".encode("utf-8")
+            for signature, name_length_offset, name_start_offset, flag_offset in (
+                (b"PK\x03\x04", 26, 30, 6),
+                (b"PK\x01\x02", 28, 46, 8),
+            ):
+                cursor = raw_archive.find(signature)
+                while cursor >= 0:
+                    name_length = int.from_bytes(
+                        raw_archive[cursor + name_length_offset : cursor + name_length_offset + 2], "little"
+                    )
+                    name_start = cursor + name_start_offset
+                    if raw_archive[name_start : name_start + name_length] == encoded_name:
+                        flags = int.from_bytes(raw_archive[cursor + flag_offset : cursor + flag_offset + 2], "little")
+                        raw_archive[cursor + flag_offset : cursor + flag_offset + 2] = (flags & ~0x800).to_bytes(
+                            2, "little"
+                        )
+                    cursor = raw_archive.find(signature, cursor + len(signature))
+            archive_path.write_bytes(raw_archive)
             common = [
                 "--project-dir",
                 str(root),
@@ -365,6 +390,8 @@ class CliFeatureTests(unittest.TestCase):
                 str(Path(temporary) / "layout.log"),
                 "--json",
             ]
+            sfx_path = Path(temporary) / "launcher.zip"
+            sfx_path.write_bytes(b"MZ\x90\x00CodeSaver launcher\r\n" + archive_path.read_bytes())
 
             def run(*arguments):
                 output = io.StringIO()
@@ -380,9 +407,18 @@ class CliFeatureTests(unittest.TestCase):
             self.assertEqual(run("--archive-symlink-cycles", str(archive_path))["cycles"], [["cycle/a", "cycle/b"]])
             self.assertEqual(run("--archive-directory-payloads", str(archive_path))["directories"][0]["bytes"], 10)
             self.assertEqual(
-                run("--archive-implicit-parents", str(archive_path))["directories"], ["implicit", "implicit/deep"]
+                run("--archive-implicit-parents", str(archive_path))["directories"],
+                ["implicit", "implicit/deep", "nested"],
             )
             self.assertEqual(run("--archive-future-dates", str(archive_path))["members"][0]["path"], "future.txt")
+            self.assertEqual(
+                run("--archive-signature-audit", str(archive_path))["mismatches"][0]["detected_format"], "PDF"
+            )
+            self.assertEqual(run("--archive-legacy-names", str(archive_path))["members"][0]["encoding"], "CP437")
+            self.assertEqual(run("--archive-aes-encryption", str(archive_path))["members"][0]["strength"], 3)
+            directories = run("--archive-directory-sizes", str(archive_path))["directories"]
+            self.assertEqual(next(row for row in directories if row["path"] == "nested")["files"], 1)
+            self.assertEqual(run("--archive-preamble", str(sfx_path))["preamble_bytes"], 24)
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

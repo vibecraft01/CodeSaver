@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.1 and Desktop v1.6.9 — 2026-10-05
+
+- Added five archive inspection reports to both applications: signature/extension mismatches, legacy names, AES metadata, folder storage totals, and ZIP preambles.
+- Prepared for publication after green cross-platform CI and package builds.
+
 # CodeSaver CLI v1.8.0 and Desktop v1.6.8 — 2026-10-03
 
 - Added five archive layout diagnostics to both applications: dangling symlinks, symlink cycles, directory payloads, implicit parent folders, and future timestamps.

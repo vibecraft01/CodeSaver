@@ -751,3 +751,106 @@ def future_timestamp_members(path: Path, grace_hours: int = 24) -> list[dict[str
             for info in archive.infolist()
             if datetime(*info.date_time) > threshold
         ]
+
+
+def signature_mismatches(path: Path) -> list[dict[str, str]]:
+    """Find known file signatures whose format does not match the member extension."""
+    signatures = (
+        (b"%PDF-", "PDF", {".pdf"}),
+        (b"\x89PNG\r\n\x1a\n", "PNG", {".png"}),
+        (b"\xff\xd8\xff", "JPEG", {".jpg", ".jpeg"}),
+        (b"GIF87a", "GIF", {".gif"}),
+        (b"GIF89a", "GIF", {".gif"}),
+        (b"PK\x03\x04", "ZIP", {".zip", ".docx", ".xlsx", ".pptx", ".jar", ".epub"}),
+        (b"PK\x05\x06", "ZIP", {".zip"}),
+        (b"\x1f\x8b", "GZIP", {".gz", ".tgz"}),
+        (b"\x7fELF", "ELF", {".elf", ".so", ".bin"}),
+        (b"BM", "BMP", {".bmp"}),
+        (b"MZ", "Windows executable", {".exe", ".dll", ".sys"}),
+    )
+    mismatches = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            extension = PurePosixPath(info.filename).suffix.casefold()
+            if not extension:
+                continue
+            with archive.open(info) as member:
+                prefix = member.read(16)
+            detected = next((label for magic, label, _ in signatures if prefix.startswith(magic)), None)
+            allowed = next((extensions for _, label, extensions in signatures if label == detected), set())
+            if detected and extension not in allowed:
+                mismatches.append({"path": info.filename, "extension": extension, "detected_format": detected})
+    return mismatches
+
+
+def legacy_encoded_names(path: Path) -> list[dict[str, str]]:
+    """List non-ASCII ZIP names without the UTF-8 general-purpose flag."""
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "encoding": "CP437"}
+            for info in archive.infolist()
+            if not info.flag_bits & 0x800 and any(ord(character) > 127 for character in info.filename)
+        ]
+
+
+def aes_encrypted_members(path: Path) -> list[dict[str, object]]:
+    """Read WinZip AES extra-field metadata from encrypted archive members."""
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            offset = 0
+            while offset + 4 <= len(info.extra):
+                field_id = int.from_bytes(info.extra[offset : offset + 2], "little")
+                field_length = int.from_bytes(info.extra[offset + 2 : offset + 4], "little")
+                offset += 4
+                if field_length > len(info.extra) - offset:
+                    break
+                data = info.extra[offset : offset + field_length]
+                offset += field_length
+                if field_id == 0x9901 and len(data) >= 7:
+                    results.append(
+                        {
+                            "path": info.filename,
+                            "vendor_version": int.from_bytes(data[:2], "little"),
+                            "vendor": data[2:4].decode("ascii", errors="replace"),
+                            "strength": data[4],
+                            "compression_method": int.from_bytes(data[5:7], "little"),
+                        }
+                    )
+                    break
+    return results
+
+
+def directory_storage_summary(path: Path) -> list[dict[str, object]]:
+    """Aggregate file counts and compressed/uncompressed sizes for each archive folder."""
+    totals: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"files": 0, "uncompressed_bytes": 0, "compressed_bytes": 0}
+    )
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            parts = info.filename.replace("\\", "/").strip("/").split("/")
+            directories = ["/".join(parts[:index]) for index in range(1, len(parts))]
+            directories.append(".")
+            for directory in set(directories):
+                totals[directory]["files"] += 1
+                totals[directory]["uncompressed_bytes"] += info.file_size
+                totals[directory]["compressed_bytes"] += info.compress_size
+    return [{"path": name, **values} for name, values in sorted(totals.items())]
+
+
+def zip_preamble_report(path: Path) -> dict[str, object]:
+    """Describe any self-extracting or other data prepended before the first ZIP member."""
+    with zipfile.ZipFile(path) as archive:
+        first_header = min((info.header_offset for info in archive.infolist()), default=archive.start_dir)
+    with Path(path).open("rb") as stream:
+        prefix = stream.read(first_header)
+    return {
+        "archive": str(path),
+        "has_preamble": bool(prefix),
+        "preamble_bytes": len(prefix),
+        "signature_hex": prefix[:16].hex(),
+    }
