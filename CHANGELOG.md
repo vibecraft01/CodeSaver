@@ -4,6 +4,10 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.2 and Desktop v1.6.10 — 2026-10-09
+
+- Added nested-ZIP discovery, ZIP64 metadata inspection, data-descriptor listing, trailing-data detection, and central-directory signature inspection to both applications.
+
 # CodeSaver CLI v1.8.1 and Desktop v1.6.9 — 2026-10-05
 
 - Added five archive inspection reports to both applications: signature/extension mismatches, legacy names, AES metadata, folder storage totals, and ZIP preambles.

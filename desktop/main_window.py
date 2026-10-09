@@ -44,7 +44,10 @@ from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
     absolute_member_paths,
     aes_encrypted_members,
+    archive_trailing_data_report,
+    central_directory_signature_report,
     directory_storage_summary,
+    data_descriptor_members,
     dangling_symlink_members,
     directory_payload_members,
     archive_comment_report,
@@ -79,6 +82,7 @@ from codesaver.archive_tools import (
     unsupported_compression_members,
     member_compression,
     member_permissions,
+    nested_archive_members,
     members_in_date_range,
     members_larger_than,
     portable_path_issues,
@@ -91,6 +95,7 @@ from codesaver.archive_tools import (
     unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
+    zip64_member_report,
     zip_preamble_report,
 )
 
@@ -570,6 +575,11 @@ _DESKTOP_1_2_1_TEXT = {
     "archive_aes_encryption": "Inspect AES encryption metadata",
     "archive_directory_sizes": "Summarize storage by folder",
     "archive_preamble": "Inspect ZIP executable preamble",
+    "archive_nested_zips": "Find ZIP files inside members",
+    "archive_zip64": "Inspect ZIP64 member metadata",
+    "archive_data_descriptors": "List data-descriptor members",
+    "archive_trailing_data": "Check data after ZIP end record",
+    "archive_central_signature": "Inspect central-directory signature",
     "search_archive_prompt": "File name or path contains:",
     "compare_archives": "Compare two archives",
     "compare_archives_prompt": "Select the second archive",
@@ -764,6 +774,11 @@ TEXT["ru"].update(
         "archive_aes_encryption": "Показать параметры AES-шифрования",
         "archive_directory_sizes": "Сводка размеров по папкам",
         "archive_preamble": "Проверить префикс ZIP-архива",
+        "archive_nested_zips": "Найти ZIP-файлы внутри архива",
+        "archive_zip64": "Проверить метаданные ZIP64",
+        "archive_data_descriptors": "Показать записи с data descriptor",
+        "archive_trailing_data": "Проверить данные после конца ZIP",
+        "archive_central_signature": "Проверить подпись центрального каталога",
         "search_archive_prompt": "Часть имени или пути файла:",
         "compare_archives": "Сравнить два архива",
         "compare_archives_prompt": "Выберите второй архив",
@@ -1201,6 +1216,11 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("archive_aes_encryption"), self._show_aes_archive_metadata)
         tools_menu.addAction(self._text("archive_directory_sizes"), self._show_archive_directory_sizes)
         tools_menu.addAction(self._text("archive_preamble"), self._show_archive_preamble)
+        tools_menu.addAction(self._text("archive_nested_zips"), self._show_nested_archives)
+        tools_menu.addAction(self._text("archive_zip64"), self._show_zip64_members)
+        tools_menu.addAction(self._text("archive_data_descriptors"), self._show_data_descriptor_members)
+        tools_menu.addAction(self._text("archive_trailing_data"), self._show_trailing_archive_data)
+        tools_menu.addAction(self._text("archive_central_signature"), self._show_central_directory_signature)
         tools_menu.addAction(self._text("compare_archives"), self._compare_two_archives)
         tools_menu.addAction(self._text("export_archive_hashes"), self._export_archive_hashes)
         tools_menu.addAction(self._text("unpacked_size"), self._show_unpacked_size)
@@ -2771,6 +2791,62 @@ class MainWindow(QMainWindow):
             report = zip_preamble_report(archive)
             body = f"Preamble: {report['preamble_bytes']} bytes; signature={report['signature_hex']}"
             QMessageBox.information(self, self._text("archive_preamble"), body)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_nested_archives(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = nested_archive_members(archive)
+            body = "\n".join(f"{row['path']}: ZIP signature {row['signature']}" for row in rows)
+            QMessageBox.information(self, self._text("archive_nested_zips"), body or "No nested ZIP members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_zip64_members(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = zip64_member_report(archive)
+            body = "\n".join(f"{row['path']}: ZIP64 metadata, version {row['extract_version']}" for row in rows)
+            QMessageBox.information(self, self._text("archive_zip64"), body or "No ZIP64 members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_data_descriptor_members(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            rows = data_descriptor_members(archive)
+            body = "\n".join(row["path"] for row in rows)
+            QMessageBox.information(self, self._text("archive_data_descriptors"), body or "No data-descriptor members")
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_trailing_archive_data(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = archive_trailing_data_report(archive)
+            QMessageBox.information(
+                self, self._text("archive_trailing_data"), f"Trailing bytes: {report['trailing_bytes']}"
+            )
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+
+    def _show_central_directory_signature(self) -> None:
+        archive = self._selected_archive()
+        if not archive:
+            return
+        try:
+            report = central_directory_signature_report(archive)
+            body = f"Signature present: {report['present']} ({report['signature_bytes']} bytes)"
+            QMessageBox.information(self, self._text("archive_central_signature"), body)
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
 

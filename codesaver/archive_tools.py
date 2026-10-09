@@ -854,3 +854,186 @@ def zip_preamble_report(path: Path) -> dict[str, object]:
         "preamble_bytes": len(prefix),
         "signature_hex": prefix[:16].hex(),
     }
+
+
+def nested_archive_members(path: Path) -> list[dict[str, str]]:
+    """Find members that begin with a recognized ZIP record signature."""
+    signatures = {b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"}
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            try:
+                with archive.open(info) as member:
+                    signature = member.read(4)
+            except (RuntimeError, NotImplementedError, zipfile.BadZipFile):
+                continue
+            if signature in signatures:
+                results.append({"path": info.filename, "signature": signature.hex()})
+    return results
+
+
+def zip64_member_report(path: Path) -> list[dict[str, object]]:
+    """List members carrying ZIP64 extra fields or requiring ZIP64 versions."""
+    results = []
+    with zipfile.ZipFile(path) as archive:
+        for info in archive.infolist():
+            offset = 0
+            has_zip64_extra = False
+            while offset + 4 <= len(info.extra):
+                field_id = int.from_bytes(info.extra[offset : offset + 2], "little")
+                field_length = int.from_bytes(info.extra[offset + 2 : offset + 4], "little")
+                offset += 4
+                if field_length > len(info.extra) - offset:
+                    break
+                if field_id == 0x0001:
+                    has_zip64_extra = True
+                    break
+                offset += field_length
+            if has_zip64_extra or info.extract_version >= 45:
+                results.append(
+                    {
+                        "path": info.filename,
+                        "zip64_extra": has_zip64_extra,
+                        "extract_version": info.extract_version,
+                    }
+                )
+    return results
+
+
+def data_descriptor_members(path: Path) -> list[dict[str, object]]:
+    """List members whose sizes and CRC are stored after their compressed data."""
+    with zipfile.ZipFile(path) as archive:
+        return [
+            {"path": info.filename, "compression_method": info.compress_type}
+            for info in archive.infolist()
+            if not info.is_dir() and info.flag_bits & 0x08
+        ]
+
+
+def _end_record_candidates(stream, file_size: int):
+    """Yield possible ZIP EOCD records from the end, with bounded memory use."""
+    block_size = 1024 * 1024
+    search_end = file_size
+    while search_end > 0:
+        start = max(0, search_end - block_size)
+        stream.seek(start)
+        block = stream.read(search_end - start)
+        cursor = block.rfind(b"PK\x05\x06")
+        while cursor >= 0:
+            absolute = start + cursor
+            stream.seek(absolute)
+            record = stream.read(22)
+            if len(record) == 22 and record[:4] == b"PK\x05\x06":
+                comment_length = int.from_bytes(record[20:22], "little")
+                if absolute + 22 + comment_length <= file_size:
+                    yield absolute, record
+            cursor = block.rfind(b"PK\x05\x06", 0, cursor)
+        if start == 0:
+            break
+        search_end = start + 3
+
+
+def _central_directory_layout(stream, eocd_offset: int, record: bytes) -> tuple[int, int, int, int]:
+    """Validate the central-directory records and return (count, start, end, signature size)."""
+    total_entries = int.from_bytes(record[10:12], "little")
+    directory_size = int.from_bytes(record[12:16], "little")
+    directory_offset = int.from_bytes(record[16:20], "little")
+    directory_end_record = eocd_offset
+
+    if total_entries == 0xFFFF or directory_size == 0xFFFFFFFF or directory_offset == 0xFFFFFFFF:
+        locator_offset = eocd_offset - 20
+        stream.seek(locator_offset)
+        locator = stream.read(20)
+        if len(locator) != 20 or locator[:4] != b"PK\x06\x07":
+            raise zipfile.BadZipFile("ZIP64 locator not found")
+        stream.seek(locator_offset - 12)
+        end_record_size_field = stream.read(12)
+        if len(end_record_size_field) != 12 or end_record_size_field[:4] != b"PK\x06\x06":
+            raise zipfile.BadZipFile("ZIP64 end record not found")
+        zip64_size = int.from_bytes(end_record_size_field[4:12], "little")
+        zip64_offset = locator_offset - 12 - zip64_size
+        stream.seek(zip64_offset)
+        zip64_record = stream.read(56)
+        if len(zip64_record) != 56 or zip64_record[:4] != b"PK\x06\x06":
+            raise zipfile.BadZipFile("Invalid ZIP64 end record")
+        total_entries = int.from_bytes(zip64_record[32:40], "little")
+        directory_size = int.from_bytes(zip64_record[40:48], "little")
+        directory_offset = int.from_bytes(zip64_record[48:56], "little")
+        directory_end_record = zip64_offset
+
+    prefix_size = directory_end_record - directory_size - directory_offset
+    if prefix_size < 0:
+        raise zipfile.BadZipFile("Invalid central directory offset")
+    cursor = directory_offset + prefix_size
+    directory_start = cursor
+    directory_end = directory_start + directory_size
+    for _ in range(total_entries):
+        stream.seek(cursor)
+        header = stream.read(46)
+        if len(header) != 46 or header[:4] != b"PK\x01\x02":
+            raise zipfile.BadZipFile("Invalid central directory record")
+        name_length = int.from_bytes(header[28:30], "little")
+        extra_length = int.from_bytes(header[30:32], "little")
+        comment_length = int.from_bytes(header[32:34], "little")
+        cursor += 46 + name_length + extra_length + comment_length
+        if cursor > directory_end:
+            raise zipfile.BadZipFile("Truncated central directory")
+
+    signature_size = 0
+    if cursor < directory_end:
+        stream.seek(cursor)
+        signature = stream.read(6)
+        if len(signature) != 6 or signature[:4] != b"PK\x05\x05":
+            raise zipfile.BadZipFile("Unexpected data in central directory")
+        signature_size = int.from_bytes(signature[4:6], "little")
+        if cursor + 6 + signature_size != directory_end:
+            raise zipfile.BadZipFile("Invalid central-directory signature length")
+    elif cursor != directory_end:
+        raise zipfile.BadZipFile("Invalid central directory size")
+    return total_entries, directory_start, directory_end, signature_size
+
+
+def archive_trailing_data_report(path: Path) -> dict[str, object]:
+    """Report bytes appended after a valid ZIP end record, without loading the archive whole."""
+    path = Path(path)
+    file_size = path.stat().st_size
+    with path.open("rb") as stream:
+        valid_record = None
+        for eocd_offset, record in _end_record_candidates(stream, file_size):
+            try:
+                _central_directory_layout(stream, eocd_offset, record)
+                valid_record = eocd_offset, record
+                break
+            except zipfile.BadZipFile:
+                continue
+    if valid_record is None:
+        raise zipfile.BadZipFile("Valid ZIP end record not found")
+    eocd_offset, record = valid_record
+    comment_size = int.from_bytes(record[20:22], "little")
+    trailing_bytes = max(0, file_size - eocd_offset - 22 - comment_size)
+    return {
+        "archive": str(path),
+        "trailing_bytes": trailing_bytes,
+        "has_trailing_data": trailing_bytes > 0,
+    }
+
+
+def central_directory_signature_report(path: Path) -> dict[str, object]:
+    """Detect the optional digital-signature record following ZIP central entries."""
+    path = Path(path)
+    file_size = path.stat().st_size
+    with path.open("rb") as stream:
+        for eocd_offset, record in _end_record_candidates(stream, file_size):
+            try:
+                _, _, _, signature_size = _central_directory_layout(stream, eocd_offset, record)
+                return {
+                    "archive": str(path),
+                    "present": signature_size > 0,
+                    "signature_bytes": signature_size,
+                    "zip64": int.from_bytes(record[10:12], "little") == 0xFFFF,
+                }
+            except zipfile.BadZipFile:
+                continue
+    raise zipfile.BadZipFile("Valid ZIP end record not found")

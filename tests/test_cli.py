@@ -419,6 +419,11 @@ class CliFeatureTests(unittest.TestCase):
             directories = run("--archive-directory-sizes", str(archive_path))["directories"]
             self.assertEqual(next(row for row in directories if row["path"] == "nested")["files"], 1)
             self.assertEqual(run("--archive-preamble", str(sfx_path))["preamble_bytes"], 24)
+            self.assertEqual(run("--archive-nested-zips", str(archive_path))["count"], 0)
+            self.assertEqual(run("--archive-zip64", str(archive_path))["count"], 0)
+            self.assertEqual(run("--archive-data-descriptors", str(archive_path))["count"], 0)
+            self.assertEqual(run("--archive-trailing-data", str(archive_path))["trailing_bytes"], 0)
+            self.assertFalse(run("--archive-central-signature", str(archive_path))["present"])
 
     def test_safety_and_maintenance_reports(self):
         with tempfile.TemporaryDirectory() as tmp:

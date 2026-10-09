@@ -1,3 +1,4 @@
+import io
 import tempfile
 import stat
 import unittest
@@ -9,6 +10,9 @@ from pathlib import Path
 from codesaver.archive_tools import (
     absolute_member_paths,
     aes_encrypted_members,
+    archive_trailing_data_report,
+    central_directory_signature_report,
+    data_descriptor_members,
     dangling_symlink_members,
     directory_payload_members,
     duplicate_directory_entries,
@@ -45,6 +49,7 @@ from codesaver.archive_tools import (
     member_permissions,
     members_in_date_range,
     members_larger_than,
+    nested_archive_members,
     legacy_encoded_names,
     portable_path_issues,
     risky_member_permissions,
@@ -57,6 +62,7 @@ from codesaver.archive_tools import (
     unsafe_symlink_targets,
     verify_zip,
     zip_preamble_report,
+    zip64_member_report,
 )
 
 
@@ -79,6 +85,58 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class ArchiveToolsTests(unittest.TestCase):
+    def test_nested_zip64_descriptors_trailing_data_and_central_signature(self):
+        class NonSeekableBuffer(io.BytesIO):
+            def seekable(self):
+                return False
+
+            def seek(self, *args):
+                raise io.UnsupportedOperation("non-seekable")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            inner_stream = io.BytesIO()
+            with zipfile.ZipFile(inner_stream, "w") as inner:
+                inner.writestr("inside.txt", "hello")
+
+            base = root / "base.zip"
+            zip64_info = zipfile.ZipInfo("large.bin")
+            zip64_info.create_version = 45
+            zip64_info.extract_version = 45
+            zip64_info.extra = b"\x01\x00\x10\x00" + bytes(16)
+            with zipfile.ZipFile(base, "w") as archive:
+                archive.writestr("embedded.dat", inner_stream.getvalue())
+                archive.writestr(zip64_info, b"zip64-metadata")
+
+            self.assertEqual(nested_archive_members(base)[0]["path"], "embedded.dat")
+            self.assertEqual(zip64_member_report(base)[0]["path"], "large.bin")
+            self.assertEqual(data_descriptor_members(base), [])
+            self.assertEqual(archive_trailing_data_report(base)["trailing_bytes"], 0)
+            self.assertFalse(central_directory_signature_report(base)["present"])
+
+            appended = root / "appended.zip"
+            trailing_payload = b"TAIL" * 20_000
+            appended.write_bytes(base.read_bytes() + trailing_payload)
+            self.assertEqual(archive_trailing_data_report(appended)["trailing_bytes"], len(trailing_payload))
+
+            signed = root / "signed.zip"
+            raw = bytearray(base.read_bytes())
+            eocd = raw.rfind(b"PK\x05\x06")
+            signature_record = b"PK\x05\x05\x03\x00SIG"
+            raw[eocd:eocd] = signature_record
+            adjusted_eocd = eocd + len(signature_record)
+            central_size = int.from_bytes(raw[adjusted_eocd + 12 : adjusted_eocd + 16], "little")
+            raw[adjusted_eocd + 12 : adjusted_eocd + 16] = (central_size + len(signature_record)).to_bytes(4, "little")
+            signed.write_bytes(raw)
+            self.assertEqual(central_directory_signature_report(signed)["signature_bytes"], 3)
+
+            descriptor_stream = NonSeekableBuffer()
+            with zipfile.ZipFile(descriptor_stream, "w") as archive:
+                archive.writestr("streamed.txt", b"written without seeking")
+            descriptor_path = root / "descriptor.zip"
+            descriptor_path.write_bytes(descriptor_stream.getvalue())
+            self.assertEqual(data_descriptor_members(descriptor_path)[0]["path"], "streamed.txt")
+
     def test_signature_encoding_encryption_directory_and_preamble_reports(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive_path = Path(temporary) / "audit.zip"

@@ -28,12 +28,15 @@ from .cloud import upload_archive
 from .archive_tools import (
     absolute_member_paths,
     aes_encrypted_members,
+    archive_trailing_data_report,
+    central_directory_signature_report,
     archive_comment_report,
     archive_crc_inventory,
     archive_path_length_report,
     archive_root_layout,
     archive_timestamp_summary,
     directory_storage_summary,
+    data_descriptor_members,
     duplicate_member_basenames,
     duplicate_directory_entries,
     dangling_symlink_members,
@@ -63,6 +66,7 @@ from .archive_tools import (
     archive_depth_report,
     member_compression,
     member_permissions,
+    nested_archive_members,
     members_in_date_range,
     members_larger_than,
     portable_path_issues,
@@ -75,6 +79,7 @@ from .archive_tools import (
     unicode_compatibility_collisions,
     unsafe_symlink_targets,
     verify_zip,
+    zip64_member_report,
     zip_preamble_report,
 )
 from .core import BackupError, BackupManager
@@ -564,6 +569,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--archive-aes-encryption", type=Path, metavar="ARCHIVE", help="Inspect WinZip AES metadata")
     parser.add_argument("--archive-directory-sizes", type=Path, metavar="ARCHIVE", help="Summarize bytes by folder")
     parser.add_argument("--archive-preamble", type=Path, metavar="ARCHIVE", help="Inspect data before ZIP payload")
+    parser.add_argument("--archive-nested-zips", type=Path, metavar="ARCHIVE", help="Find ZIP files inside members")
+    parser.add_argument("--archive-zip64", type=Path, metavar="ARCHIVE", help="List ZIP64 member metadata")
+    parser.add_argument("--archive-data-descriptors", type=Path, metavar="ARCHIVE", help="List data-descriptor members")
+    parser.add_argument(
+        "--archive-trailing-data", type=Path, metavar="ARCHIVE", help="Check bytes after ZIP end record"
+    )
+    parser.add_argument(
+        "--archive-central-signature", type=Path, metavar="ARCHIVE", help="Check central-directory signature record"
+    )
     parser.add_argument(
         "--restore-files",
         nargs="+",
@@ -1253,6 +1267,29 @@ def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
     elif args.archive_preamble:
         result = zip_preamble_report(args.archive_preamble.expanduser().resolve())
         plain = f"Preamble: {result['preamble_bytes']} bytes; signature={result['signature_hex']}"
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain)
+    elif args.archive_nested_zips:
+        rows = nested_archive_members(args.archive_nested_zips.expanduser().resolve())
+        result = {"archive": str(args.archive_nested_zips), "members": rows, "count": len(rows)}
+        plain = "\n".join(f"{row['path']}: ZIP signature {row['signature']}" for row in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No nested ZIP members")
+    elif args.archive_zip64:
+        rows = zip64_member_report(args.archive_zip64.expanduser().resolve())
+        result = {"archive": str(args.archive_zip64), "members": rows, "count": len(rows)}
+        plain = "\n".join(f"{row['path']}: ZIP64 metadata, version {row['extract_version']}" for row in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No ZIP64 members")
+    elif args.archive_data_descriptors:
+        rows = data_descriptor_members(args.archive_data_descriptors.expanduser().resolve())
+        result = {"archive": str(args.archive_data_descriptors), "members": rows, "count": len(rows)}
+        plain = "\n".join(row["path"] for row in rows)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain or "No data-descriptor members")
+    elif args.archive_trailing_data:
+        result = archive_trailing_data_report(args.archive_trailing_data.expanduser().resolve())
+        plain = f"Trailing bytes: {result['trailing_bytes']}"
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain)
+    elif args.archive_central_signature:
+        result = central_directory_signature_report(args.archive_central_signature.expanduser().resolve())
+        plain = f"Central-directory signature present: {result['present']} ({result['signature_bytes']} bytes)"
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else plain)
     else:
         return False
