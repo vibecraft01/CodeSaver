@@ -1,6 +1,6 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.6.10.
+Desktop application source for CodeSaver Desktop 1.7.0.
 
 The current desktop tools include:
 
@@ -16,6 +16,9 @@ The current desktop tools include:
 - inspecting the unpacked size of an archive;
 - previewing retention cleanup before removing old backups;
 - copying an archive manifest as JSON.
+- filtering the archive list by a 7-, 30-, or 90-day date window;
+- previewing a selected archive's date, size, and file count;
+- switching between compact and comfortable archive-list density.
 
 The application uses the shared CodeSaver backup engine and PyQt5. Build and
 platform packaging instructions are available in the repository documentation.

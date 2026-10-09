@@ -36,6 +36,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QComboBox,
 )
 from PyQt5.QtCore import QUrl
 
@@ -999,6 +1000,33 @@ TEXT["ru"].update(
     }
 )
 
+TEXT["en"].update(
+    {
+        "workspace_actions": "Workspace actions",
+        "comfortable_rows": "Compact archive rows",
+        "date_all": "Any date",
+        "date_7_days": "Last 7 days",
+        "date_30_days": "Last 30 days",
+        "date_90_days": "Last 90 days",
+        "select_archive_details": "Select an archive to see its details",
+        "archive_details_summary": "{name}  •  {date}  •  {size}  •  {members} files",
+        "archive_details_unreadable": "{name}  •  Could not read archive details",
+    }
+)
+TEXT["ru"].update(
+    {
+        "workspace_actions": "Действия с проектом",
+        "comfortable_rows": "Компактные строки архива",
+        "date_all": "За всё время",
+        "date_7_days": "Последние 7 дней",
+        "date_30_days": "Последние 30 дней",
+        "date_90_days": "Последние 90 дней",
+        "select_archive_details": "Выберите архив, чтобы увидеть подробности",
+        "archive_details_summary": "{name}  •  {date}  •  {size}  •  файлов: {members}",
+        "archive_details_unreadable": "{name}  •  Не удалось прочитать архив",
+    }
+)
+
 
 class BackupWorker(QThread):
     progress = pyqtSignal(int, int, int, int)
@@ -1085,12 +1113,20 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         self.setWindowTitle(self._text("title"))
+        self.setMinimumSize(760, 520)
+        self.resize(1120, 760)
         central = QWidget()
         layout = QVBoxLayout(central)
+        layout.setContentsMargins(22, 18, 22, 16)
+        layout.setSpacing(12)
         project_frame = QFrame()
+        project_frame.setObjectName("projectCard")
         project_layout = QVBoxLayout(project_frame)
+        project_layout.setContentsMargins(16, 14, 16, 14)
+        project_layout.setSpacing(7)
         header = QHBoxLayout()
         self.project_header = QLabel()
+        self.project_header.setObjectName("projectHeader")
         header.addWidget(self.project_header)
         header.addStretch()
         self.open_button = QPushButton(self._text("open"))
@@ -1098,13 +1134,9 @@ class MainWindow(QMainWindow):
         header.addWidget(self.open_button)
         self.open_backups_button = QPushButton(self._text("open_backups"))
         self.open_backups_button.clicked.connect(self._open_backup_folder)
-        header.addWidget(self.open_backups_button)
         self.recent_button = QPushButton(self._text("recent"))
         self.recent_button.setMenu(QMenu(self.recent_button))
         header.addWidget(self.recent_button)
-        self.refresh_button = QPushButton(self._text("refresh"))
-        self.refresh_button.clicked.connect(self._refresh_backups)
-        header.addWidget(self.refresh_button)
         project_layout.addLayout(header)
         self.path_label = QLabel(self._text("path", path="—"))
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -1396,30 +1428,57 @@ class MainWindow(QMainWindow):
         self.cleanup_button.clicked.connect(self._cleanup_old_backups)
         self.export_report_button = QPushButton(self._text("export_report"))
         self.export_report_button.clicked.connect(self._export_report)
+        self.backup_button.setObjectName("primaryAction")
         actions.addWidget(self.backup_button)
         actions.addWidget(self.restore_button)
         actions.addWidget(self.verify_button)
-        actions.addWidget(self.verify_all_button)
-        actions.addWidget(self.compare_button)
-        actions.addWidget(self.export_compare_button)
-        actions.addWidget(self.cleanup_button)
-        actions.addWidget(self.export_report_button)
-        actions.addWidget(self.developer_button)
-        actions.addWidget(self.audit_button)
-        actions.addWidget(self.export_dashboard_button)
-        actions.addWidget(self.copy_dashboard_button)
-        actions.addWidget(self.git_changes_button)
-        actions.addWidget(self.refresh_project_button)
-        actions.addWidget(self.autosave_pause_button)
+        self.refresh_button = QPushButton(self._text("refresh"))
+        self.refresh_button.clicked.connect(self._refresh_backups)
+        actions.addWidget(self.refresh_button)
         actions.addWidget(self.project_tools_button)
         actions.addStretch()
         actions.addWidget(self.settings_button)
         layout.addLayout(actions)
 
+        workspace_menu = tools_menu.addMenu(self._text("workspace_actions"))
+        for label, callback in (
+            ("open_backups", self._open_backup_folder),
+            ("verify_all", self._verify_all),
+            ("compare", self._compare_selected),
+            ("export_compare", self._export_compare_selected),
+            ("cleanup", self._cleanup_old_backups),
+            ("export_report", self._export_report),
+            ("developer_dashboard", self._show_developer_dashboard),
+            ("project_audit", self._show_developer_dashboard),
+            ("export_dashboard", self._export_dashboard),
+            ("copy_dashboard", self._copy_dashboard),
+            ("open_git_changes", self._open_git_changes),
+            ("refresh_project", self._refresh_project_info),
+            ("autosave_pause", self._toggle_autosave_pause),
+        ):
+            workspace_menu.addAction(self._text(label), callback)
+        density_action = tools_menu.addAction(self._text("comfortable_rows"))
+        density_action.setCheckable(True)
+        density_action.setChecked(True)
+        density_action.toggled.connect(
+            lambda compact: self.table.setStyleSheet(
+                "QTableWidget::item { padding: 2px; }" if compact else "QTableWidget::item { padding: 9px; }"
+            )
+        )
+
+        filter_row = QHBoxLayout()
         self.archive_search = QLineEdit()
         self.archive_search.setPlaceholderText(self._text("search_archives"))
         self.archive_search.textChanged.connect(self._refresh_backups)
-        layout.addWidget(self.archive_search)
+        filter_row.addWidget(self.archive_search, 1)
+        self.date_filter = QComboBox()
+        self.date_filter.addItem(self._text("date_all"), 0)
+        self.date_filter.addItem(self._text("date_7_days"), 7)
+        self.date_filter.addItem(self._text("date_30_days"), 30)
+        self.date_filter.addItem(self._text("date_90_days"), 90)
+        self.date_filter.currentIndexChanged.connect(self._refresh_backups)
+        filter_row.addWidget(self.date_filter)
+        layout.addLayout(filter_row)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -1429,7 +1488,11 @@ class MainWindow(QMainWindow):
         self.table.cellDoubleClicked.connect(lambda _row, _column: self._restore_selected())
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_archive_menu)
+        self.table.itemSelectionChanged.connect(self._update_archive_details)
         layout.addWidget(self.table, 1)
+        self.archive_details_label = QLabel(self._text("select_archive_details"))
+        self.archive_details_label.setObjectName("archiveDetails")
+        layout.addWidget(self.archive_details_label)
 
         self.backup_shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
         self.backup_shortcut.activated.connect(self._start_backup)
@@ -1498,6 +1561,11 @@ class MainWindow(QMainWindow):
         self._update_autosave_status()
         self.drop_hint.setText(self._text("drop_project"))
         self.archive_search.setPlaceholderText(self._text("search_archives"))
+        if hasattr(self, "date_filter"):
+            for index, key in enumerate(("date_all", "date_7_days", "date_30_days", "date_90_days")):
+                self.date_filter.setItemText(index, self._text(key))
+        if hasattr(self, "archive_details_label"):
+            self._update_archive_details()
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
 
     def _setup_tray(self) -> None:
@@ -1511,16 +1579,23 @@ class MainWindow(QMainWindow):
         theme = detect_system_theme() if self.settings.theme == "system" else self.settings.theme
         colors = theme_colors(theme, self.settings.accent_color)
         stylesheet = (
-            "QMainWindow,QWidget{{background:{background};color:{text};}}"
-            "QFrame{{border:1px solid {border};border-radius:6px;}}"
+            "QMainWindow,QWidget{{background:{background};color:{text};font-size:10pt;}}"
+            "QFrame{{border:1px solid {border};border-radius:12px;}}"
+            "QFrame#projectCard{{background:{panel};border:1px solid {border};border-radius:14px;}}"
+            "QLabel#projectHeader{{font-size:15pt;font-weight:700;}}"
             "QPushButton{{background:{button};color:{text};border:1px solid {border};"
-            "padding:8px 14px;border-radius:5px;}}"
+            "padding:9px 15px;border-radius:8px;}}"
             "QPushButton:hover{{background:{panel};border-color:{accent};}}"
-            "QTableWidget{{background:{panel};color:{text};gridline-color:{border};border:1px solid {border};}}"
-            "QHeaderView::section{{background:{button};color:{text};padding:6px;border:0;}}"
-            "QProgressBar{{border:1px solid {border};border-radius:4px;text-align:center;}}"
+            "QPushButton#primaryAction{{background:{accent};color:#ffffff;border:0;font-weight:600;}}"
+            "QPushButton#primaryAction:hover{{background:{button};border:1px solid {accent};}}"
+            "QTableWidget{{background:{panel};alternate-background-color:{button};color:{text};"
+            "gridline-color:{border};border:1px solid {border};border-radius:10px;"
+            "selection-background-color:{accent};}}"
+            "QHeaderView::section{{background:{button};color:{text};padding:10px;border:0;font-weight:600;}}"
+            "QProgressBar{{border:1px solid {border};border-radius:6px;text-align:center;min-height:12px;}}"
             "QProgressBar::chunk{{background:{accent};}}"
             "QLineEdit,QSpinBox,QComboBox{{background:{panel};color:{text};border:1px solid {border};padding:4px;}}"
+            "QLabel#archiveDetails{{padding:8px 12px;border:1px solid {border};border-radius:8px;}}"
             "QMenu{{background:{panel};color:{text};border:1px solid {border};}}"
         ).format(**colors)
         self.setStyleSheet(stylesheet)
@@ -1664,16 +1739,44 @@ class MainWindow(QMainWindow):
             self.backup_stats_label.setText(self._text("backup_stats", count=count, size=format_bytes(total_size)))
             archives = all_archives
             archives = [item for item in archives if not query or query in item[0].name.lower()]
+            age_days = self.date_filter.currentData()
+            if age_days:
+                cutoff = time.time() - int(age_days) * 86400
+                archives = [item for item in archives if item[0].stat().st_mtime >= cutoff]
             self.statusBar().showMessage(self._text("search_results", shown=len(archives), total=len(all_archives)))
-            for row, (path, date, size) in enumerate(archives):
+            for row, (path, archive_date, size) in enumerate(archives):
                 self.table.insertRow(row)
                 item = QTableWidgetItem(path.name)
                 item.setData(Qt.UserRole, str(path))
                 self.table.setItem(row, 0, item)
-                self.table.setItem(row, 1, QTableWidgetItem(date))
+                self.table.setItem(row, 1, QTableWidgetItem(archive_date))
                 self.table.setItem(row, 2, QTableWidgetItem(size))
+            self._update_archive_details()
         except OSError as exc:
             self._show_error(str(exc))
+
+    def _update_archive_details(self) -> None:
+        if not hasattr(self, "archive_details_label"):
+            return
+        row = self.table.currentRow() if hasattr(self, "table") else -1
+        if row < 0 or not self.table.item(row, 0):
+            self.archive_details_label.setText(self._text("select_archive_details"))
+            return
+        archive = Path(self.table.item(row, 0).data(Qt.UserRole))
+        try:
+            with zipfile.ZipFile(archive) as bundle:
+                members = sum(not entry.is_dir() for entry in bundle.infolist())
+            self.archive_details_label.setText(
+                self._text(
+                    "archive_details_summary",
+                    name=archive.name,
+                    date=datetime.fromtimestamp(archive.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    size=format_bytes(archive.stat().st_size),
+                    members=members,
+                )
+            )
+        except (OSError, zipfile.BadZipFile):
+            self.archive_details_label.setText(self._text("archive_details_unreadable", name=archive.name))
 
     def _show_archive_menu(self, position) -> None:
         row = self.table.rowAt(position.y())
@@ -4903,7 +5006,10 @@ class MainWindow(QMainWindow):
         body = (
             "No files"
             if not dates
-            else f"Oldest: {datetime.fromtimestamp(min(dates)).isoformat()}\nNewest: {datetime.fromtimestamp(max(dates)).isoformat()}"
+            else (
+                f"Oldest: {datetime.fromtimestamp(min(dates)).isoformat()}\n"
+                f"Newest: {datetime.fromtimestamp(max(dates)).isoformat()}"
+            )
         )
         QMessageBox.information(self, "Project file date range", body)
 

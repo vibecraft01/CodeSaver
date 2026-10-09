@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.3 and Desktop v1.7.0 — 2026-10-09
+
+- CLI: compare the two newest backups, rank largest archived members, detect byte-identical archives, export a cumulative size-history CSV, and check a storage budget.
+- Desktop: redesign the main window with a compact responsive action bar and updated card, table, and control styling; add date-window filters, selected-archive details, and compact-row mode.
+- Keep previous Desktop tools available from the workspace actions menu.
+
 # CodeSaver CLI v1.8.2 and Desktop v1.6.10 — 2026-10-09
 
 - Added nested-ZIP discovery, ZIP64 metadata inspection, data-descriptor listing, trailing-data detection, and central-directory signature inspection to both applications.

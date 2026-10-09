@@ -48,6 +48,60 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class CliFeatureTests(unittest.TestCase):
+    def test_backup_history_workflows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            older = backups / "older.zip"
+            newer = backups / "newer.zip"
+            with zipfile.ZipFile(older, "w") as archive:
+                archive.writestr("small.txt", "small")
+                archive.writestr("large.bin", "x" * 200)
+            with zipfile.ZipFile(newer, "w") as archive:
+                archive.writestr("small.txt", "changed")
+                archive.writestr("added.txt", "new")
+                archive.writestr("large.bin", "x" * 200)
+            identical = backups / "identical.zip"
+            identical.write_bytes(older.read_bytes())
+            os.utime(older, (1_700_000_000, 1_700_000_000))
+            os.utime(identical, (1_700_000_050, 1_700_000_050))
+            os.utime(newer, (1_700_000_100, 1_700_000_100))
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "workflow.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-backup-workflows")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            diff = run("--backup-latest-diff")
+            self.assertEqual(diff["comparison"]["added"], ["added.txt"])
+            self.assertEqual(diff["comparison"]["changed"], ["small.txt"])
+            largest = run("--backup-largest-members", "1")
+            self.assertEqual(largest["members"][0]["path"], "large.bin")
+            duplicates = run("--backup-identical-archives")
+            self.assertEqual(len(duplicates["duplicate_groups"]), 1)
+            budget = run("--backup-budget", "1")
+            self.assertTrue(budget["over_budget"])
+            history_path = Path(tmp) / "reports" / "history.csv"
+            history = run("--backup-history-csv", str(history_path))
+            self.assertEqual(history["archives"], 3)
+            self.assertEqual(len(history_path.read_text(encoding="utf-8").splitlines()), 4)
+
     def test_new_archive_commands_are_reachable_from_cli(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

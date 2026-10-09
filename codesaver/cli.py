@@ -125,6 +125,15 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("-h", "--help", action="help", help=translate("help.help", language))
     parser.add_argument("--project-dir", type=Path, default=None, help=translate("help.project_dir", language))
     parser.add_argument("--backup-dir", type=Path, default=None, help=translate("help.backup_dir", language))
+    parser.add_argument("--backup-latest-diff", action="store_true", help="Compare the two newest backup archives")
+    parser.add_argument(
+        "--backup-largest-members", type=int, metavar="N", help="List the N largest files in the newest archive"
+    )
+    parser.add_argument("--backup-identical-archives", action="store_true", help="Find byte-identical backup archives")
+    parser.add_argument("--backup-history-csv", type=Path, metavar="FILE", help="Export backup size history as CSV")
+    parser.add_argument(
+        "--backup-budget", type=int, metavar="BYTES", help="Check total backup storage against a byte budget"
+    )
     parser.add_argument("--interval", type=int, default=None, help=translate("help.interval", language))
     parser.add_argument("--no-autosave", action="store_true", help=translate("help.no_autosave", language))
     parser.add_argument("--backup-now", action="store_true", help=translate("help.backup_now", language))
@@ -1035,6 +1044,124 @@ def _self_check(manager: BackupManager) -> dict[str, object]:
     return result
 
 
+def _handle_backup_workflows(args: argparse.Namespace, manager: BackupManager) -> bool:
+    """Run the five focused backup-history workflows added in CLI 1.8.3."""
+    archives = sorted(
+        (path for path in manager.backup_dir.glob("*.zip") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if args.backup_latest_diff:
+        comparison = compare_zips(archives[-2], archives[-1]) if len(archives) >= 2 else None
+        payload = {
+            "operation": "backup-latest-diff",
+            "archives": [str(path) for path in archives[-2:]],
+            "comparison": comparison,
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.json
+            else (
+                json.dumps(comparison, ensure_ascii=False, indent=2)
+                if comparison
+                else "At least two backups are required"
+            )
+        )
+    elif args.backup_largest_members is not None:
+        if args.backup_largest_members < 1:
+            raise BackupError("N must be at least 1")
+        latest = archives[-1] if archives else None
+        members = []
+        if latest:
+            with zipfile.ZipFile(latest) as bundle:
+                members = sorted(
+                    (
+                        {"path": item.filename, "bytes": item.file_size, "compressed_bytes": item.compress_size}
+                        for item in bundle.infolist()
+                        if not item.is_dir()
+                    ),
+                    key=lambda item: item["bytes"],
+                    reverse=True,
+                )[: args.backup_largest_members]
+        payload = {
+            "operation": "backup-largest-members",
+            "archive": str(latest) if latest else None,
+            "members": members,
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.json
+            else ("\n".join(f"{row['bytes']} bytes  {row['path']}" for row in members) or "No backup members found")
+        )
+    elif args.backup_identical_archives:
+        groups: dict[str, list[str]] = {}
+        for archive in archives:
+            groups.setdefault(_archive_checksum(archive), []).append(str(archive))
+        duplicates = [paths for paths in groups.values() if len(paths) > 1]
+        payload = {
+            "operation": "backup-identical-archives",
+            "duplicate_groups": duplicates,
+            "count": sum(len(group) for group in duplicates),
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.json
+            else ("\n".join("\n".join(group) for group in duplicates) or "No byte-identical backup archives")
+        )
+    elif args.backup_history_csv:
+        target = args.backup_history_csv.expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        cumulative = previous = 0
+        for archive in archives:
+            size = archive.stat().st_size
+            cumulative += size
+            rows.append(
+                {
+                    "archive": archive.name,
+                    "created_at": datetime.fromtimestamp(archive.stat().st_mtime).astimezone().isoformat(),
+                    "bytes": size,
+                    "change_bytes": size - previous,
+                    "cumulative_bytes": cumulative,
+                }
+            )
+            previous = size
+        with target.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream, fieldnames=("archive", "created_at", "bytes", "change_bytes", "cumulative_bytes")
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        print(
+            json.dumps(
+                {"operation": "backup-history-csv", "file": str(target), "archives": len(rows)}, ensure_ascii=False
+            )
+            if args.json
+            else f"Wrote {len(rows)} backup records to {target}"
+        )
+    elif args.backup_budget is not None:
+        if args.backup_budget < 0:
+            raise BackupError("Budget must be zero or greater")
+        used = sum(archive.stat().st_size for archive in archives)
+        payload = {
+            "operation": "backup-budget",
+            "budget_bytes": args.backup_budget,
+            "used_bytes": used,
+            "over_budget": used > args.backup_budget,
+            "over_by_bytes": max(0, used - args.backup_budget),
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.json
+            else (
+                f"{used} / {args.backup_budget} bytes — "
+                + (f"over by {used - args.backup_budget}" if used > args.backup_budget else "within budget")
+            )
+        )
+    else:
+        return False
+    return True
+
+
 def _handle_archive_structure_audit(args: argparse.Namespace) -> bool:
     """Handle the newest archive-structure commands outside the long CLI chain."""
     if args.archive_portability_audit:
@@ -1334,7 +1461,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
-        if args.version:
+        if _handle_backup_workflows(args, manager):
+            pass
+        elif args.version:
             print(__version__)
         elif _handle_archive_structure_audit(args):
             pass
