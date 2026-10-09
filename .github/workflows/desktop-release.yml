@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: release-assets
           merge-multiple: true
       - name: Publish Desktop release
         env:
@@ -63,9 +63,9 @@ jobs:
           notes_file="docs/releases/${GITHUB_REF_NAME}.md"
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists; updating its assets."
-            gh release upload "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --clobber
+            gh release upload "${GITHUB_REF_NAME}" release-assets/* --repo "${GITHUB_REPOSITORY}" --clobber
           elif [ -f "$notes_file" ]; then
-            gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver Desktop ${GITHUB_REF_NAME}" --notes-file "$notes_file"
+            gh release create "${GITHUB_REF_NAME}" release-assets/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver Desktop ${GITHUB_REF_NAME}" --notes-file "$notes_file"
           else
-            gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver Desktop ${GITHUB_REF_NAME}" --generate-notes
+            gh release create "${GITHUB_REF_NAME}" release-assets/* --repo "${GITHUB_REPOSITORY}" --title "CodeSaver Desktop ${GITHUB_REF_NAME}" --generate-notes
           fi
