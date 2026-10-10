@@ -66,6 +66,7 @@ class DesktopSupportTests(unittest.TestCase):
                 language="auto",
                 backup_on_start=True,
                 recent_projects=(str(Path(tmp) / "project"),),
+                pinned_archives=(str(Path(tmp) / "backups" / "important.zip"),),
             )
             save_settings(settings, config_path)
             loaded = load_settings(config_path)
@@ -77,6 +78,7 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertTrue(loaded.backup_on_start)
             self.assertTrue(loaded.verify_after_backup)
             self.assertEqual(loaded.recent_projects, (str((Path(tmp) / "project").resolve()),))
+            self.assertEqual(loaded.pinned_archives, (str((Path(tmp) / "backups" / "important.zip").resolve()),))
             self.assertEqual(format_bytes(1024 * 1024), "1.0 MB")
 
     def test_custom_theme_palette_and_language_detection(self):

@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.8.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.3) | Python 3.9+ | Updated 2026-10-09 |
-| CodeSaver Desktop | [**1.7.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.0) | Python 3.10+ with PyQt5 | Updated 2026-10-09 |
+| CodeSaver CLI | [**1.8.4**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.4) | Python 3.9+ | Updated 2026-10-10 |
+| CodeSaver Desktop | [**1.7.1**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.1) | Python 3.10+ with PyQt5 | Updated 2026-10-10 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -154,11 +154,15 @@ The star count was refreshed on 28 September 2026; the other figures above remai
 - Detect byte-identical ZIP backups with `--backup-identical-archives`.
 - Export per-backup and cumulative storage history using `--backup-history-csv FILE`.
 - Check total stored bytes against a configured threshold with `--backup-budget BYTES`.
+- Preview age-based cleanup with `--backup-retention DAYS`; pass `--apply-retention` to delete the listed archives.
+- Preflight a restore for CRC errors, unsafe paths, overwrites, and available disk space with `--restore-preflight ARCHIVE`.
+- Run a non-destructive restore drill with `--restore-drill ARCHIVE`; files are extracted and verified in a temporary directory.
+- Export a JSON archive catalog with SHA-256 checksums using `--backup-manifest-json FILE`.
 - Python 3.9+ dependency-free runtime.
 
 ### Desktop version
 
-CodeSaver Desktop `1.7.0` is a redesigned, responsive graphical alternative for developers who prefer a visual workflow. It includes:
+CodeSaver Desktop `1.7.1` is a redesigned, responsive graphical alternative for developers who prefer a visual workflow. It includes:
 - Windows filename portability, Unicode collision, path-depth, symlink-target, and file/folder conflict audits.
 - Long member-path search, root-folder layout, ZIP comments, per-file CRC-32 inventory, and timestamp summary.
 - Duplicate-basename, hidden-file, backslash-path, executable-mode, and empty-directory archive checks.
@@ -203,6 +207,8 @@ CodeSaver Desktop `1.7.0` is a redesigned, responsive graphical alternative for 
 - `Ctrl+Shift+V` shortcut to verify the selected backup immediately.
 - Archive details view with file count, size, creation date, and full path.
 - Plain-text archive manifest export for audits and indexing.
+- Pin important backups; pins persist across restarts and archive renames.
+- Compare a selected backup with its immediately preceding snapshot.
 - Safe archive renaming with collision protection.
 - Individual archive deletion with explicit confirmation.
 - One-click opening of the active project folder from an archive.
@@ -415,13 +421,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.7.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.0):
+The current stable binary is available in the [Desktop v1.7.1 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.1):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.8.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.3) is available.
+The stable [CLI v1.8.4 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.4) is available.
 
 ### Build from source
 

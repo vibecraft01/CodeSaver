@@ -4,6 +4,11 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.4 and Desktop v1.7.1 — 2026-10-10
+
+- CLI: add age-based retention cleanup with dry-run by default, restore preflight for CRC/path/conflict/space checks, a temporary-directory restore drill, and a SHA-256 archive catalog export.
+- Desktop: add persistent archive pinning and compare a selected snapshot with its immediately previous backup.
+
 # CodeSaver CLI v1.8.3 and Desktop v1.7.0 — 2026-10-09
 
 - CLI: compare the two newest backups, rank largest archived members, detect byte-identical archives, export a cumulative size-history CSV, and check a storage budget.

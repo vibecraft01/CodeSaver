@@ -48,6 +48,65 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class CliFeatureTests(unittest.TestCase):
+    def test_new_backup_retention_and_recovery_workflows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            archive = backups / "project_2024-01-01_00-00-00_000000.zip"
+            unrelated = backups / "other-project_2024-01-01_00-00-00_000000.zip"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+                bundle.writestr("src/app.py", "print('hello')\n")
+            unrelated.write_bytes(archive.read_bytes())
+            os.utime(archive, (1_700_000_000, 1_700_000_000))
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text("old content", encoding="utf-8")
+            common = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "run.log"),
+                "--json",
+            ]
+
+            def run(*arguments):
+                output = io.StringIO()
+                with (
+                    patch("codesaver.cli._remember_project"),
+                    patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-backup-recovery")),
+                    redirect_stdout(output),
+                ):
+                    self.assertEqual(main([*common, *arguments]), 0)
+                return json.loads(output.getvalue())
+
+            preflight = run("--restore-preflight", str(archive))
+            self.assertFalse(preflight["safe_to_restore"])
+            self.assertTrue(preflight["requires_overwrite_confirmation"])
+            self.assertEqual(preflight["conflicts"], ["src/app.py"])
+            drill = run("--restore-drill", str(archive))
+            self.assertTrue(drill["success"])
+            self.assertEqual(drill["verified_files"], 1)
+            self.assertEqual((root / "src" / "app.py").read_text(encoding="utf-8"), "old content")
+
+            manifest_file = Path(tmp) / "reports" / "backups.json"
+            manifest_result = run("--backup-manifest-json", str(manifest_file))
+            self.assertEqual(manifest_result["archives"], 2)
+            manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            self.assertEqual(len(manifest["archives"][0]["sha256"]), 64)
+            self.assertTrue(manifest["archives"][0]["crc_valid"])
+
+            preview = run("--backup-retention", "1")
+            self.assertTrue(preview["dry_run"])
+            self.assertEqual(preview["removed"], [])
+            self.assertTrue(archive.exists())
+            applied = run("--backup-retention", "1", "--apply-retention")
+            self.assertEqual(applied["removed"], [str(archive.resolve())])
+            self.assertFalse(archive.exists())
+            self.assertTrue(unrelated.exists())
+
     def test_backup_history_workflows(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

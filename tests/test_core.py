@@ -188,6 +188,20 @@ class BackupManagerTests(unittest.TestCase):
             BackupManager(root).create_backup(lambda current, total, path: progress.append((current, total, path)))
             self.assertEqual(progress[0][0:2], (0, 0))
 
+    def test_backups_created_in_quick_succession_keep_distinct_archives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            (root / "app.py").write_text("first\n", encoding="utf-8")
+            manager = BackupManager(root, backups)
+            first = manager.create_backup()
+            (root / "app.py").write_text("second\n", encoding="utf-8")
+            second = manager.create_backup()
+            self.assertNotEqual(first, second)
+            self.assertEqual(len(list(backups.glob("*.zip"))), 2)
+            self.assertEqual(manager.compare_backup(first)["modified"], ["app.py"])
+
     def test_restore_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

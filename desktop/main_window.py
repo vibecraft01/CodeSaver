@@ -1011,6 +1011,15 @@ TEXT["en"].update(
         "select_archive_details": "Select an archive to see its details",
         "archive_details_summary": "{name}  •  {date}  •  {size}  •  {members} files",
         "archive_details_unreadable": "{name}  •  Could not read archive details",
+        "pin_archive": "Pin archive",
+        "unpin_archive": "Unpin archive",
+        "compare_previous_backup": "Compare with previous backup",
+        "pin_status": "Pinned archive: {name}",
+        "unpin_status": "Unpinned archive: {name}",
+        "previous_backup_missing": "No older backup is available for comparison.",
+        "backup_pair_comparison": (
+            "Previous: {older}\nSelected: {newer}\n\nAdded: {added}\nRemoved: {removed}\nChanged: {changed}"
+        ),
     }
 )
 TEXT["ru"].update(
@@ -1024,6 +1033,15 @@ TEXT["ru"].update(
         "select_archive_details": "Выберите архив, чтобы увидеть подробности",
         "archive_details_summary": "{name}  •  {date}  •  {size}  •  файлов: {members}",
         "archive_details_unreadable": "{name}  •  Не удалось прочитать архив",
+        "pin_archive": "Закрепить архив",
+        "unpin_archive": "Открепить архив",
+        "compare_previous_backup": "Сравнить с предыдущей копией",
+        "pin_status": "Архив закреплён: {name}",
+        "unpin_status": "Архив откреплён: {name}",
+        "previous_backup_missing": "Нет более старого архива для сравнения.",
+        "backup_pair_comparison": (
+            "Предыдущая: {older}\nВыбранная: {newer}\n\nДобавлено: {added}\nУдалено: {removed}\nИзменено: {changed}"
+        ),
     }
 )
 
@@ -1746,7 +1764,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(self._text("search_results", shown=len(archives), total=len(all_archives)))
             for row, (path, archive_date, size) in enumerate(archives):
                 self.table.insertRow(row)
-                item = QTableWidgetItem(path.name)
+                pinned = str(path.resolve()) in self.settings.pinned_archives
+                item = QTableWidgetItem(("★ " if pinned else "") + path.name)
                 item.setData(Qt.UserRole, str(path))
                 self.table.setItem(row, 0, item)
                 self.table.setItem(row, 1, QTableWidgetItem(archive_date))
@@ -1786,6 +1805,11 @@ class MainWindow(QMainWindow):
         archive = Path(self.table.item(row, 0).data(Qt.UserRole))
         menu = QMenu(self)
         info_action = menu.addAction(self._text("archive_info"))
+        pin_action = menu.addAction(
+            self._text("unpin_archive" if str(archive.resolve()) in self.settings.pinned_archives else "pin_archive")
+        )
+        compare_previous_action = menu.addAction(self._text("compare_previous_backup"))
+        menu.addSeparator()
         manifest_action = menu.addAction(self._text("export_manifest"))
         rename_action = menu.addAction(self._text("rename_archive"))
         delete_action = menu.addAction(self._text("delete_archive"))
@@ -1802,6 +1826,10 @@ class MainWindow(QMainWindow):
         selected = menu.exec_(self.table.viewport().mapToGlobal(position))
         if selected == info_action:
             self._show_archive_info(archive)
+        elif selected == pin_action:
+            self._toggle_archive_pin(archive)
+        elif selected == compare_previous_action:
+            self._compare_with_previous_backup(archive)
         elif selected == manifest_action:
             self._export_archive_manifest(archive)
         elif selected == rename_action:
@@ -1889,6 +1917,12 @@ class MainWindow(QMainWindow):
             return
         try:
             archive.rename(target)
+            old_path = str(archive.resolve())
+            if old_path in self.settings.pinned_archives:
+                self.settings.pinned_archives = tuple(
+                    str(target.resolve()) if item == old_path else item for item in self.settings.pinned_archives
+                )
+                save_settings(self.settings)
             self.statusBar().showMessage(self._text("rename_done"))
             self._refresh_backups()
         except OSError as exc:
@@ -1908,6 +1942,12 @@ class MainWindow(QMainWindow):
             return
         try:
             archive.unlink()
+            resolved = str(archive.resolve())
+            if resolved in self.settings.pinned_archives:
+                self.settings.pinned_archives = tuple(
+                    item for item in self.settings.pinned_archives if item != resolved
+                )
+                save_settings(self.settings)
             self.statusBar().showMessage(self._text("delete_done"))
             self._refresh_backups()
         except OSError as exc:
@@ -1935,6 +1975,45 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(self._text("no_archive_selected"))
             return None
         return Path(self.table.item(row, 0).data(Qt.UserRole))
+
+    def _toggle_archive_pin(self, archive: Path) -> None:
+        resolved = str(archive.resolve())
+        pinned = set(self.settings.pinned_archives)
+        if resolved in pinned:
+            pinned.remove(resolved)
+            message = self._text("unpin_status", name=archive.name)
+        else:
+            pinned.add(resolved)
+            message = self._text("pin_status", name=archive.name)
+        self.settings.pinned_archives = tuple(sorted(pinned))
+        save_settings(self.settings)
+        self._refresh_backups()
+        self.statusBar().showMessage(message)
+
+    def _compare_with_previous_backup(self, archive: Path) -> None:
+        if not self.manager:
+            return
+        archives = sorted(
+            archive_details(self.manager.backup_dir), key=lambda item: (item[0].stat().st_mtime_ns, item[0].name)
+        )
+        index = next((index for index, item in enumerate(archives) if item[0].resolve() == archive.resolve()), -1)
+        if index <= 0:
+            QMessageBox.information(self, self._text("compare"), self._text("previous_backup_missing"))
+            return
+        older = archives[index - 1][0]
+        try:
+            diff = compare_zips(older, archive)
+            body = self._text(
+                "backup_pair_comparison",
+                older=older.name,
+                newer=archive.name,
+                added="\n".join(diff["added"]) or "—",
+                removed="\n".join(diff["removed"]) or "—",
+                changed="\n".join(diff["changed"]) or "—",
+            )
+            QMessageBox.information(self, self._text("compare"), body)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
 
     def _copy_project_path(self) -> None:
         if self.manager:

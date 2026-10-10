@@ -40,6 +40,7 @@ class DesktopSettings:
     recent_projects: tuple[str, ...] = ()
     backup_on_start: bool = False
     verify_after_backup: bool = True
+    pinned_archives: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -68,6 +69,11 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             for item in raw.get("recent_projects", [])
             if isinstance(item, str) and item
         )[:5]
+        pinned_archives = tuple(
+            str(Path(item).expanduser().resolve())
+            for item in raw.get("pinned_archives", [])
+            if isinstance(item, str) and item
+        )
         language = raw.get("language", "auto") if raw.get("language", "auto") in DESKTOP_LANGUAGES else "auto"
         theme = raw.get("theme", "system") if raw.get("theme", "system") in DESKTOP_THEMES else "system"
         accent_color = str(raw.get("accent_color", "#58A6FF"))
@@ -89,6 +95,7 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             recent_projects=recent_projects,
             backup_on_start=bool(raw.get("backup_on_start", False)),
             verify_after_backup=bool(raw.get("verify_after_backup", True)),
+            pinned_archives=pinned_archives,
         )
     except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
         return DesktopSettings()

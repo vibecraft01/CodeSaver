@@ -134,6 +134,27 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument(
         "--backup-budget", type=int, metavar="BYTES", help="Check total backup storage against a byte budget"
     )
+    parser.add_argument(
+        "--backup-retention", type=int, metavar="DAYS", help="Preview backups older than DAYS for retention cleanup"
+    )
+    parser.add_argument(
+        "--apply-retention", action="store_true", help="Delete the backups selected by --backup-retention"
+    )
+    parser.add_argument(
+        "--restore-preflight",
+        type=Path,
+        metavar="ARCHIVE",
+        help="Check archive integrity, restore conflicts, and required disk space",
+    )
+    parser.add_argument(
+        "--restore-drill",
+        type=Path,
+        metavar="ARCHIVE",
+        help="Extract an archive to a temporary folder and verify its contents",
+    )
+    parser.add_argument(
+        "--backup-manifest-json", type=Path, metavar="FILE", help="Export a checksummed JSON catalog of all backups"
+    )
     parser.add_argument("--interval", type=int, default=None, help=translate("help.interval", language))
     parser.add_argument("--no-autosave", action="store_true", help=translate("help.no_autosave", language))
     parser.add_argument("--backup-now", action="store_true", help=translate("help.backup_now", language))
@@ -1045,12 +1066,178 @@ def _self_check(manager: BackupManager) -> dict[str, object]:
 
 
 def _handle_backup_workflows(args: argparse.Namespace, manager: BackupManager) -> bool:
-    """Run the five focused backup-history workflows added in CLI 1.8.3."""
+    """Run focused backup-history and recovery workflows."""
     archives = sorted(
         (path for path in manager.backup_dir.glob("*.zip") if path.is_file()),
         key=lambda path: path.stat().st_mtime,
     )
-    if args.backup_latest_diff:
+    if args.apply_retention and args.backup_retention is None:
+        raise ValueError("--apply-retention requires --backup-retention DAYS")
+    if args.backup_retention is not None:
+        if args.backup_retention < 0:
+            raise ValueError("Retention age must be zero or greater")
+        cutoff = time.time() - args.backup_retention * 86400
+        project_prefix = f"{manager.project_dir.name}_"
+        expired = [
+            archive
+            for archive in archives
+            if archive.name.startswith(project_prefix) and archive.stat().st_mtime < cutoff
+        ]
+        reclaimed_bytes = sum(archive.stat().st_size for archive in expired)
+        removed = []
+        if args.apply_retention:
+            for archive in expired:
+                archive.unlink()
+                removed.append(str(archive))
+        payload = {
+            "operation": "backup-retention",
+            "older_than_days": args.backup_retention,
+            "dry_run": not args.apply_retention,
+            "candidates": [str(archive) for archive in expired],
+            "removed": removed,
+            "reclaimable_bytes": reclaimed_bytes,
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.json
+            else (
+                f"{'Removed' if args.apply_retention else 'Would remove'} {len(expired)} archives "
+                f"({_format_bytes(reclaimed_bytes)})"
+            )
+        )
+    elif args.restore_preflight:
+        archive = args.restore_preflight.expanduser().resolve()
+        if not archive.is_file():
+            raise BackupError("errors.archive_missing", archive=archive)
+        conflicts = []
+        unsafe = []
+        total_bytes = 0
+        with zipfile.ZipFile(archive) as bundle:
+            bad_member = bundle.testzip()
+            for info in bundle.infolist():
+                if info.is_dir():
+                    continue
+                member = PurePosixPath(info.filename)
+                windows_member = PureWindowsPath(info.filename)
+                if (
+                    member.is_absolute()
+                    or windows_member.is_absolute()
+                    or windows_member.drive
+                    or ".." in member.parts
+                    or ".." in windows_member.parts
+                ):
+                    unsafe.append(info.filename)
+                    continue
+                total_bytes += info.file_size
+                if (manager.project_dir / Path(*member.parts)).exists():
+                    conflicts.append(info.filename)
+        free_bytes = shutil.disk_usage(manager.project_dir).free
+        payload = {
+            "operation": "restore-preflight",
+            "archive": str(archive),
+            "valid_crc": bad_member is None,
+            "bad_member": bad_member,
+            "unsafe_paths": unsafe,
+            "conflicts": conflicts,
+            "required_bytes": total_bytes,
+            "free_bytes": free_bytes,
+            "enough_space": free_bytes >= total_bytes,
+            "requires_overwrite_confirmation": bool(conflicts),
+            "safe_to_restore": bad_member is None and not unsafe and free_bytes >= total_bytes and not conflicts,
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2) if args.json else json.dumps(payload, ensure_ascii=False)
+        )
+    elif args.restore_drill:
+        archive = args.restore_drill.expanduser().resolve()
+        if not archive.is_file():
+            raise BackupError("errors.archive_missing", archive=archive)
+        verified_files = 0
+        verified_bytes = 0
+        with tempfile.TemporaryDirectory(prefix="codesaver-restore-drill-") as temporary:
+            target_root = Path(temporary).resolve()
+            with zipfile.ZipFile(archive) as bundle:
+                bad_member = bundle.testzip()
+                if bad_member:
+                    raise ValueError(f"Archive CRC check failed at {bad_member}")
+                file_entries = [info for info in bundle.infolist() if not info.is_dir()]
+                required_bytes = sum(info.file_size for info in file_entries)
+                free_bytes = shutil.disk_usage(target_root).free
+                if required_bytes > free_bytes:
+                    raise ValueError(f"Restore drill needs {required_bytes} bytes but only {free_bytes} are available")
+                for info in bundle.infolist():
+                    member = PurePosixPath(info.filename)
+                    windows_member = PureWindowsPath(info.filename)
+                    if (
+                        member.is_absolute()
+                        or windows_member.is_absolute()
+                        or windows_member.drive
+                        or ".." in member.parts
+                        or ".." in windows_member.parts
+                    ):
+                        raise ValueError(f"Unsafe archive path: {info.filename}")
+                    if info.is_dir():
+                        continue
+                    extracted = (target_root / Path(*member.parts)).resolve()
+                    if not extracted.is_relative_to(target_root):
+                        raise ValueError(f"Unsafe archive path: {info.filename}")
+                    extracted.parent.mkdir(parents=True, exist_ok=True)
+                    expected_hash = hashlib.sha256()
+                    with bundle.open(info) as source, extracted.open("wb") as destination:
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            expected_hash.update(chunk)
+                            destination.write(chunk)
+                    actual_hash = hashlib.sha256()
+                    actual_size = 0
+                    with extracted.open("rb") as restored:
+                        for chunk in iter(lambda: restored.read(1024 * 1024), b""):
+                            actual_hash.update(chunk)
+                            actual_size += len(chunk)
+                    if actual_size != info.file_size or actual_hash.digest() != expected_hash.digest():
+                        raise ValueError(f"Extracted file verification failed: {info.filename}")
+                    verified_files += 1
+                    verified_bytes += actual_size
+        payload = {
+            "operation": "restore-drill",
+            "archive": str(archive),
+            "success": True,
+            "verified_files": verified_files,
+            "verified_bytes": verified_bytes,
+            "temporary_files_removed": True,
+        }
+        print(
+            json.dumps(payload, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Restore drill passed: {verified_files} files"
+        )
+    elif args.backup_manifest_json:
+        target = args.backup_manifest_json.expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        entries = []
+        for archive in archives:
+            with zipfile.ZipFile(archive) as bundle:
+                entries.append(
+                    {
+                        "archive": str(archive.resolve()),
+                        "created_at": datetime.fromtimestamp(archive.stat().st_mtime).astimezone().isoformat(),
+                        "bytes": archive.stat().st_size,
+                        "sha256": _archive_checksum(archive),
+                        "files": sum(not item.is_dir() for item in bundle.infolist()),
+                        "uncompressed_bytes": sum(item.file_size for item in bundle.infolist() if not item.is_dir()),
+                        "crc_valid": bundle.testzip() is None,
+                    }
+                )
+        target.write_text(
+            json.dumps({"operation": "backup-manifest", "archives": entries}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        payload = {"operation": "backup-manifest", "file": str(target), "archives": len(entries)}
+        print(
+            json.dumps(payload, ensure_ascii=False)
+            if args.json
+            else f"Wrote {len(entries)} archive records to {target}"
+        )
+    elif args.backup_latest_diff:
         comparison = compare_zips(archives[-2], archives[-1]) if len(archives) >= 2 else None
         payload = {
             "operation": "backup-latest-diff",

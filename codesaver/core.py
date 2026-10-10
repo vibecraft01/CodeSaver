@@ -216,7 +216,7 @@ class BackupManager:
         try:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
             files = self.list_files()
-            stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
             destination = self.backup_dir / f"{self.project_dir.name}_{stamp}.zip"
             fd, temp_name = tempfile.mkstemp(prefix=".codesaver-", suffix=".tmp", dir=self.backup_dir)
             os.close(fd)

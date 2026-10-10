@@ -147,4 +147,5 @@ class SettingsDialog(QDialog):
             recent_projects=self.settings_value.recent_projects,
             backup_on_start=self.backup_on_start.isChecked(),
             verify_after_backup=self.verify_after_backup.isChecked(),
+            pinned_archives=self.settings_value.pinned_archives,
         )
