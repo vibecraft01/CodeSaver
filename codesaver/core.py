@@ -217,7 +217,12 @@ class BackupManager:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
             files = self.list_files()
             stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
-            destination = self.backup_dir / f"{self.project_dir.name}_{stamp}.zip"
+            archive_stem = f"{self.project_dir.name}_{stamp}"
+            destination = self.backup_dir / f"{archive_stem}.zip"
+            collision = 1
+            while destination.exists():
+                destination = self.backup_dir / f"{archive_stem}_{collision}.zip"
+                collision += 1
             fd, temp_name = tempfile.mkstemp(prefix=".codesaver-", suffix=".tmp", dir=self.backup_dir)
             os.close(fd)
             temp_path = Path(temp_name)
