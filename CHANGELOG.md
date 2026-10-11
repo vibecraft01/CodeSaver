@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.5 and Desktop v1.7.2 — 2026-10-11
+
+- CLI and Desktop: restore complete archives or selected members into a separate directory, leaving the current project untouched.
+- Validate archive paths and destination conflicts before extraction so known unsafe entries and overwrite conflicts are rejected before files are written.
+- CLI: add `--restore-to DIR` and `--restore-files-to DIR` for portable recovery workflows.
+- Desktop: add context-menu actions to restore an archive or selected files into a chosen folder.
+
 # CodeSaver CLI v1.8.4 and Desktop v1.7.1 — 2026-10-10
 
 - CLI: add age-based retention cleanup with dry-run by default, restore preflight for CRC/path/conflict/space checks, a temporary-directory restore drill, and a SHA-256 archive catalog export.

@@ -48,6 +48,83 @@ def _mark_member_encrypted(path: Path, member_name: str) -> None:
 
 
 class CliFeatureTests(unittest.TestCase):
+    def test_restore_archive_to_separate_directory_from_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            archive = Path(tmp) / "portable.zip"
+            with zipfile.ZipFile(archive, "w") as source:
+                source.writestr("src/app.py", "print('portable')\n")
+            destination = Path(tmp) / "recovered"
+            output = io.StringIO()
+            with (
+                patch("codesaver.cli._remember_project"),
+                patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-restore-to")),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "--project-dir",
+                            str(root),
+                            "--backup-dir",
+                            str(Path(tmp) / "backups"),
+                            "--log",
+                            str(Path(tmp) / "run.log"),
+                            "--json",
+                            "--restore",
+                            str(archive),
+                            "--restore-to",
+                            str(destination),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertEqual(json.loads(output.getvalue())["files"], 1)
+            self.assertEqual((destination / "src" / "app.py").read_text(encoding="utf-8"), "print('portable')\n")
+
+    def test_restore_selected_files_to_directory_from_cli(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            archive = Path(tmp) / "portable.zip"
+            with zipfile.ZipFile(archive, "w") as source:
+                source.writestr("src/app.py", "print('selected')\n")
+                source.writestr("README.md", "not selected")
+            destination = Path(tmp) / "recovered"
+            output = io.StringIO()
+            with (
+                patch("codesaver.cli._remember_project"),
+                patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-restore-files-to")),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "--project-dir",
+                            str(root),
+                            "--backup-dir",
+                            str(Path(tmp) / "backups"),
+                            "--log",
+                            str(Path(tmp) / "run.log"),
+                            "--json",
+                            "--restore-files",
+                            str(archive),
+                            "src/app.py",
+                            "--restore-files-to",
+                            str(destination),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertEqual(json.loads(output.getvalue())["files"], 1)
+            self.assertTrue((destination / "src" / "app.py").is_file())
+            self.assertFalse((destination / "README.md").exists())
+
+    def test_restore_destination_options_require_matching_restore_command(self):
+        self.assertEqual(main(["--restore-to", "out"]), 2)
+        self.assertEqual(main(["--restore-files-to", "out"]), 2)
+
     def test_new_backup_retention_and_recovery_workflows(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

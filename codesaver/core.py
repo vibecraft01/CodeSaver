@@ -15,7 +15,7 @@ import os
 import tempfile
 import time
 from typing import Callable, Iterator, Optional, Union
-from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
 from .lang import translate
 
@@ -401,13 +401,23 @@ class BackupManager:
         except OSError as exc:
             raise BackupError("errors.cleanup_failed", path=self.backup_dir, error=exc) from exc
 
-    def restore_backup(self, archive_path: Union[Path, str], overwrite: bool = False) -> int:
+    def restore_backup(
+        self,
+        archive_path: Union[Path, str],
+        overwrite: bool = False,
+        destination_dir: Optional[Union[Path, str]] = None,
+    ) -> int:
         """Restore an archive into the project directory and return file count.
 
         Zip member paths are validated to prevent path traversal outside the
-        target directory.
+        target directory. ``destination_dir`` allows a safe restore to a new
+        location without requiring the original project directory to exist.
         """
-        self._validate_project()
+        if destination_dir is None:
+            self._validate_project()
+            target_root = self.project_dir.resolve()
+        else:
+            target_root = Path(destination_dir).expanduser().resolve()
         archive = Path(archive_path).expanduser().resolve()
         if not archive.is_file():
             raise BackupError("errors.archive_missing", archive=archive)
@@ -417,16 +427,35 @@ class BackupManager:
                 corrupted_member = source.testzip()
                 if corrupted_member:
                     raise BackupError("errors.invalid_zip", archive=archive)
-                target_root = self.project_dir.resolve()
+                planned: list[tuple[ZipInfo, Path]] = []
+                seen: set[Path] = set()
                 for member in source.infolist():
+                    if member.filename == ".codesaver-manifest.json":
+                        continue
                     target = (target_root / member.filename).resolve()
                     if target != target_root and target_root not in target.parents:
                         raise BackupError("errors.unsafe_path", member=member.filename)
+                    if target in seen:
+                        raise BackupError("errors.invalid_zip", archive=archive)
+                    seen.add(target)
                     if member.is_dir():
-                        target.mkdir(parents=True, exist_ok=True)
                         continue
                     if target.exists() and not overwrite:
                         raise BackupError("errors.file_exists", path=target)
+                    planned.append((member, target))
+                file_targets = {target for _, target in planned}
+                for target in file_targets:
+                    if any(parent in file_targets for parent in target.parents):
+                        raise BackupError("errors.invalid_zip", archive=archive)
+                    if target.is_dir():
+                        raise BackupError("errors.file_exists", path=target)
+                    parent = target.parent
+                    while parent != target_root:
+                        if parent.exists() and not parent.is_dir():
+                            raise BackupError("errors.file_exists", path=parent)
+                        parent = parent.parent
+                target_root.mkdir(parents=True, exist_ok=True)
+                for member, target in planned:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with source.open(member) as input_file, target.open("wb") as output_file:
                         output_file.write(input_file.read())
@@ -441,9 +470,19 @@ class BackupManager:
             raise BackupError("errors.restore_failed", error=exc) from exc
         return count
 
-    def restore_files(self, archive_path: Union[Path, str], members: list[str], overwrite: bool = False) -> int:
-        """Restore only selected safe files from an archive."""
-        self._validate_project()
+    def restore_files(
+        self,
+        archive_path: Union[Path, str],
+        members: list[str],
+        overwrite: bool = False,
+        destination_dir: Optional[Union[Path, str]] = None,
+    ) -> int:
+        """Restore only selected safe files, optionally into another folder."""
+        if destination_dir is None:
+            self._validate_project()
+            target_root = self.project_dir.resolve()
+        else:
+            target_root = Path(destination_dir).expanduser().resolve()
         archive = Path(archive_path).expanduser().resolve()
         requested = {str(member).replace("\\", "/") for member in members if str(member).strip()}
         if not archive.is_file() or not requested:
@@ -453,17 +492,31 @@ class BackupManager:
             with ZipFile(archive, "r") as source:
                 if source.testzip():
                     raise BackupError("errors.invalid_zip", archive=archive)
-                target_root = self.project_dir.resolve()
                 available = {info.filename: info for info in source.infolist() if not info.is_dir()}
+                planned: list[tuple[ZipInfo, Path]] = []
                 for name in sorted(requested):
                     member = available.get(name)
                     if member is None or name == ".codesaver-manifest.json":
                         continue
                     target = (target_root / name).resolve()
-                    if target_root not in target.parents:
+                    if target == target_root or target_root not in target.parents:
                         raise BackupError("errors.unsafe_path", member=name)
                     if target.exists() and not overwrite:
                         raise BackupError("errors.file_exists", path=target)
+                    planned.append((member, target))
+                file_targets = {target for _, target in planned}
+                for target in file_targets:
+                    if any(parent in file_targets for parent in target.parents):
+                        raise BackupError("errors.invalid_zip", archive=archive)
+                    if target.is_dir():
+                        raise BackupError("errors.file_exists", path=target)
+                    parent = target.parent
+                    while parent != target_root:
+                        if parent.exists() and not parent.is_dir():
+                            raise BackupError("errors.file_exists", path=parent)
+                        parent = parent.parent
+                target_root.mkdir(parents=True, exist_ok=True)
+                for member, target in planned:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with source.open(member) as input_file, target.open("wb") as output_file:
                         output_file.write(input_file.read())

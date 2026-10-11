@@ -201,6 +201,7 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         "--no-gitignore", action="store_true", default=None, help=translate("help.no_gitignore", language)
     )
     parser.add_argument("--restore", type=Path, metavar="ARCHIVE", help=translate("help.restore", language))
+    parser.add_argument("--restore-to", type=Path, metavar="DIR", help="Restore the archive into a separate directory")
     parser.add_argument("--restore-safe", action="store_true", help=translate("help.restore_safe", language))
     parser.add_argument("--archive-info", type=Path, metavar="ARCHIVE", help="Show archive metadata")
     parser.add_argument("--export-manifest", type=Path, metavar="ARCHIVE", help="Export archive file list")
@@ -613,6 +614,9 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
         nargs="+",
         metavar="ARCHIVE FILE",
         help=translate("help.restore_files", language),
+    )
+    parser.add_argument(
+        "--restore-files-to", type=Path, metavar="DIR", help="Destination directory for --restore-files"
     )
     parser.add_argument("--overwrite", action="store_true", help=translate("help.overwrite", language))
     parser.add_argument("--config", type=Path, metavar="FILE", help=translate("help.config", language))
@@ -1621,6 +1625,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(translate("errors.python_version", detected_language, version=python_version_text()), file=sys.stderr)
         return 2
     args = build_parser(detected_language).parse_args(argv)
+    if args.restore_to and not args.restore:
+        print("--restore-to requires --restore ARCHIVE", file=sys.stderr)
+        return 2
+    if args.restore_files_to and not args.restore_files:
+        print("--restore-files-to requires --restore-files ARCHIVE MEMBER...", file=sys.stderr)
+        return 2
+    if args.restore_to and args.restore_files:
+        print("Use --restore-to with --restore or --restore-files-to with --restore-files", file=sys.stderr)
+        return 2
+    if args.restore_files_to and (args.restore or args.restore_safe):
+        print("Use --restore-files-to only with --restore-files", file=sys.stderr)
+        return 2
     language = normalize_language(args.language or detected_language)
     if not raw_args and args.project_dir is None:
         try:
@@ -3976,7 +3992,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                             print(f"  {item}")
         elif args.restore_files:
             archive, *members = args.restore_files
-            count = manager.restore_files(archive, members, overwrite=args.overwrite)
+            count = manager.restore_files(
+                archive, members, overwrite=args.overwrite, destination_dir=args.restore_files_to
+            )
             logger.info("Selected files restored: archive=%s files=%s", archive, count)
             if args.json:
                 print(json.dumps({"operation": "restore-files", "archive": str(archive), "files": count}))
@@ -3985,11 +4003,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif args.restore or args.restore_safe:
             if args.restore_safe and not args.restore:
                 raise ValueError("--restore-safe requires --restore ARCHIVE")
+            if args.restore_to and not args.restore:
+                raise ValueError("--restore-to requires --restore ARCHIVE")
             safety_archive = manager.create_backup() if args.restore_safe else None
             if args.verify:
                 members = manager.verify_backup(args.restore)
                 print(translate("message.backup_verified", language, count=members))
-            count = manager.restore_backup(args.restore, overwrite=args.overwrite)
+            count = manager.restore_backup(args.restore, overwrite=args.overwrite, destination_dir=args.restore_to)
             logger.info("Backup restored: archive=%s files=%s", args.restore, count)
             if args.json:
                 print(

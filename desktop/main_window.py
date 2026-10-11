@@ -410,6 +410,11 @@ _DESKTOP_1_0_2_TEXT = {
     "restore_files": "Restore selected files",
     "restore_files_prompt": "Enter the archive paths to restore, one per line:",
     "restore_files_done": "Selected files restored: {count}",
+    "restore_files_to_folder": "Restore selected files into another folder…",
+    "restore_to_folder": "Restore archive into another folder…",
+    "restore_to_confirm": "Restore {path} into the selected folder? Existing files will not be overwritten.",
+    "restore_to_started": "Restoring into the selected folder…",
+    "restore_to_done": "Restored {count} file(s) into the selected folder.",
     "recent_empty": "No recent projects",
     "drop_project": "Drop a project folder here",
     "backup_warning": "Less than 1 GB of free disk space remains. Continue?",
@@ -975,6 +980,11 @@ TEXT["ru"].update(
         "restore_files": "Восстановить выбранные файлы",
         "restore_files_prompt": "Укажите пути файлов из архива, по одному в строке:",
         "restore_files_done": "Выбранных файлов восстановлено: {count}",
+        "restore_files_to_folder": "Восстановить выбранные файлы в другую папку…",
+        "restore_to_folder": "Восстановить архив в другую папку…",
+        "restore_to_confirm": "Восстановить архив в папку {path}? Существующие файлы не будут перезаписаны.",
+        "restore_to_started": "Восстановление в выбранную папку…",
+        "restore_to_done": "В выбранную папку восстановлено файлов: {count}.",
     }
 )
 TEXT["ru"].update(
@@ -1058,6 +1068,7 @@ class BackupWorker(QThread):
         archive: Path | None = None,
         language: str = "en",
         archives: list[Path] | None = None,
+        destination: Path | None = None,
     ) -> None:
         super().__init__()
         self.manager = manager
@@ -1065,6 +1076,7 @@ class BackupWorker(QThread):
         self.archive = archive
         self.language = language
         self.archives = archives or []
+        self.destination = destination
 
     def run(self) -> None:
         try:
@@ -1090,6 +1102,9 @@ class BackupWorker(QThread):
             elif self.operation == "compare":
                 result = self.manager.compare_backup(self.archive)
                 self.succeeded.emit(json.dumps(result, ensure_ascii=False))
+            elif self.operation == "restore_to":
+                count = self.manager.restore_backup(self.archive, destination_dir=self.destination)
+                self.succeeded.emit(str(count))
             else:
                 safety_archive = self.manager.create_backup()
                 count = self.manager.restore_backup(self.archive, overwrite=True)
@@ -1822,6 +1837,8 @@ class MainWindow(QMainWindow):
         copy_action = menu.addAction(self._text("copy_archive_path"))
         open_action = menu.addAction(self._text("open_archive_folder"))
         restore_files_action = menu.addAction(self._text("restore_files"))
+        restore_selected_to_action = menu.addAction(self._text("restore_files_to_folder"))
+        restore_to_action = menu.addAction(self._text("restore_to_folder"))
         cloud_action = menu.addAction(self._text("cloud_upload"))
         selected = menu.exec_(self.table.viewport().mapToGlobal(position))
         if selected == info_action:
@@ -1852,6 +1869,10 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(archive.parent)))
         elif selected == restore_files_action:
             self._restore_selected_files(archive)
+        elif selected == restore_selected_to_action:
+            self._restore_selected_files_to_folder(archive)
+        elif selected == restore_to_action:
+            self._restore_archive_to_folder(archive)
         elif selected == cloud_action:
             self._upload_archive_to_cloud(archive)
 
@@ -3223,7 +3244,7 @@ class MainWindow(QMainWindow):
         self._connect_worker()
         self.worker.start()
 
-    def _restore_selected_files(self, archive: Path) -> None:
+    def _restore_selected_files(self, archive: Path, destination_dir: Path | None = None) -> None:
         if not self.manager:
             return
         try:
@@ -3237,11 +3258,48 @@ class MainWindow(QMainWindow):
             if not accepted:
                 return
             selected = [line.strip() for line in value.splitlines() if line.strip()]
-            count = self.manager.restore_files(archive, selected, overwrite=True)
+            if destination_dir is None:
+                count = self.manager.restore_files(archive, selected, overwrite=True)
+            else:
+                count = self.manager.restore_files(archive, selected, destination_dir=destination_dir)
             self.statusBar().showMessage(self._text("restore_files_done", count=count))
-            self._refresh_project_info()
+            if destination_dir is None:
+                self._refresh_project_info()
         except (BackupError, OSError, ValueError) as exc:
             self._show_error(str(exc))
+
+    def _restore_selected_files_to_folder(self, archive: Path) -> None:
+        destination = QFileDialog.getExistingDirectory(self, self._text("restore_files_to_folder"))
+        if destination:
+            self._restore_selected_files(archive, Path(destination))
+
+    def _restore_archive_to_folder(self, archive: Path) -> None:
+        if not self.manager:
+            return
+        destination = QFileDialog.getExistingDirectory(self, self._text("restore_to_folder"))
+        if not destination:
+            return
+        answer = QMessageBox.question(
+            self,
+            self._text("confirm"),
+            self._text("restore_to_confirm", path=destination),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._operation = "restore_to"
+        self.statusBar().showMessage(self._text("restore_to_started"))
+        self._set_busy(True)
+        self.worker = BackupWorker(
+            self.manager,
+            "restore_to",
+            archive,
+            language=self._active_language,
+            destination=Path(destination),
+        )
+        self._connect_worker()
+        self.worker.start()
 
     def _verify_selected(self) -> None:
         if not self.manager:
@@ -3367,9 +3425,12 @@ class MainWindow(QMainWindow):
             verified, total = str(value).split("/", 1)
             self.statusBar().showMessage(self._text("verify_all_done", verified=verified, total=total))
             self.tray.notify(self._text("title"), self._text("verify_all_done", verified=verified, total=total))
+        elif self._operation == "restore_to":
+            self.statusBar().showMessage(self._text("restore_to_done", count=value))
         else:
             self.statusBar().showMessage(self._text("restore_done", count=value))
-        self._refresh_project_info()
+        if self._operation != "restore_to":
+            self._refresh_project_info()
         self._refresh_backups()
 
     def _show_compare_result(self, result: dict[str, list[str]]) -> None:

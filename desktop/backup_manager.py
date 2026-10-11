@@ -47,11 +47,22 @@ class DesktopBackupManager:
         self.last_errors.clear()
         return self.core.create_backup(detailed_progress_callback=progress_callback)
 
-    def restore_backup(self, archive_path: Union[Path, str], overwrite: bool = False) -> int:
-        return self.core.restore_backup(archive_path, overwrite=overwrite)
+    def restore_backup(
+        self,
+        archive_path: Union[Path, str],
+        overwrite: bool = False,
+        destination_dir: Optional[Union[Path, str]] = None,
+    ) -> int:
+        return self.core.restore_backup(archive_path, overwrite=overwrite, destination_dir=destination_dir)
 
-    def restore_files(self, archive_path: Union[Path, str], members: list[str], overwrite: bool = False) -> int:
-        return self.core.restore_files(archive_path, members, overwrite=overwrite)
+    def restore_files(
+        self,
+        archive_path: Union[Path, str],
+        members: list[str],
+        overwrite: bool = False,
+        destination_dir: Optional[Union[Path, str]] = None,
+    ) -> int:
+        return self.core.restore_files(archive_path, members, overwrite=overwrite, destination_dir=destination_dir)
 
     def verify_backup(self, archive_path: Union[Path, str]) -> int:
         """Validate ZIP CRCs and any embedded SHA-256 manifest."""

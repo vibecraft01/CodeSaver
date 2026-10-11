@@ -235,6 +235,70 @@ class BackupManagerTests(unittest.TestCase):
                 BackupManager(root).restore_backup(archive)
             self.assertEqual(context.exception.key, "errors.invalid_zip")
 
+    def test_restore_archive_to_separate_directory_without_original_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = Path(tmp) / "original"
+            backups = Path(tmp) / "backups"
+            destination = Path(tmp) / "recovered" / "project"
+            original.mkdir()
+            (original / "src").mkdir()
+            (original / "src" / "app.py").write_text("print('recovered')\n", encoding="utf-8")
+            archive = BackupManager(original, backups).create_backup(include_manifest=True)
+
+            missing_project = Path(tmp) / "not-created"
+            manager = BackupManager(missing_project, backups)
+            self.assertEqual(manager.restore_backup(archive, destination_dir=destination), 1)
+            self.assertEqual((destination / "src" / "app.py").read_text(encoding="utf-8"), "print('recovered')\n")
+            self.assertFalse((destination / ".codesaver-manifest.json").exists())
+            self.assertFalse(missing_project.exists())
+
+    def test_restore_to_directory_checks_all_conflicts_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            archive = Path(tmp) / "snapshot.zip"
+            with ZipFile(archive, "w") as source:
+                source.writestr("a-new.txt", "new")
+                source.writestr("z-existing.txt", "from archive")
+            destination = Path(tmp) / "destination"
+            destination.mkdir()
+            (destination / "z-existing.txt").write_text("keep", encoding="utf-8")
+
+            with self.assertRaises(BackupError):
+                BackupManager(root).restore_backup(archive, destination_dir=destination)
+            self.assertFalse((destination / "a-new.txt").exists())
+            self.assertEqual((destination / "z-existing.txt").read_text(encoding="utf-8"), "keep")
+
+    def test_restore_preflights_file_directory_conflicts_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            archive = Path(tmp) / "conflict.zip"
+            with ZipFile(archive, "w") as source:
+                source.writestr("a/child.txt", "child")
+                source.writestr("a", "file")
+            destination = Path(tmp) / "destination"
+
+            with self.assertRaises(BackupError):
+                BackupManager(root).restore_backup(archive, destination_dir=destination)
+            self.assertFalse(destination.exists())
+
+    def test_restore_selected_files_to_separate_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "restore.txt").write_text("saved", encoding="utf-8")
+            archive = BackupManager(root, Path(tmp) / "backups").create_backup()
+            destination = Path(tmp) / "recovered"
+
+            self.assertEqual(
+                BackupManager(Path(tmp) / "missing").restore_files(
+                    archive, ["restore.txt"], destination_dir=destination
+                ),
+                1,
+            )
+            self.assertEqual((destination / "restore.txt").read_text(encoding="utf-8"), "saved")
+
     def test_verify_backup_checks_zip_integrity(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

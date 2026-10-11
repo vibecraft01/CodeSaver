@@ -128,6 +128,32 @@ class DesktopSupportTests(unittest.TestCase):
             archive = manager.create_backup()
             self.assertEqual(manager.verify_backup(archive), 1)
 
+    def test_desktop_manager_restores_archive_to_another_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "app.py").write_text("print('portable')\n", encoding="utf-8")
+            manager = DesktopBackupManager(root, DesktopSettings(backup_dir=str(Path(tmp) / "backups")))
+            archive = manager.create_backup()
+            destination = Path(tmp) / "recovered"
+
+            self.assertEqual(manager.restore_backup(archive, destination_dir=destination), 1)
+            self.assertEqual((destination / "app.py").read_text(encoding="utf-8"), "print('portable')\n")
+
+    def test_desktop_manager_restores_selected_files_to_another_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "keep.txt").write_text("saved", encoding="utf-8")
+            (root / "skip.txt").write_text("skip", encoding="utf-8")
+            manager = DesktopBackupManager(root, DesktopSettings(backup_dir=str(Path(tmp) / "backups")))
+            archive = manager.create_backup()
+            destination = Path(tmp) / "recovered"
+
+            self.assertEqual(manager.restore_files(archive, ["keep.txt"], destination_dir=destination), 1)
+            self.assertEqual((destination / "keep.txt").read_text(encoding="utf-8"), "saved")
+            self.assertFalse((destination / "skip.txt").exists())
+
     def test_desktop_manager_compares_archive_with_project(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

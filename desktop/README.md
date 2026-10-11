@@ -1,6 +1,6 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.7.1.
+Desktop application source for CodeSaver Desktop 1.7.2.
 
 The current desktop tools include:
 
@@ -20,6 +20,9 @@ The current desktop tools include:
 - previewing a selected archive's date, size, and file count;
 - switching between compact and comfortable archive-list density.
 - pinning important archives persistently and comparing a snapshot with the preceding backup.
+- restoring a whole archive or chosen files into a separate folder without replacing files already there.
 
 The application uses the shared CodeSaver backup engine and PyQt5. Build and
 platform packaging instructions are available in the repository documentation.
+
+See the [Desktop 1.7.2 release notes](../docs/releases/desktop-v1.7.2.md).
