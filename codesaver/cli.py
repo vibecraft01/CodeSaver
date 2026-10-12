@@ -163,6 +163,13 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     parser.add_argument("--manifest", action="store_true", help=translate("help.manifest", language))
     parser.add_argument("--list", type=Path, metavar="ARCHIVE", help=translate("help.list", language))
     parser.add_argument("--diff", type=Path, metavar="ARCHIVE", help=translate("help.diff", language))
+    parser.add_argument(
+        "--diff-status", choices=("added", "modified", "missing"), help="Show only one project-diff category"
+    )
+    parser.add_argument("--diff-path", metavar="TEXT", help="Filter project-diff paths by case-insensitive text")
+    parser.add_argument("--diff-report", type=Path, metavar="FILE", help="Write project-diff results as JSON")
+    parser.add_argument("--diff-csv", type=Path, metavar="FILE", help="Write project-diff results as CSV")
+    parser.add_argument("--fail-on-diff", action="store_true", help="Exit with status 1 when project differences exist")
     parser.add_argument("--health", action="store_true", help=translate("help.health", language))
     parser.add_argument("--stats", action="store_true", help=translate("help.stats", language))
     parser.add_argument("--git-context", action="store_true", help=translate("help.git_context", language))
@@ -1637,6 +1644,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.restore_files_to and (args.restore or args.restore_safe):
         print("Use --restore-files-to only with --restore-files", file=sys.stderr)
         return 2
+    if any((args.diff_status, args.diff_path, args.diff_report, args.diff_csv, args.fail_on_diff)) and not args.diff:
+        print("Project-diff options require --diff ARCHIVE", file=sys.stderr)
+        return 2
     language = normalize_language(args.language or detected_language)
     if not raw_args and args.project_dir is None:
         try:
@@ -1664,6 +1674,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         _remember_project(project_dir)
         logger.info("CodeSaver started: language=%s project=%s", language, manager.project_dir)
         health_failed = False
+        diff_failed = False
         if _handle_backup_workflows(args, manager):
             pass
         elif args.version:
@@ -3969,8 +3980,27 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"  {member}")
         elif args.diff:
             diff = manager.compare_backup(args.diff)
+            if args.diff_path:
+                needle = args.diff_path.casefold()
+                diff = {key: [item for item in values if needle in item.casefold()] for key, values in diff.items()}
+            if args.diff_status:
+                diff = {key: (diff[key] if key == args.diff_status else []) for key in diff}
+            diff_failed = any(diff.values())
+            report = {"operation": "diff", "archive": str(args.diff), **diff}
+            if args.diff_report:
+                target = args.diff_report.expanduser()
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            if args.diff_csv:
+                target = args.diff_csv.expanduser()
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open("w", encoding="utf-8-sig", newline="") as output_file:
+                    writer = csv.writer(output_file)
+                    writer.writerow(("status", "path"))
+                    for key, values in diff.items():
+                        writer.writerows((key, item) for item in values)
             if args.json:
-                print(json.dumps({"operation": "diff", "archive": str(args.diff), **diff}, ensure_ascii=False))
+                print(json.dumps(report, ensure_ascii=False))
             else:
                 print(
                     translate(
@@ -3990,6 +4020,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                         print(translate(label_key, language) + ":")
                         for item in diff[key]:
                             print(f"  {item}")
+                if args.diff_report:
+                    print(f"JSON report written: {args.diff_report}")
+                if args.diff_csv:
+                    print(f"CSV report written: {args.diff_csv}")
         elif args.restore_files:
             archive, *members = args.restore_files
             count = manager.restore_files(
@@ -4371,6 +4405,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 manager, autosave=not args.no_autosave, interval=settings.interval, language=language, logger=logger
             )
         if args.health and health_failed:
+            return 1
+        if args.fail_on_diff and diff_failed:
             return 1
         logger.info("CodeSaver finished successfully")
         return 0

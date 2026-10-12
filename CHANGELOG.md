@@ -4,6 +4,14 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.6 and Desktop v1.7.3 — 2026-10-12
+
+- CLI: added change-category filtering (`--diff-status`) and path-text filtering (`--diff-path`) to `--diff`.
+- CLI: added JSON and CSV project-diff exports plus `--fail-on-diff` for CI pipelines.
+- Desktop: replaced the plain comparison popup with a results table and per-status summary counts.
+- Desktop: added status filtering and live path search to comparison results.
+- Desktop: added CSV export for visible results, path copying, and open-location actions.
+
 # CodeSaver CLI v1.8.5 and Desktop v1.7.2 — 2026-10-11
 
 - CLI and Desktop: restore complete archives or selected members into a separate directory, leaving the current project untouched.

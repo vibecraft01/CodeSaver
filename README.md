@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.8.5**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.5) | Python 3.9+ | Updated 2026-10-11 |
-| CodeSaver Desktop | [**1.7.2**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.2) | Python 3.10+ with PyQt5 | Updated 2026-10-11 |
+| CodeSaver CLI | [**1.8.6**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.6) | Python 3.9+ | Updated 2026-10-12 |
+| CodeSaver Desktop | [**1.7.3**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.3) | Python 3.10+ with PyQt5 | Updated 2026-10-12 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -160,12 +160,13 @@ The star count was refreshed on 28 September 2026; the other figures above remai
 - Export a JSON archive catalog with SHA-256 checksums using `--backup-manifest-json FILE`.
 - Restore a complete archive into another folder with `--restore ARCHIVE --restore-to DIR`, without changing the original project.
 - Restore selected members into another folder with `--restore-files ARCHIVE MEMBER... --restore-files-to DIR`.
+- Refine `--diff ARCHIVE` by change type (`--diff-status`), path text (`--diff-path`), or export a JSON/CSV report; `--fail-on-diff` provides a CI-friendly exit code.
 - Validate every archive path and destination conflict before writing, preventing unsafe paths or known conflicts from causing a partial restore.
 - Python 3.9+ dependency-free runtime.
 
 ### Desktop version
 
-CodeSaver Desktop `1.7.2` is a redesigned, responsive graphical alternative for developers who prefer a visual workflow. It also supports restoring a complete archive or selected files into another folder; existing destination files are preserved and archive paths are checked before extraction. It includes:
+CodeSaver Desktop `1.7.3` is a redesigned, responsive graphical alternative for developers who prefer a visual workflow. Its project comparison now has a searchable, status-filterable results table, a change summary, CSV export, and quick path actions. It also supports restoring a complete archive or selected files into another folder; existing destination files are preserved and archive paths are checked before extraction. It includes:
 - Windows filename portability, Unicode collision, path-depth, symlink-target, and file/folder conflict audits.
 - Long member-path search, root-folder layout, ZIP comments, per-file CRC-32 inventory, and timestamp summary.
 - Duplicate-basename, hidden-file, backslash-path, executable-mode, and empty-directory archive checks.
@@ -424,13 +425,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.7.2 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.2):
+The current stable binary is available in the [Desktop v1.7.3 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.7.3):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.8.5 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.5) is available.
+The stable [CLI v1.8.6 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.8.6) is available.
 
 ### Build from source
 

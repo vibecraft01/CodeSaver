@@ -727,6 +727,53 @@ class CliFeatureTests(unittest.TestCase):
         self.assertEqual(args.exclude_dir, ["generated"])
         self.assertEqual(args.report, Path("report.json"))
 
+    def test_diff_filters_exports_and_ci_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "changed.py").write_text("new\n", encoding="utf-8")
+            (root / "added.py").write_text("added\n", encoding="utf-8")
+            archive = Path(tmp) / "baseline.zip"
+            with zipfile.ZipFile(archive, "w") as source:
+                source.writestr("changed.py", "old\n")
+                source.writestr("removed.py", "removed\n")
+            report = Path(tmp) / "reports" / "diff.json"
+            csv_report = Path(tmp) / "reports" / "diff.csv"
+            output = io.StringIO()
+            with (
+                patch("codesaver.cli._remember_project"),
+                patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-diff-reports")),
+                redirect_stdout(output),
+            ):
+                result = main(
+                    [
+                        "--language",
+                        "en",
+                        "--project-dir",
+                        str(root),
+                        "--backup-dir",
+                        str(Path(tmp) / "backups"),
+                        "--diff",
+                        str(archive),
+                        "--diff-status",
+                        "modified",
+                        "--diff-report",
+                        str(report),
+                        "--diff-csv",
+                        str(csv_report),
+                        "--fail-on-diff",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(result, 1)
+            self.assertEqual(json.loads(output.getvalue())["modified"], ["changed.py"])
+            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["modified"], ["changed.py"])
+            self.assertIn("modified,changed.py", csv_report.read_text(encoding="utf-8-sig"))
+
+    def test_diff_options_require_diff_archive(self):
+        with patch("sys.stderr", io.StringIO()), patch("codesaver.cli._remember_project"):
+            self.assertEqual(main(["--diff-status", "added", "--project-dir", "."]), 2)
+
     def test_self_check_runs_disposable_backup(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

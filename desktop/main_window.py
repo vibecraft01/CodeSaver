@@ -20,6 +20,7 @@ from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, 
 from PyQt5.QtGui import QDesktopServices, QKeySequence
 from PyQt5.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -1007,6 +1008,43 @@ TEXT["ru"].update(
         "compare_details": (
             "Добавленные файлы:\n{added}\n\n" "Изменённые файлы:\n{modified}\n\n" "Отсутствующие файлы:\n{missing}"
         ),
+    }
+)
+
+TEXT["en"].update(
+    {
+        "diff_all": "All changes",
+        "diff_added": "Added",
+        "diff_modified": "Modified",
+        "diff_missing": "Missing",
+        "diff_search": "Search paths…",
+        "diff_status": "Status",
+        "diff_path": "Path",
+        "diff_summary_table": "Added: {added}  •  Modified: {modified}  •  Missing: {missing}",
+        "diff_export_csv": "Export visible rows as CSV…",
+        "diff_copy_path": "Copy selected path",
+        "diff_open_location": "Open file location",
+        "diff_no_row": "Select a result row first.",
+        "diff_unsafe_path": "The archive path is outside the selected project.",
+        "diff_csv_done": "Comparison CSV saved: {path}",
+    }
+)
+TEXT["ru"].update(
+    {
+        "diff_all": "Все изменения",
+        "diff_added": "Добавлены",
+        "diff_modified": "Изменены",
+        "diff_missing": "Отсутствуют",
+        "diff_search": "Поиск по путям…",
+        "diff_status": "Статус",
+        "diff_path": "Путь",
+        "diff_summary_table": "Добавлено: {added}  •  Изменено: {modified}  •  Отсутствует: {missing}",
+        "diff_export_csv": "Экспортировать видимые строки в CSV…",
+        "diff_copy_path": "Копировать выбранный путь",
+        "diff_open_location": "Открыть расположение файла",
+        "diff_no_row": "Сначала выберите строку результата.",
+        "diff_unsafe_path": "Путь из архива находится за пределами выбранного проекта.",
+        "diff_csv_done": "CSV сравнения сохранён: {path}",
     }
 )
 
@@ -3434,16 +3472,125 @@ class MainWindow(QMainWindow):
         self._refresh_backups()
 
     def _show_compare_result(self, result: dict[str, list[str]]) -> None:
-        def lines(items: list[str]) -> str:
-            return "\n".join(f"  • {item}" for item in items) or "  —"
-
-        body = self._text(
-            "compare_details",
-            added=lines(result["added"]),
-            modified=lines(result["modified"]),
-            missing=lines(result["missing"]),
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self._text("compare_title"))
+        dialog.setMinimumSize(720, 520)
+        layout = QVBoxLayout(dialog)
+        summary = QLabel(
+            self._text(
+                "diff_summary_table",
+                added=len(result["added"]),
+                modified=len(result["modified"]),
+                missing=len(result["missing"]),
+            )
         )
-        QMessageBox.information(self, self._text("compare_title"), body)
+        layout.addWidget(summary)
+
+        filters = QHBoxLayout()
+        status_filter = QComboBox()
+        status_filter.addItem(self._text("diff_all"), "all")
+        status_filter.addItem(self._text("diff_added"), "added")
+        status_filter.addItem(self._text("diff_modified"), "modified")
+        status_filter.addItem(self._text("diff_missing"), "missing")
+        search = QLineEdit()
+        search.setPlaceholderText(self._text("diff_search"))
+        filters.addWidget(status_filter)
+        filters.addWidget(search, 1)
+        layout.addLayout(filters)
+
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels([self._text("diff_status"), self._text("diff_path")])
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setSelectionMode(QTableWidget.SingleSelection)
+        table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(table, 1)
+
+        status_labels = {
+            "added": self._text("diff_added"),
+            "modified": self._text("diff_modified"),
+            "missing": self._text("diff_missing"),
+        }
+        all_rows = [(status, path) for status in ("added", "modified", "missing") for path in result[status]]
+        visible_rows: list[tuple[str, str]] = []
+
+        def refresh_rows() -> None:
+            nonlocal visible_rows
+            selected_status = status_filter.currentData()
+            needle = search.text().casefold()
+            visible_rows = [
+                (status, path)
+                for status, path in all_rows
+                if (selected_status == "all" or status == selected_status) and needle in path.casefold()
+            ]
+            table.setRowCount(len(visible_rows))
+            for row, (status, path) in enumerate(visible_rows):
+                table.setItem(row, 0, QTableWidgetItem(status_labels[status]))
+                table.setItem(row, 1, QTableWidgetItem(path))
+
+        status_filter.currentIndexChanged.connect(refresh_rows)
+        search.textChanged.connect(refresh_rows)
+        refresh_rows()
+
+        buttons = QHBoxLayout()
+        export_button = QPushButton(self._text("diff_export_csv"))
+        copy_button = QPushButton(self._text("diff_copy_path"))
+        open_button = QPushButton(self._text("diff_open_location"))
+        close_button = QPushButton(self._text("ready"))
+        buttons.addWidget(export_button)
+        buttons.addStretch()
+        buttons.addWidget(copy_button)
+        buttons.addWidget(open_button)
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
+
+        def selected_path() -> str | None:
+            row = table.currentRow()
+            return visible_rows[row][1] if 0 <= row < len(visible_rows) else None
+
+        def export_visible() -> None:
+            destination, _ = QFileDialog.getSaveFileName(
+                dialog, self._text("diff_export_csv"), "codesaver-project-diff.csv", "CSV files (*.csv)"
+            )
+            if not destination:
+                return
+            try:
+                with Path(destination).open("w", encoding="utf-8-sig", newline="") as output:
+                    writer = csv.writer(output)
+                    writer.writerow((self._text("diff_status"), self._text("diff_path")))
+                    writer.writerows((status_labels[status], path) for status, path in visible_rows)
+                self.statusBar().showMessage(self._text("diff_csv_done", path=destination))
+            except OSError as exc:
+                self._show_error(str(exc))
+
+        def copy_selected() -> None:
+            path = selected_path()
+            if path is None:
+                self.statusBar().showMessage(self._text("diff_no_row"))
+                return
+            QApplication.clipboard().setText(path)
+
+        def open_selected_location() -> None:
+            path = selected_path()
+            if path is None:
+                self.statusBar().showMessage(self._text("diff_no_row"))
+                return
+            if not self.manager:
+                return
+            target = (self.manager.project_dir / PurePosixPath(path)).resolve()
+            if target != self.manager.project_dir and self.manager.project_dir not in target.parents:
+                self._show_error(self._text("diff_unsafe_path"))
+                return
+            location = target.parent if target.is_file() else target
+            while not location.exists() and location != self.manager.project_dir:
+                location = location.parent
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(location)))
+
+        export_button.clicked.connect(export_visible)
+        copy_button.clicked.connect(copy_selected)
+        open_button.clicked.connect(open_selected_location)
+        close_button.clicked.connect(dialog.accept)
+        dialog.exec_()
 
     def _worker_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"{self._text('error')}: {message}")
