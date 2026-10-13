@@ -25,6 +25,7 @@ from typing import Optional
 from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
+from .backup_metadata import BackupMetadataStore
 from .archive_tools import (
     absolute_member_paths,
     aes_encrypted_members,
@@ -154,6 +155,19 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--backup-manifest-json", type=Path, metavar="FILE", help="Export a checksummed JSON catalog of all backups"
+    )
+    metadata_group = parser.add_mutually_exclusive_group()
+    metadata_group.add_argument(
+        "--backup-label", nargs=2, metavar=("ARCHIVE", "LABEL"), help="Set a searchable label on a backup archive"
+    )
+    metadata_group.add_argument(
+        "--backup-note", nargs=2, metavar=("ARCHIVE", "NOTE"), help="Set a note on a backup archive"
+    )
+    metadata_group.add_argument(
+        "--backup-metadata-search", metavar="TEXT", help="Search backup names, labels, and notes"
+    )
+    metadata_group.add_argument(
+        "--backup-catalog-export", type=Path, metavar="FILE", help="Export the backup catalog as JSON or CSV"
     )
     parser.add_argument("--interval", type=int, default=None, help=translate("help.interval", language))
     parser.add_argument("--no-autosave", action="store_true", help=translate("help.no_autosave", language))
@@ -1082,7 +1096,36 @@ def _handle_backup_workflows(args: argparse.Namespace, manager: BackupManager) -
         (path for path in manager.backup_dir.glob("*.zip") if path.is_file()),
         key=lambda path: path.stat().st_mtime,
     )
-    if args.apply_retention and args.backup_retention is None:
+    if args.backup_label:
+        archive, label = args.backup_label
+        record = BackupMetadataStore(manager.backup_dir).update(archive, label=label)
+        print(json.dumps({"operation": "backup-label", "archive": archive, **record}, ensure_ascii=False))
+        return True
+    elif args.backup_note:
+        archive, note = args.backup_note
+        record = BackupMetadataStore(manager.backup_dir).update(archive, note=note)
+        print(json.dumps({"operation": "backup-note", "archive": archive, **record}, ensure_ascii=False))
+        return True
+    elif args.backup_metadata_search is not None:
+        rows = BackupMetadataStore(manager.backup_dir).catalog(args.backup_metadata_search)
+        print(
+            json.dumps(
+                {"operation": "backup-metadata-search", "count": len(rows), "archives": rows},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return True
+    elif args.backup_catalog_export:
+        target = args.backup_catalog_export.expanduser()
+        count = BackupMetadataStore(manager.backup_dir).export(target)
+        print(
+            json.dumps(
+                {"operation": "backup-catalog-export", "file": str(target), "archives": count}, ensure_ascii=False
+            )
+        )
+        return True
+    elif args.apply_retention and args.backup_retention is None:
         raise ValueError("--apply-retention requires --backup-retention DAYS")
     if args.backup_retention is not None:
         if args.backup_retention < 0:

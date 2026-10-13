@@ -4,6 +4,12 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.8.7 and Desktop v1.7.4 — 2026-10-13
+
+- CLI: add persistent backup labels and notes, case-insensitive annotation search, and JSON/CSV catalog export.
+- Desktop: add archive labels and notes, live search across annotations, label filtering, and catalog export.
+- Keep annotations when an archive is renamed and remove them when it is deleted.
+
 # CodeSaver CLI v1.8.6 and Desktop v1.7.3 — 2026-10-12
 
 - CLI: added change-category filtering (`--diff-status`) and path-text filtering (`--diff-path`) to `--diff`.

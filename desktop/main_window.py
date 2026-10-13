@@ -42,6 +42,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QUrl
 
 from codesaver.core import BackupError
+from codesaver.backup_metadata import BackupMetadataStore
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
     absolute_member_paths,
@@ -168,6 +169,31 @@ TEXT = {
         "disk_warning": "Low disk space remaining: {free}",
     },
 }
+
+TEXT["ru"].update(
+    {
+        "archive_label_filter": "Все метки",
+        "edit_archive_metadata": "Изменить метку и заметку",
+        "metadata_label_prompt": "Метка архива:",
+        "metadata_note_prompt": "Заметка к архиву:",
+        "metadata_saved": "Метка и заметка сохранены",
+        "export_backup_catalog": "Экспортировать каталог бэкапов…",
+        "backup_catalog_exported": "Каталог экспортирован: {path}",
+        "archive_metadata_details": "Метка: {label} • Заметка: {note}",
+    }
+)
+TEXT["en"].update(
+    {
+        "archive_label_filter": "All labels",
+        "edit_archive_metadata": "Edit label and note",
+        "metadata_label_prompt": "Archive label:",
+        "metadata_note_prompt": "Archive note:",
+        "metadata_saved": "Label and note saved",
+        "export_backup_catalog": "Export backup catalog…",
+        "backup_catalog_exported": "Catalog exported: {path}",
+        "archive_metadata_details": "Label: {label} • Note: {note}",
+    }
+)
 
 
 # Keep the UI strings in one place and use UTF-8 text for the refreshed
@@ -1549,6 +1575,13 @@ class MainWindow(QMainWindow):
         self.date_filter.addItem(self._text("date_90_days"), 90)
         self.date_filter.currentIndexChanged.connect(self._refresh_backups)
         filter_row.addWidget(self.date_filter)
+        self.label_filter = QComboBox()
+        self.label_filter.addItem(self._text("archive_label_filter"), "")
+        self.label_filter.currentIndexChanged.connect(self._refresh_backups)
+        filter_row.addWidget(self.label_filter)
+        self.export_catalog_button = QPushButton(self._text("export_backup_catalog"))
+        self.export_catalog_button.clicked.connect(self._export_backup_catalog)
+        filter_row.addWidget(self.export_catalog_button)
         layout.addLayout(filter_row)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([self._text("archive"), self._text("date"), self._text("size")])
@@ -1632,6 +1665,9 @@ class MainWindow(QMainWindow):
         self._update_autosave_status()
         self.drop_hint.setText(self._text("drop_project"))
         self.archive_search.setPlaceholderText(self._text("search_archives"))
+        self.export_catalog_button.setText(self._text("export_backup_catalog"))
+        if hasattr(self, "label_filter"):
+            self.label_filter.setItemText(0, self._text("archive_label_filter"))
         if hasattr(self, "date_filter"):
             for index, key in enumerate(("date_all", "date_7_days", "date_30_days", "date_90_days")):
                 self.date_filter.setItemText(index, self._text(key))
@@ -1806,10 +1842,39 @@ class MainWindow(QMainWindow):
         try:
             query = self.archive_search.text().strip().lower()
             all_archives = archive_details(self.manager.backup_dir)
+            metadata_store = BackupMetadataStore(self.manager.backup_dir)
+            metadata_rows = metadata_store.catalog()
+            metadata = {item["archive"]: item for item in metadata_rows}
+            selected_label = self.label_filter.currentData() if hasattr(self, "label_filter") else ""
+            old_filter = selected_label or ""
+            self.label_filter.blockSignals(True)
+            try:
+                self.label_filter.clear()
+                self.label_filter.addItem(self._text("archive_label_filter"), "")
+                for label in sorted({item["label"] for item in metadata_rows if item["label"]}, key=str.casefold):
+                    self.label_filter.addItem(label, label)
+                self.label_filter.setCurrentIndex(max(0, self.label_filter.findData(old_filter)))
+            finally:
+                self.label_filter.blockSignals(False)
             count, total_size = backup_summary(self.manager.backup_dir)
             self.backup_stats_label.setText(self._text("backup_stats", count=count, size=format_bytes(total_size)))
             archives = all_archives
-            archives = [item for item in archives if not query or query in item[0].name.lower()]
+            archives = [
+                item
+                for item in archives
+                if (
+                    not query
+                    or query
+                    in " ".join(
+                        (
+                            item[0].name,
+                            metadata.get(item[0].name, {}).get("label", ""),
+                            metadata.get(item[0].name, {}).get("note", ""),
+                        )
+                    ).lower()
+                )
+                and (not old_filter or metadata.get(item[0].name, {}).get("label", "") == old_filter)
+            ]
             age_days = self.date_filter.currentData()
             if age_days:
                 cutoff = time.time() - int(age_days) * 86400
@@ -1818,13 +1883,14 @@ class MainWindow(QMainWindow):
             for row, (path, archive_date, size) in enumerate(archives):
                 self.table.insertRow(row)
                 pinned = str(path.resolve()) in self.settings.pinned_archives
-                item = QTableWidgetItem(("★ " if pinned else "") + path.name)
+                label = metadata.get(path.name, {}).get("label", "")
+                item = QTableWidgetItem(("★ " if pinned else "") + (f"[{label}] " if label else "") + path.name)
                 item.setData(Qt.UserRole, str(path))
                 self.table.setItem(row, 0, item)
                 self.table.setItem(row, 1, QTableWidgetItem(archive_date))
                 self.table.setItem(row, 2, QTableWidgetItem(size))
             self._update_archive_details()
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             self._show_error(str(exc))
 
     def _update_archive_details(self) -> None:
@@ -1838,6 +1904,7 @@ class MainWindow(QMainWindow):
         try:
             with zipfile.ZipFile(archive) as bundle:
                 members = sum(not entry.is_dir() for entry in bundle.infolist())
+            annotation = BackupMetadataStore(archive.parent).get(archive)
             self.archive_details_label.setText(
                 self._text(
                     "archive_details_summary",
@@ -1846,8 +1913,12 @@ class MainWindow(QMainWindow):
                     size=format_bytes(archive.stat().st_size),
                     members=members,
                 )
+                + "\n"
+                + self._text(
+                    "archive_metadata_details", label=annotation["label"] or "—", note=annotation["note"] or "—"
+                )
             )
-        except (OSError, zipfile.BadZipFile):
+        except (OSError, ValueError, zipfile.BadZipFile):
             self.archive_details_label.setText(self._text("archive_details_unreadable", name=archive.name))
 
     def _show_archive_menu(self, position) -> None:
@@ -1864,6 +1935,7 @@ class MainWindow(QMainWindow):
         compare_previous_action = menu.addAction(self._text("compare_previous_backup"))
         menu.addSeparator()
         manifest_action = menu.addAction(self._text("export_manifest"))
+        metadata_action = menu.addAction(self._text("edit_archive_metadata"))
         rename_action = menu.addAction(self._text("rename_archive"))
         delete_action = menu.addAction(self._text("delete_archive"))
         checksum_action = menu.addAction(self._text("copy_checksum"))
@@ -1887,6 +1959,8 @@ class MainWindow(QMainWindow):
             self._compare_with_previous_backup(archive)
         elif selected == manifest_action:
             self._export_archive_manifest(archive)
+        elif selected == metadata_action:
+            self._edit_archive_metadata(archive)
         elif selected == rename_action:
             self._rename_archive(archive)
         elif selected == delete_action:
@@ -1947,11 +2021,15 @@ class MainWindow(QMainWindow):
             self._show_error(str(exc))
 
     def _export_archive_manifest(self, archive: Path) -> None:
-        destination, _ = QFileDialog.getSaveFileName(
+        destination, selected_filter = QFileDialog.getSaveFileName(
             self, self._text("export_manifest"), f"{archive.stem}-manifest.txt"
         )
         if not destination:
             return
+        if "JSON" in selected_filter and Path(destination).suffix.casefold() != ".json":
+            destination += ".json"
+        elif "CSV" in selected_filter and Path(destination).suffix.casefold() != ".csv":
+            destination += ".csv"
         try:
             members = [item for item in self.manager.core.list_backup(archive) if not item.endswith("/")]
             Path(destination).write_text(
@@ -1959,6 +2037,43 @@ class MainWindow(QMainWindow):
             )
             self.statusBar().showMessage(self._text("export_manifest_done", path=destination))
         except (BackupError, OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _edit_archive_metadata(self, archive: Path) -> None:
+        store = BackupMetadataStore(archive.parent)
+        try:
+            current = store.get(archive)
+            label, accepted = QInputDialog.getText(
+                self, self._text("edit_archive_metadata"), self._text("metadata_label_prompt"), text=current["label"]
+            )
+            if not accepted:
+                return
+            note, accepted = QInputDialog.getText(
+                self, self._text("edit_archive_metadata"), self._text("metadata_note_prompt"), text=current["note"]
+            )
+            if not accepted:
+                return
+            store.update(archive, label=label, note=note)
+            self.statusBar().showMessage(self._text("metadata_saved"))
+            self._refresh_backups()
+        except (OSError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _export_backup_catalog(self) -> None:
+        if not self.manager:
+            return
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            self._text("export_backup_catalog"),
+            "codesaver-backups.csv",
+            "CSV (*.csv);;JSON (*.json)",
+        )
+        if not destination:
+            return
+        try:
+            BackupMetadataStore(self.manager.backup_dir).export(destination)
+            self.statusBar().showMessage(self._text("backup_catalog_exported", path=destination))
+        except (OSError, ValueError) as exc:
             self._show_error(str(exc))
 
     def _rename_archive(self, archive: Path) -> None:
@@ -1975,7 +2090,10 @@ class MainWindow(QMainWindow):
             self._show_error(self._text("error"))
             return
         try:
+            metadata_store = BackupMetadataStore(archive.parent)
+            metadata_store.get(archive)
             archive.rename(target)
+            metadata_store.rename_entry(archive.name, target)
             old_path = str(archive.resolve())
             if old_path in self.settings.pinned_archives:
                 self.settings.pinned_archives = tuple(
@@ -2001,6 +2119,7 @@ class MainWindow(QMainWindow):
             return
         try:
             archive.unlink()
+            BackupMetadataStore(archive.parent).discard_entry(archive.name)
             resolved = str(archive.resolve())
             if resolved in self.settings.pinned_archives:
                 self.settings.pinned_archives = tuple(
