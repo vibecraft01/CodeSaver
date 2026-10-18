@@ -43,6 +43,7 @@ from PyQt5.QtCore import QUrl
 
 from codesaver.core import BackupError
 from codesaver.backup_metadata import BackupMetadataStore
+from codesaver.evolution import backup_evolution, export_evolution_csv
 from codesaver.cloud import upload_archive
 from codesaver.archive_tools import (
     absolute_member_paths,
@@ -180,6 +181,45 @@ TEXT["ru"].update(
         "export_backup_catalog": "Экспортировать каталог бэкапов…",
         "backup_catalog_exported": "Каталог экспортирован: {path}",
         "archive_metadata_details": "Метка: {label} • Заметка: {note}",
+    }
+)
+
+TEXT["ru"].update(
+    {
+        "backup_evolution": "История изменений между бэкапами",
+        "evolution_search": "Фильтр по имени файла или пути…",
+        "evolution_from": "Предыдущий архив",
+        "evolution_to": "Новый архив",
+        "evolution_status": "Изменение",
+        "evolution_path": "Путь",
+        "evolution_before": "Было, байт",
+        "evolution_after": "Стало, байт",
+        "evolution_empty": "Нет изменений между архивами или недостаточно резервных копий.",
+        "evolution_export": "Экспортировать CSV…",
+        "evolution_export_done": "CSV истории изменений сохранён: {path}",
+        "evolution_added": "Добавлен",
+        "evolution_modified": "Изменён",
+        "evolution_removed": "Удалён",
+        "close": "Закрыть",
+    }
+)
+TEXT["en"].update(
+    {
+        "backup_evolution": "Backup evolution history",
+        "evolution_search": "Filter by filename or path…",
+        "evolution_from": "Previous archive",
+        "evolution_to": "New archive",
+        "evolution_status": "Change",
+        "evolution_path": "Path",
+        "evolution_before": "Before, bytes",
+        "evolution_after": "After, bytes",
+        "evolution_empty": "No changes between archives, or not enough backups are available.",
+        "evolution_export": "Export CSV…",
+        "evolution_export_done": "Evolution CSV saved: {path}",
+        "evolution_added": "Added",
+        "evolution_modified": "Modified",
+        "evolution_removed": "Removed",
+        "close": "Close",
     }
 )
 TEXT["en"].update(
@@ -1542,6 +1582,7 @@ class MainWindow(QMainWindow):
             ("open_backups", self._open_backup_folder),
             ("verify_all", self._verify_all),
             ("compare", self._compare_selected),
+            ("backup_evolution", self._show_backup_evolution),
             ("export_compare", self._export_compare_selected),
             ("cleanup", self._cleanup_old_backups),
             ("export_report", self._export_report),
@@ -1683,6 +1724,9 @@ class MainWindow(QMainWindow):
         self.tray.show()
 
     def _apply_theme(self) -> None:
+        if not self.settings.theme_enabled:
+            self.setStyleSheet("")
+            return
         theme = detect_system_theme() if self.settings.theme == "system" else self.settings.theme
         colors = theme_colors(theme, self.settings.accent_color)
         stylesheet = (
@@ -2192,6 +2236,120 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, self._text("compare"), body)
         except (OSError, ValueError, zipfile.BadZipFile) as exc:
             self._show_error(str(exc))
+
+    def _show_backup_evolution(self) -> None:
+        if not self.manager:
+            self.statusBar().showMessage(self._text("choose_project"))
+            return
+        try:
+            report = backup_evolution(self.manager.backup_dir)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            self._show_error(str(exc))
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self._text("backup_evolution"))
+        dialog.resize(1000, 600)
+        layout = QVBoxLayout(dialog)
+        search = QLineEdit()
+        search.setPlaceholderText(self._text("evolution_search"))
+        layout.addWidget(search)
+        table = QTableWidget(0, 6)
+        table.setHorizontalHeaderLabels(
+            [
+                self._text("evolution_from"),
+                self._text("evolution_to"),
+                self._text("evolution_status"),
+                self._text("evolution_path"),
+                self._text("evolution_before"),
+                self._text("evolution_after"),
+            ]
+        )
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setSortingEnabled(True)
+        table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(table, 1)
+        status = QLabel()
+        layout.addWidget(status)
+
+        rows = [(transition, change) for transition in report["transitions"] for change in transition["changes"]]
+
+        def refresh_rows(query: str = "") -> None:
+            needle = query.casefold().strip()
+            visible = [
+                (transition, change)
+                for transition, change in rows
+                if not needle
+                or needle in change["path"].casefold()
+                or needle in transition["from_archive"].casefold()
+                or needle in transition["to_archive"].casefold()
+            ]
+            table.setSortingEnabled(False)
+            table.setRowCount(len(visible))
+            labels = {
+                "added": self._text("evolution_added"),
+                "modified": self._text("evolution_modified"),
+                "removed": self._text("evolution_removed"),
+            }
+            for row, (transition, change) in enumerate(visible):
+                values = (
+                    transition["from_archive"],
+                    transition["to_archive"],
+                    labels[change["status"]],
+                    change["path"],
+                    str(change["before_bytes"]),
+                    str(change["after_bytes"]),
+                )
+                for column, value in enumerate(values):
+                    table.setItem(row, column, QTableWidgetItem(value))
+            table.setSortingEnabled(True)
+            status.setText(f"{len(visible)} / {len(rows)}" if rows else self._text("evolution_empty"))
+
+        search.textChanged.connect(refresh_rows)
+        refresh_rows()
+        buttons = QHBoxLayout()
+        export_button = QPushButton(self._text("evolution_export"))
+        close_button = QPushButton(self._text("close"))
+
+        def export_visible() -> None:
+            destination, _ = QFileDialog.getSaveFileName(
+                dialog, self._text("evolution_export"), "backup-evolution.csv", "CSV files (*.csv)"
+            )
+            if not destination:
+                return
+            needle = search.text().casefold().strip()
+            filtered = {
+                **report,
+                "transitions": [
+                    {
+                        **transition,
+                        "changes": [
+                            change
+                            for change in transition["changes"]
+                            if not needle
+                            or needle in change["path"].casefold()
+                            or needle in transition["from_archive"].casefold()
+                            or needle in transition["to_archive"].casefold()
+                        ],
+                    }
+                    for transition in report["transitions"]
+                ],
+            }
+            filtered["change_count"] = sum(len(item["changes"]) for item in filtered["transitions"])
+            try:
+                export_evolution_csv(filtered, Path(destination))
+                self.statusBar().showMessage(self._text("evolution_export_done", path=destination))
+            except OSError as exc:
+                self._show_error(str(exc))
+
+        export_button.clicked.connect(export_visible)
+        close_button.clicked.connect(dialog.accept)
+        buttons.addWidget(export_button)
+        buttons.addStretch()
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
+        dialog.exec_()
 
     def _copy_project_path(self) -> None:
         if self.manager:

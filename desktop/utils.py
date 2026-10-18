@@ -17,7 +17,7 @@ from codesaver.core import DEFAULT_EXCLUDED_DIRS
 
 DESKTOP_CONFIG_PATH = Path.home() / ".codesaver-desktop.json"
 DESKTOP_DEFAULT_EXCLUDED_DIRS = tuple(dict.fromkeys((*DEFAULT_EXCLUDED_DIRS, "node_modules", "dist", "build")))
-DESKTOP_THEMES = ("system", "dark", "light", "midnight", "ocean", "forest", "high-contrast")
+DESKTOP_THEMES = ("system", "dark", "light", "midnight", "ocean", "forest", "autumn", "high-contrast")
 DESKTOP_LANGUAGES = ("auto", "ru", "en")
 
 
@@ -33,6 +33,7 @@ class DesktopSettings:
     keep_last: int = 0
     language: str = "auto"
     theme: str = "system"
+    theme_enabled: bool = True
     accent_color: str = "#58A6FF"
     minimize_to_tray: bool = True
     compress: bool = True
@@ -88,6 +89,7 @@ def load_settings(path: Path = DESKTOP_CONFIG_PATH) -> DesktopSettings:
             keep_last=keep_last,
             language=language,
             theme=theme,
+            theme_enabled=bool(raw.get("theme_enabled", True)),
             accent_color=accent_color,
             minimize_to_tray=bool(raw.get("minimize_to_tray", True)),
             compress=bool(raw.get("compress", True)),
@@ -155,6 +157,7 @@ def theme_colors(theme: str, accent: str = "#58A6FF") -> dict[str, str]:
         "midnight": ("#080B14", "#101629", "#17213A", "#E6EDF7", "#283653"),
         "ocean": ("#071A26", "#0B2B3A", "#123E50", "#E8FAFF", "#245A6D"),
         "forest": ("#0B1712", "#12251B", "#1B3525", "#E8F5EC", "#31543C"),
+        "autumn": ("#21150F", "#352116", "#4A2C1A", "#FFF1DC", "#79502E"),
         "high-contrast": ("#000000", "#101010", "#202020", "#FFFFFF", "#FFFFFF"),
     }
     background, panel, button, text, border = palettes.get(theme, palettes["dark"])

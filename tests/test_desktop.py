@@ -7,6 +7,7 @@ from zipfile import ZipFile
 
 from desktop.backup_manager import DesktopBackupManager
 from desktop.utils import (
+    DESKTOP_THEMES,
     DesktopSettings,
     archive_details,
     backup_summary,
@@ -61,6 +62,7 @@ class DesktopSupportTests(unittest.TestCase):
                 interval_minutes=5,
                 keep_last=3,
                 theme="light",
+                theme_enabled=False,
                 accent_color="#FF8800",
                 compress=False,
                 language="auto",
@@ -74,6 +76,7 @@ class DesktopSupportTests(unittest.TestCase):
             self.assertEqual(loaded.excluded_extensions, settings.excluded_extensions)
             self.assertEqual(loaded.keep_last, 3)
             self.assertEqual(loaded.theme, "light")
+            self.assertFalse(loaded.theme_enabled)
             self.assertEqual(loaded.accent_color, "#FF8800")
             self.assertTrue(loaded.backup_on_start)
             self.assertTrue(loaded.verify_after_backup)
@@ -85,6 +88,9 @@ class DesktopSupportTests(unittest.TestCase):
         palette = theme_colors("ocean", "#AA33CC")
         self.assertEqual(palette["background"], "#071A26")
         self.assertEqual(palette["accent"], "#AA33CC")
+        autumn = theme_colors("autumn")
+        self.assertEqual(autumn["background"], "#21150F")
+        self.assertIn("autumn", DESKTOP_THEMES)
         with patch.dict("os.environ", {"LC_ALL": "ru_RU.UTF-8", "LANG": ""}, clear=False):
             self.assertEqual(detect_system_language(), "ru")
 

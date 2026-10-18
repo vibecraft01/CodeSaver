@@ -1,6 +1,6 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.7.4.
+Desktop application source for CodeSaver Desktop 1.8.0.
 
 The current desktop tools include:
 
@@ -22,10 +22,12 @@ The current desktop tools include:
 - pinning important archives persistently and comparing a snapshot with the preceding backup.
 - restoring a whole archive or chosen files into a separate folder without replacing files already there.
 - adding archive labels and notes, filtering by labels, searching annotations, and exporting a portable catalog.
+- reviewing file additions, modifications, and removals across consecutive backups with live path filtering and CSV export;
+- selecting the warm autumn theme or disabling CodeSaver's custom styling independently.
 
 The project comparison window now shows a searchable results table, status counts and filters, supports CSV export, and lets you copy a path or open its location.
 
 The application uses the shared CodeSaver backup engine and PyQt5. Build and
 platform packaging instructions are available in the repository documentation.
 
-See the [Desktop 1.7.4 release notes](../docs/releases/desktop-v1.7.4.md).
+See the [Desktop 1.8.0 release notes](../docs/releases/desktop-v1.8.0.md).

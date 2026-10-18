@@ -334,6 +334,49 @@ class CliFeatureTests(unittest.TestCase):
             oversized = run("--archive-larger-than", str(archive_path), "10")
             self.assertEqual(oversized["members"], [{"path": "large.bin", "bytes": 50}])
 
+    def test_backup_evolution_report_csv_and_change_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            backups = Path(tmp) / "backups"
+            root.mkdir()
+            backups.mkdir()
+            first = backups / "first.zip"
+            second = backups / "second.zip"
+            for archive_path, content in ((first, b"before"), (second, b"after")):
+                with zipfile.ZipFile(archive_path, "w") as archive:
+                    archive.writestr("src/app.py", content)
+            import os
+
+            os.utime(first, (1_700_000_000, 1_700_000_000))
+            os.utime(second, (1_700_000_100, 1_700_000_100))
+            csv_path = Path(tmp) / "evolution.csv"
+            arguments = [
+                "--project-dir",
+                str(root),
+                "--backup-dir",
+                str(backups),
+                "--log",
+                str(Path(tmp) / "evolution.log"),
+                "--json",
+                "--backup-evolution",
+                "--evolution-path",
+                "src/",
+                "--evolution-csv",
+                str(csv_path),
+                "--evolution-fail-on-change",
+            ]
+            output = io.StringIO()
+            with (
+                patch("codesaver.cli._remember_project"),
+                patch("codesaver.cli.configure_logging", return_value=logging.getLogger("test-evolution")),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(main(arguments), 1)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["change_count"], 1)
+            self.assertEqual(report["transitions"][0]["modified"], 1)
+            self.assertTrue(csv_path.is_file())
+
     def test_archive_security_cli_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "project"

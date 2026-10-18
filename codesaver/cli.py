@@ -26,6 +26,7 @@ from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
 from .cloud import upload_archive
 from .backup_metadata import BackupMetadataStore
+from .evolution import backup_evolution, evolution_has_changes, export_evolution_csv
 from .archive_tools import (
     absolute_member_paths,
     aes_encrypted_members,
@@ -155,6 +156,14 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--backup-manifest-json", type=Path, metavar="FILE", help="Export a checksummed JSON catalog of all backups"
+    )
+    parser.add_argument(
+        "--backup-evolution", action="store_true", help="Compare every consecutive backup and summarize file changes"
+    )
+    parser.add_argument("--evolution-path", metavar="TEXT", help="Limit backup-evolution results to matching paths")
+    parser.add_argument("--evolution-csv", type=Path, metavar="FILE", help="Export backup-evolution changes to CSV")
+    parser.add_argument(
+        "--evolution-fail-on-change", action="store_true", help="Exit with status 1 if backup evolution has changes"
     )
     metadata_group = parser.add_mutually_exclusive_group()
     metadata_group.add_argument(
@@ -1096,6 +1105,30 @@ def _handle_backup_workflows(args: argparse.Namespace, manager: BackupManager) -
         (path for path in manager.backup_dir.glob("*.zip") if path.is_file()),
         key=lambda path: path.stat().st_mtime,
     )
+    if args.backup_evolution or args.evolution_path or args.evolution_csv or args.evolution_fail_on_change:
+        report = backup_evolution(manager.backup_dir, args.evolution_path or "")
+        if args.evolution_csv:
+            export_evolution_csv(report, args.evolution_csv.expanduser())
+        args.evolution_detected_changes = evolution_has_changes(report)
+        if args.json:
+            output = dict(report)
+            if args.evolution_csv:
+                output["csv_file"] = str(args.evolution_csv.expanduser())
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+        else:
+            print(
+                f"Compared {report['snapshots']} snapshots across {len(report['transitions'])} transitions; "
+                f"{report['change_count']} changed paths"
+            )
+            for transition in report["transitions"]:
+                print(
+                    f"{transition['from_archive']} -> {transition['to_archive']}: "
+                    f"+{transition['added']} ~{transition['modified']} -{transition['removed']} "
+                    f"({transition['net_bytes']:+} bytes)"
+                )
+            if args.evolution_csv:
+                print(f"CSV written: {args.evolution_csv.expanduser()}")
+        return True
     if args.backup_label:
         archive, label = args.backup_label
         record = BackupMetadataStore(manager.backup_dir).update(archive, label=label)
@@ -4450,6 +4483,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.health and health_failed:
             return 1
         if args.fail_on_diff and diff_failed:
+            return 1
+        if args.evolution_fail_on_change and getattr(args, "evolution_detected_changes", False):
             return 1
         logger.info("CodeSaver finished successfully")
         return 0

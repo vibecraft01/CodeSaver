@@ -58,11 +58,14 @@ class SettingsDialog(QDialog):
             "midnight": "Midnight",
             "ocean": "Ocean",
             "forest": "Forest",
+            "autumn": "Осенняя" if russian else "Autumn",
             "high-contrast": "High contrast",
         }
         for value in DESKTOP_THEMES:
             self.theme.addItem(theme_labels[value], value)
         self.theme.setCurrentIndex(max(0, self.theme.findData(settings.theme)))
+        self.theme_enabled = QCheckBox("Включить оформление CodeSaver" if russian else "Enable CodeSaver theme")
+        self.theme_enabled.setChecked(settings.theme_enabled)
 
         self.accent_color = settings.accent_color
         self.accent_button = QPushButton(self.accent_color)
@@ -95,6 +98,7 @@ class SettingsDialog(QDialog):
         form.addRow("Хранить бэкапов (0 — без лимита):" if russian else "Keep backups (0 = unlimited):", self.keep_last)
         form.addRow("Язык:" if russian else "Language:", self.language)
         form.addRow("Тема:" if russian else "Theme:", self.theme)
+        form.addRow("", self.theme_enabled)
         form.addRow("Акцентный цвет:" if russian else "Accent color:", self.accent_button)
         form.addRow("Папка бэкапов:" if russian else "Backup directory:", backup_row)
         form.addRow("", self.compress)
@@ -140,6 +144,7 @@ class SettingsDialog(QDialog):
             keep_last=self.keep_last.value(),
             language=self.language.currentData(),
             theme=self.theme.currentData(),
+            theme_enabled=self.theme_enabled.isChecked(),
             accent_color=self.accent_color,
             minimize_to_tray=self.minimize_to_tray.isChecked(),
             compress=self.compress.isChecked(),

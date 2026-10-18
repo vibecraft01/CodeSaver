@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.9.0 and Desktop v1.8.0 — 2026-10-18
+
+- CLI: add file-level evolution reports across consecutive backup archives, optional path filtering, CSV export, and a CI-friendly fail-on-change exit status.
+- Desktop: add a searchable backup-evolution table with CSV export.
+- Desktop: add an autumn color theme and a setting to turn off CodeSaver's custom styling.
+- Validate archive snapshots using member content hashes so same-size edits are detected.
+
 # CodeSaver CLI v1.8.7 and Desktop v1.7.4 — 2026-10-13
 
 - CLI: add persistent backup labels and notes, case-insensitive annotation search, and JSON/CSV catalog export.
