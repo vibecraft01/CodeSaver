@@ -8,8 +8,8 @@ CodeSaver is a cross-platform code backup utility for developers. It creates tim
 
 | Component | Version | Runtime | Distribution |
 | --- | --- | --- | --- |
-| CodeSaver CLI | [**1.9.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.9.0) | Python 3.9+ | Updated 2026-10-18 |
-| CodeSaver Desktop | [**1.8.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.8.0) | Python 3.10+ with PyQt5 | Updated 2026-10-18 |
+| CodeSaver CLI | [**1.10.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.10.0) | Python 3.9+ | Updated 2026-10-26 |
+| CodeSaver Desktop | [**1.9.0**](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.9.0) | Python 3.10+ with PyQt5 | Updated 2026-10-26 |
 
 The CLI and Desktop applications share the same tested backup and restore engine. Installing the CLI does not install PyQt5.
 
@@ -141,6 +141,7 @@ The star count was refreshed on 28 September 2026; the other figures above remai
 - File extension counts and storage totals with `--extension-report`.
 - Per-archive verification results with `--health-report`.
 - `--version` for scripts and support diagnostics.
+- Save, list, apply, and delete named backup profiles shared with Desktop.
 - JSON backup plans with `--plan-json FILE`.
 - Exportable archive verification reports with `--verify-report FILE`.
 - Git remote inspection with `--git-remote`.
@@ -167,7 +168,7 @@ The star count was refreshed on 28 September 2026; the other figures above remai
 
 ### Desktop version
 
-CodeSaver Desktop `1.8.0` is a redesigned, responsive graphical alternative for developers who prefer a visual workflow. It adds a warm autumn palette, an independent switch to disable CodeSaver styling, and a searchable, CSV-exportable history of file-level changes across consecutive backups. Its archive catalog supports persistent labels and notes, filters by label, and exports a portable CSV/JSON catalog. It also supports restoring selected files into another folder without overwriting existing files. It includes:
+CodeSaver Desktop `1.9.0` is a redesigned, responsive graphical alternative for developers who prefer a visual workflow. It adds reusable named backup profiles shared with the CLI, a warm autumn palette, an independent switch to disable CodeSaver styling, and a searchable, CSV-exportable history of file-level changes across consecutive backups. Its archive catalog supports persistent labels and notes, filters by label, and exports a portable CSV/JSON catalog. It also supports restoring selected files into another folder without overwriting existing files. It includes:
 - Windows filename portability, Unicode collision, path-depth, symlink-target, and file/folder conflict audits.
 - Long member-path search, root-folder layout, ZIP comments, per-file CRC-32 inventory, and timestamp summary.
 - Duplicate-basename, hidden-file, backslash-path, executable-mode, and empty-directory archive checks.
@@ -258,7 +259,7 @@ The main window is organized as a compact developer dashboard:
 +-----------------------------------------------------------------------+
 ```
 
-The Settings dialog centralizes project exclusions, autosave, retention, language, theme, compression, and storage preferences.
+The Settings dialog centralizes project exclusions, autosave, retention, language, theme, compression, and storage preferences. Project Tools can save, apply, and delete named backup profiles shared with the CLI.
 
 ## Supported languages
 
@@ -426,13 +427,13 @@ codesaver-desktop
 
 ### Download a standalone package
 
-The current stable binary is available in the [Desktop v1.8.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.8.0):
+The current stable binary is available in the [Desktop v1.9.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/desktop-v1.9.0):
 
 - `CodeSaverDesktop-windows-x64.exe` for Windows.
 - `CodeSaverDesktop-macos.zip` containing the macOS application.
 - `CodeSaverDesktop-linux-amd64.deb` for Debian-based Linux distributions.
 
-The stable [CLI v1.9.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.9.0) is available.
+The stable [CLI v1.10.0 release](https://github.com/vibecraft01/CodeSaver/releases/tag/v1.10.0) is available.
 
 ### Build from source
 

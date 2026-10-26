@@ -9,6 +9,7 @@ import platform
 import sys
 import subprocess
 import csv
+from dataclasses import replace
 from collections import Counter
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from shutil import disk_usage
@@ -45,6 +46,7 @@ from codesaver.core import BackupError
 from codesaver.backup_metadata import BackupMetadataStore
 from codesaver.evolution import backup_evolution, export_evolution_csv
 from codesaver.cloud import upload_archive
+from codesaver.profiles import ProfileError, delete_profile, get_profile, list_profiles, save_profile
 from codesaver.archive_tools import (
     absolute_member_paths,
     aes_encrypted_members,
@@ -1324,6 +1326,19 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(self._text("symlinks"), self._show_symlinks)
         tools_menu.addAction(self._text("copy_git_context"), self._copy_git_context)
         tools_menu.addAction(self._text("open_config"), self._open_desktop_config)
+        tools_menu.addSeparator()
+        tools_menu.addAction(
+            "Сохранить профиль бэкапа…" if self._active_language == "ru" else "Save backup profile…",
+            self._save_backup_profile,
+        )
+        tools_menu.addAction(
+            "Применить профиль бэкапа…" if self._active_language == "ru" else "Apply backup profile…",
+            self._apply_backup_profile,
+        )
+        tools_menu.addAction(
+            "Удалить профиль бэкапа…" if self._active_language == "ru" else "Delete backup profile…",
+            self._delete_backup_profile,
+        )
         tools_menu.addAction(self._text("cloud_upload"), self._upload_selected_to_cloud)
         tools_menu.addAction(self._text("export_tree"), self._export_project_tree)
         tools_menu.addAction(self._text("copy_backup_command"), self._copy_backup_command)
@@ -2496,6 +2511,97 @@ class MainWindow(QMainWindow):
             self._text("show_exclusions"),
             self._text("exclusions_body", directories=directories, extensions=extensions),
         )
+
+    def _save_backup_profile(self) -> None:
+        russian = self._active_language == "ru"
+        name, accepted = QInputDialog.getText(
+            self,
+            "Профиль бэкапа" if russian else "Backup profile",
+            "Имя профиля:" if russian else "Profile name:",
+        )
+        if not accepted:
+            return
+        try:
+            save_profile(
+                name,
+                {
+                    "backup_dir": self.settings.backup_dir,
+                    "excluded_dirs": self.settings.excluded_dirs,
+                    "excluded_extensions": self.settings.excluded_extensions,
+                    "compress": self.settings.compress,
+                    "max_size": self.settings.max_size,
+                    "keep_last": self.settings.keep_last or None,
+                    "use_gitignore": True,
+                },
+            )
+            self.statusBar().showMessage(("Профиль сохранён: " if russian else "Profile saved: ") + name.strip())
+        except (ProfileError, OSError) as exc:
+            self._show_error(str(exc))
+
+    def _apply_backup_profile(self) -> None:
+        russian = self._active_language == "ru"
+        try:
+            profiles = list_profiles()
+            if not profiles:
+                self.statusBar().showMessage("Нет сохранённых профилей" if russian else "No saved profiles")
+                return
+            name, accepted = QInputDialog.getItem(
+                self,
+                "Профиль бэкапа" if russian else "Backup profile",
+                "Выберите профиль:" if russian else "Select a profile:",
+                sorted(profiles, key=str.casefold),
+                0,
+                False,
+            )
+            if not accepted:
+                return
+            profile = get_profile(name)
+            self.settings = replace(
+                self.settings,
+                backup_dir=profile.get("backup_dir"),
+                excluded_dirs=tuple(profile.get("excluded_dirs", self.settings.excluded_dirs)),
+                excluded_extensions=tuple(profile.get("excluded_extensions", self.settings.excluded_extensions)),
+                compress=profile.get("compress", self.settings.compress),
+                max_size=profile.get("max_size", self.settings.max_size),
+                keep_last=profile.get("keep_last") or 0,
+            )
+            save_settings(self.settings)
+            if self.settings.project_dir and Path(self.settings.project_dir).is_dir():
+                self._set_project(Path(self.settings.project_dir))
+            self.statusBar().showMessage(("Применён профиль: " if russian else "Applied profile: ") + name)
+        except (ProfileError, OSError, TypeError, ValueError) as exc:
+            self._show_error(str(exc))
+
+    def _delete_backup_profile(self) -> None:
+        russian = self._active_language == "ru"
+        try:
+            profiles = list_profiles()
+            if not profiles:
+                self.statusBar().showMessage("Нет сохранённых профилей" if russian else "No saved profiles")
+                return
+            name, accepted = QInputDialog.getItem(
+                self,
+                "Удалить профиль" if russian else "Delete profile",
+                "Выберите профиль:" if russian else "Select a profile:",
+                sorted(profiles, key=str.casefold),
+                0,
+                False,
+            )
+            if (
+                accepted
+                and QMessageBox.question(
+                    self,
+                    "Подтверждение" if russian else "Confirm deletion",
+                    (f"Удалить профиль «{name}»?" if russian else f"Delete profile '{name}'?"),
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                == QMessageBox.Yes
+            ):
+                delete_profile(name)
+                self.statusBar().showMessage(("Профиль удалён: " if russian else "Deleted profile: ") + name)
+        except (ProfileError, OSError) as exc:
+            self._show_error(str(exc))
 
     def _show_symlinks(self) -> None:
         if not self.manager:

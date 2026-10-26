@@ -4,6 +4,13 @@ All notable CodeSaver changes are documented here.
 
 ## [Unreleased]
 
+# CodeSaver CLI v1.10.0 and Desktop v1.9.0 — 2026-10-26
+
+- Added shared named backup profiles with validated settings and atomic storage.
+- CLI can save, list, apply, and delete profiles with `--profile-save`, `--profile-list`, `--profile`, and `--profile-delete`.
+- Desktop can save current backup settings as a profile, apply one, and remove profiles from Project Tools.
+- Profiles are stored in `~/.codesaver-profiles.json` and shared by the CLI and Desktop.
+
 # CodeSaver CLI v1.9.0 and Desktop v1.8.0 — 2026-10-18
 
 - CLI: add file-level evolution reports across consecutive backup archives, optional path filtering, CSV export, and a CI-friendly fail-on-change exit status.

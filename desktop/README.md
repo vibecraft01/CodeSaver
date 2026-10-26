@@ -1,6 +1,6 @@
 # CodeSaver Desktop
 
-Desktop application source for CodeSaver Desktop 1.8.0.
+Desktop application source for CodeSaver Desktop 1.9.0.
 
 The current desktop tools include:
 
@@ -31,3 +31,5 @@ The application uses the shared CodeSaver backup engine and PyQt5. Build and
 platform packaging instructions are available in the repository documentation.
 
 See the [Desktop 1.8.0 release notes](../docs/releases/desktop-v1.8.0.md).
+
+Desktop 1.9.0 adds named backup profiles interchangeable with the CLI. See the [release notes](../docs/releases/desktop-v1.9.0.md).

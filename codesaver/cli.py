@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import csv
 import hashlib
 import json
@@ -24,6 +25,7 @@ from typing import Optional
 
 from . import __version__
 from .config import Config, load_config, normalize_extensions, parse_size
+from . import profiles
 from .cloud import upload_archive
 from .backup_metadata import BackupMetadataStore
 from .evolution import backup_evolution, evolution_has_changes, export_evolution_csv
@@ -650,6 +652,11 @@ def build_parser(language: Optional[str] = None) -> argparse.ArgumentParser:
     )
     parser.add_argument("--overwrite", action="store_true", help=translate("help.overwrite", language))
     parser.add_argument("--config", type=Path, metavar="FILE", help=translate("help.config", language))
+    profile_group = parser.add_mutually_exclusive_group()
+    profile_group.add_argument("--profile", metavar="NAME", help="Apply a saved backup profile")
+    profile_group.add_argument("--profile-save", metavar="NAME", help="Save effective backup settings as a profile")
+    profile_group.add_argument("--profile-list", action="store_true", help="List saved backup profiles")
+    profile_group.add_argument("--profile-delete", metavar="NAME", help="Delete a saved backup profile")
     parser.add_argument("--log", type=Path, metavar="FILE", help=translate("help.log", language))
     parser.add_argument(
         "--language",
@@ -937,6 +944,15 @@ def run_menu(
 def _settings(args: argparse.Namespace, detected_language: str) -> tuple[Path, Config, str, logging.Logger]:
     project_dir = (args.project_dir or Path.cwd()).expanduser().resolve()
     config = load_config(args.config, project_dir)
+    if args.profile:
+        profile = profiles.get_profile(args.profile, profiles.PROFILES_PATH)
+        updates = dict(profile)
+        if updates.get("backup_dir"):
+            updates["backup_dir"] = Path(updates["backup_dir"]).expanduser().resolve()
+        for key in ("excluded_dirs", "excluded_extensions", "excluded_patterns"):
+            if key in updates:
+                updates[key] = frozenset(updates[key])
+        config = replace(config, **updates)
     language = normalize_language(args.language or config.language or detected_language)
     interval = args.interval if args.interval is not None else config.interval
     if interval <= 0:
@@ -1708,6 +1724,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(translate("errors.python_version", detected_language, version=python_version_text()), file=sys.stderr)
         return 2
     args = build_parser(detected_language).parse_args(argv)
+    try:
+        if args.profile_list:
+            saved_profiles = profiles.list_profiles(profiles.PROFILES_PATH)
+            print("\n".join(sorted(saved_profiles, key=str.casefold)) if saved_profiles else "No saved profiles")
+            return 0
+        if args.profile_delete:
+            profiles.delete_profile(args.profile_delete, profiles.PROFILES_PATH)
+            print(f"Deleted backup profile: {args.profile_delete}")
+            return 0
+    except profiles.ProfileError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if args.restore_to and not args.restore:
         print("--restore-to requires --restore ARCHIVE", file=sys.stderr)
         return 2
@@ -1733,6 +1761,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger: Optional[logging.Logger] = None
     try:
         project_dir, settings, language, logger = _settings(args, language)
+        if args.profile_save:
+            profiles.save_profile(
+                args.profile_save,
+                {
+                    "backup_dir": str(settings.backup_dir) if settings.backup_dir else None,
+                    "excluded_dirs": settings.excluded_dirs,
+                    "excluded_extensions": settings.excluded_extensions,
+                    "excluded_patterns": settings.excluded_patterns,
+                    "compress": settings.compress,
+                    "max_size": settings.max_size,
+                    "keep_last": settings.keep_last,
+                    "keep_days": settings.keep_days,
+                    "follow_symlinks": settings.follow_symlinks,
+                    "use_gitignore": settings.use_gitignore,
+                },
+                profiles.PROFILES_PATH,
+            )
+            print(f"Saved backup profile: {args.profile_save}")
+            return 0
         manager = BackupManager(
             project_dir,
             settings.backup_dir,

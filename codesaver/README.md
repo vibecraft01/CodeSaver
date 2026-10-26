@@ -1,6 +1,6 @@
 # CodeSaver CLI source
 
-This directory contains the CodeSaver CLI implementation (v1.9.0).
+This directory contains the CodeSaver CLI implementation (v1.10.0).
 
 - `cli.py` — command-line argument handling and interactive commands.
 - `core.py` — backup, restore, filtering, retention, and archive logic.
@@ -15,3 +15,5 @@ Linux in the [latest CLI release](https://github.com/vibecraft01/CodeSaver/relea
 
 CLI 1.9.0 adds backup-evolution reports, path filtering, CSV export, and an
 optional nonzero exit for detected changes. See the [release notes](../docs/releases/v1.9.0.md).
+
+CLI 1.10.0 adds reusable, validated named backup profiles shared with Desktop. See the [release notes](../docs/releases/v1.10.0.md).
